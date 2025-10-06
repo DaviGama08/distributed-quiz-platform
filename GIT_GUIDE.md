@@ -53,3 +53,10 @@ git push
 ```bash
 git pull
 ```
+
+### Atualizar o JDK
+```bash
+
+Ctrl + Alt + Shift + S
+
+```

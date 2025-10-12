@@ -51,13 +51,16 @@ git checkout dev
 git pull
 git merge feature/minha-feature
 
-Depois vai abrir o Vim e digitamos:
+Se abrir Vim e digitamos:
 :wq 
 Para concluir o merge
 Sair sem salvar:
 :q!
 
+Caso contrário:
 git status
+git commit -m "merge: ..."
+
 ```
 
 ### Commit básico

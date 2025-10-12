@@ -8,7 +8,7 @@
 #### Principais
 - feat: nova funcionalidade
 - fix: correção de erro
-
+- merge: dev para main
 #### Outros
 - docs: mudanças em documentação
 - chore: manutenção/definições

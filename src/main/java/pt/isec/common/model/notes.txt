@@ -1,0 +1,14 @@
+--APAGAR--
+
+-o User é classe abstrata que vai ser herdada pelo Student e Teacher
+-final nas classes é para evitar delas serem estendidas.
+
+-option:
+a) Socket
+
+-question:
+Conjunto de opções
+a) Socket
+b) ...
+c) ...
+d) ...

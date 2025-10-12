@@ -37,11 +37,21 @@ git push -u origin dev
 
 ### Criar nova feature (a partir da dev)
 ```bash
+O pull é um fetch(busca atualização do remoto) + merge
 git checkout dev
 git pull origin dev
 git checkout -b feature/nome-da-feature
 git push -u origin feature/nome-da-feature
 ```
+
+### Fazer merge 
+```bash
+git fetch
+git checkout dev
+git pull
+git merge feature/minha-feature
+```
+
 ### Commit básico
 ```bash
 git add .

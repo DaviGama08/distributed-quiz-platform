@@ -3,6 +3,7 @@ package pt.isec.common.model.question;
 import pt.isec.common.model.common.OptionLetter;
 import pt.isec.common.model.common.QuestionState;
 
+import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -20,7 +21,8 @@ pergunta durante o respetivo período"
 O professor pode: "Eliminar uma pergunta, desde que ainda não tenha qualquer resposta associada;"
 Logo precisamos de um código associado a esse professor --teacherId--
 * */
-public final class Question {
+public final class Question implements Serializable {
+    private static final long serialVersionUID = 1L;
     private Integer id;
     private QuestionState statement;
     private String accessCode;
@@ -29,6 +31,20 @@ public final class Question {
     private LocalDateTime endAt;
     private Integer teacherId;
     private List<Option> options;
+
+    public Question() {}
+
+    public Question(QuestionState statement, Integer teacherId, List<Option> options,
+                    LocalDateTime startAt, LocalDateTime endAt, OptionLetter correctOption) {
+        this.statement = statement;
+        this.teacherId = teacherId;
+        setOptions(options);
+        this.startAt = startAt;
+        this.endAt = endAt;
+        validatePeriod();
+        setCorrectOption(correctOption);
+        generateAccessCode();
+    }
 
     //gets/sets
     public Integer getId() {return id;}
@@ -48,6 +64,13 @@ public final class Question {
     public List<Option> getOptions() {return options;}
     public void setOptions(List<Option> options) {this.options = options;}
 
+    @Override
+    public String toString() {
+        return "Question{id=" + id + ", statement=" + statement + ", accessCode='" + accessCode + '\'' +
+                ", correctOption=" + correctOption + ", startAt=" + startAt + ", endAt=" + endAt +
+                ", teacherId=" + teacherId + ", options=" + (options == null ? "[]" : options.size() + " itens") + '}';
+    }
+
     //equals/hashCode
     @Override
     public boolean equals(Object o) {
@@ -65,5 +88,7 @@ public final class Question {
     }
 
     @Override
-    public int hashCode() {return Objects.hash(id, statement, accessCode, correctOption, startAt, endAt, teacherId, options);}
+    public int hashCode() {
+        return Objects.hash(id, statement, accessCode, correctOption, startAt, endAt, teacherId, options);
+    }
 }

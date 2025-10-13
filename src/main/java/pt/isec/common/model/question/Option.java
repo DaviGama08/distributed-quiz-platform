@@ -14,19 +14,38 @@ public final class Option implements Serializable {
     public Option(){}
 
     public Option(Integer id, OptionLetter letter, String text) {
-        this.id = id;
+        validate(id, letter, text);
+        this.id     = id;
         this.letter = letter;
-        setText(text);
+        this.text   = text;
+    }
+
+    public Option(OptionLetter letter, String text) {
+        this(null, letter, text);
     }
 
     //gets/sets
-    public Integer getId() {return id;}
-    public void setId(Integer id) {this.id = id;}
-    public OptionLetter getLetter() {return letter;}
-    public void setLetter(OptionLetter letter) {this.letter = letter;}
-    public String getText() {return text;}
-    public void setText(String text) {this.text = text;}
+    public void setId(Integer id) {
+        if (id != null && id <= 0)
+            throw new IllegalArgumentException("id must be positive if provided");
+        this.id = id;
+    }
+    public void setLetter(OptionLetter letter) {
+        if (letter == null)
+            throw new IllegalArgumentException("letter cannot be null");
+        this.letter = letter;
+    }
+    public void setText(String text) {
+        if (text == null || text.isBlank())
+            throw new IllegalArgumentException("text cannot be null or blank");
+        this.text = text;
+    }
 
+    public Integer getId() {return id;}
+    public OptionLetter getLetter() {return letter;}
+    public String getText() {return text;}
+
+    //toString
     @Override
     public String toString(){
         return "Option{id=" + id + ", letter=" + letter + ", text='" + text + "'}";
@@ -45,4 +64,15 @@ public final class Option implements Serializable {
     }
     @Override
     public int hashCode(){return Objects.hash(id, letter, text);}
+
+    private static void validate(Integer id, OptionLetter letter, String text) {
+        if (id != null && id <= 0)
+            throw new IllegalArgumentException("id must be positive if provided");
+
+        if (letter == null)
+            throw new IllegalArgumentException("letter cannot be null");
+
+        if (text == null || text.isBlank())
+            throw new IllegalArgumentException("text cannot be null or blank");
+    }
 }

@@ -1,5 +1,7 @@
 package pt.isec.common.model.answer;
 
+import pt.isec.common.model.common.OptionLetter;
+
 import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -9,19 +11,21 @@ public final class Answer implements Serializable {
     private Integer id;
     private Integer studentNumber;
     private Integer questionId;
-    private char chosenOption;
+    private OptionLetter chosenOption;
     private LocalDateTime answeredAt;
 
     public Answer() {}
 
-    public Answer(Integer studentNumber, Integer questionId, char chosenOption, LocalDateTime answeredAt) {
-        setStudentNumber(studentNumber);
-        setQuestionId(questionId);
-        setChosenOption(chosenOption);
+    public Answer(Integer studentNumber, Integer questionId, OptionLetter chosenOption,
+                  LocalDateTime answeredAt) {
+        validate(studentNumber, questionId, chosenOption, answeredAt);
+        this.studentNumber = studentNumber;
+        this.questionId = questionId;
+        this.chosenOption = chosenOption;
         this.answeredAt = answeredAt;
     }
 
-    public Answer(Integer id, Integer studentNumber, Integer questionId, char chosenOption, LocalDateTime answeredAt) {
+    public Answer(Integer id, Integer studentNumber, Integer questionId, OptionLetter chosenOption, LocalDateTime answeredAt) {
         this(studentNumber, questionId, chosenOption, answeredAt);
         this.id = id;
     }
@@ -30,30 +34,15 @@ public final class Answer implements Serializable {
     public Integer getId() {return id;}
     public void setId(Integer id) {this.id = id;}
     public Integer getStudentNumber() {return studentNumber;}
-    public void setStudentNumber(Integer studentNumber) {
-        if (studentNumber != null && studentNumber <= 0) {
-            throw new IllegalArgumentException("studentNumber must be a positive integer");
-        }
-        this.studentNumber = studentNumber;
-    }
+    public void setStudentNumber(Integer studentNumber) {this.studentNumber = studentNumber;}
     public Integer getQuestionId() {return questionId;}
-    public void setQuestionId(Integer questionId) {
-        if (questionId != null && questionId <= 0) {
-            throw new IllegalArgumentException("questionId must be a positive integer");
-        }
-        this.questionId = questionId;
-    }
-    public char getChosenOption() {return chosenOption;}
-    public void setChosenOption(char chosenOption) {
-        char c = Character.toUpperCase(chosenOption);
-        if (c < 'A' || c > 'E') {
-            throw new IllegalArgumentException("Invalid chosenOption: must be a letter between A and E.");
-        }
-        this.chosenOption = c;
-    }
+    public void setQuestionId(Integer questionId) {this.questionId = questionId;}
+    public OptionLetter getChosenOption() {return chosenOption;}
+    public void setChosenOption(OptionLetter chosenOption) {this.chosenOption = chosenOption;}
     public LocalDateTime getAnsweredAt() {return answeredAt;}
     public void setAnsweredAt(LocalDateTime answeredAt) {this.answeredAt = answeredAt;}
 
+    //toString
     @Override
     public String toString() {
         return "Answer{id=" + id + ", studentNumber=" + studentNumber +
@@ -75,4 +64,23 @@ public final class Answer implements Serializable {
     }
     @Override
     public int hashCode() {return Objects.hash(id, studentNumber, questionId, chosenOption, answeredAt);}
+
+    private void validate(Integer studentNumber, Integer questionId,
+                          OptionLetter chosenOption, LocalDateTime answeredAt) {
+
+        if (studentNumber == null || studentNumber <= 0)
+            throw new IllegalArgumentException("studentNumber must be positive");
+
+        if (questionId == null || questionId <= 0)
+            throw new IllegalArgumentException("questionId must be positive");
+
+        if (chosenOption == null)
+            throw new IllegalArgumentException("chosenOption cannot be null");
+
+        if (answeredAt == null)
+            throw new IllegalArgumentException("answeredAt cannot be null");
+
+        if (answeredAt.isAfter(LocalDateTime.now()))
+            throw new IllegalArgumentException("answeredAt cannot be in the future");
+    }
 }

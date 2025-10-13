@@ -8,22 +8,38 @@ public final class Teacher extends User implements Serializable {
 
     private Integer id;
 
-    public Teacher(){}
-    public Teacher(Integer id, String name, String email, String passwordHash){
-        super(name, email, passwordHash); this.id = id;
+    public Teacher() {
+    }
+
+    public Teacher(Integer id, String name, String email, String passwordHash) {
+        validate(id);
+        super(name, email, passwordHash);
+        this.id = id;
     }
 
     // gets/sets
-    public Integer getId() {return id;}
-    public void setId(Integer id) {this.id = id;}
+    public void setId(Integer id) {
+        if (id != null && id <= 0)
+            throw new IllegalArgumentException("id must be positive if provided");
+        this.id = id;
+    }
+
+    public Integer getId() {
+        return id;
+    }
+
+    private static void validate(Integer id) {
+        if (id != null && id <= 0)
+            throw new IllegalArgumentException("id must be positive if provided");
+    }
 
     // equals/hashCode
     @Override
     public boolean equals(Object o) {
-        if(o == this) return true;
-        if(o == null || (o.getClass() != getClass())) return false;
+        if (o == this) return true;
+        if (o == null || (o.getClass() != getClass())) return false;
 
-        Teacher t = (Teacher)o;
+        Teacher t = (Teacher) o;
 
         return Objects.equals(name, t.name) &&
                 Objects.equals(email, t.email) &&
@@ -33,11 +49,17 @@ public final class Teacher extends User implements Serializable {
 
     //Gera um número inteiro que representa a combinação dos três atributos
     @Override
-    public int hashCode(){return Objects.hash(name, email, passwordHash, id);
+    public int hashCode() {
+        return Objects.hash(name, email, passwordHash, id);
     }
 
+    //toString
     @Override
-    public String toString(){
-        return "Id: " + id + "Name: " + name + ", Email: " + email;
+    public String toString() {
+        return "Teacher{" +
+                "id=" + id +
+                ", name='" + name + '\'' +
+                ", email='" + email + '\'' +
+                '}';
     }
 }

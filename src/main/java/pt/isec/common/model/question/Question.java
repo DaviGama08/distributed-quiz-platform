@@ -5,8 +5,10 @@ import pt.isec.common.model.common.QuestionState;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /*
 1)
@@ -24,7 +26,8 @@ Logo precisamos de um código associado a esse professor --teacherId--
 public final class Question implements Serializable {
     private static final long serialVersionUID = 1L;
     private Integer id;
-    private QuestionState statement;
+    private QuestionState state;
+    private String statement;
     private String accessCode;
     private OptionLetter correctOption;
     private LocalDateTime startAt;
@@ -34,36 +37,155 @@ public final class Question implements Serializable {
 
     public Question() {}
 
-    public Question(QuestionState statement, Integer teacherId, List<Option> options,
-                    LocalDateTime startAt, LocalDateTime endAt, OptionLetter correctOption) {
+    public Question(String statement, Integer teacherId, List<Option> options,
+                    LocalDateTime startAt, LocalDateTime endAt,
+                    OptionLetter correctOption, String accessCode) {
+        validate(statement, teacherId, options, startAt, endAt, correctOption, accessCode);
+        this.id = null;
         this.statement = statement;
         this.teacherId = teacherId;
-        setOptions(options);
+        this.options = List.copyOf(options); // evita modificação externa
         this.startAt = startAt;
         this.endAt = endAt;
-        validatePeriod();
-        setCorrectOption(correctOption);
-        generateAccessCode();
+        this.correctOption = correctOption;
+        this.accessCode = accessCode;
+        this.state = computeState(startAt, endAt, LocalDateTime.now());
+    }
+
+    public Question(Integer id, String statement, Integer teacherId, List<Option> options,
+                    LocalDateTime startAt, LocalDateTime endAt,
+                    OptionLetter correctOption, String accessCode) {
+        validate(statement, teacherId, options, startAt, endAt, correctOption, accessCode);
+        if (id != null && id <= 0) throw new IllegalArgumentException("id must be > 0 if provided");
+        this.id = id;
+        this.statement = statement;
+        this.teacherId = teacherId;
+        this.options = List.copyOf(options);
+        this.startAt = startAt;
+        this.endAt = endAt;
+        this.correctOption = correctOption;
+        this.accessCode = accessCode;
+        this.state = computeState(startAt, endAt, LocalDateTime.now());
     }
 
     //gets/sets
-    public Integer getId() {return id;}
-    public void setId(Integer id) {this.id = id;}
-    public QuestionState getStatement() {return statement;}
-    public void setStatement(QuestionState statement) {this.statement = statement;}
-    public String getAccessCode() {return accessCode;}
-    public void setAccessCode(String accessCode) {this.accessCode = accessCode;}
-    public OptionLetter getCorrectOption() {return correctOption;}
-    public void setCorrectOption(OptionLetter correctOption) {this.correctOption = correctOption;}
-    public LocalDateTime getStartAt() {return startAt;}
-    public void setStartAt(LocalDateTime startAt) {this.startAt = startAt;}
-    public LocalDateTime getEndAt() {return endAt;}
-    public void setEndAt(LocalDateTime endAt) {this.endAt = endAt;}
-    public Integer getTeacherId() {return teacherId;}
-    public void setTeacherId(Integer teacherId) {this.teacherId = teacherId;}
-    public List<Option> getOptions() {return options;}
-    public void setOptions(List<Option> options) {this.options = options;}
+    public void setAccessCode(String accessCode) {
+        if (accessCode != null && accessCode.isBlank())
+            throw new IllegalArgumentException("accessCode cannot be blank if provided");
+        this.accessCode = accessCode;
+    }
 
+    public void setStartAt(LocalDateTime startAt) {
+        if (startAt == null) throw new IllegalArgumentException("startAt cannot be null");
+        if (this.endAt != null && !this.endAt.isAfter(startAt))
+            throw new IllegalArgumentException("endAt must be after startAt");
+        this.startAt = startAt;
+        refreshState();
+    }
+
+    public void setEndAt(LocalDateTime endAt) {
+        if (endAt == null) throw new IllegalArgumentException("endAt cannot be null");
+        if (this.startAt != null && !endAt.isAfter(this.startAt))
+            throw new IllegalArgumentException("endAt must be after startAt");
+        this.endAt = endAt;
+        refreshState();
+    }
+
+    public void setOptions(List<Option> options) {
+        // reusa parte da validação relevante
+        if (options == null || options.size() < 2)
+            throw new IllegalArgumentException("there must be at least two options");
+        Set<OptionLetter> seen = new HashSet<>();
+        for (Option o : options) {
+            if (o == null || o.getLetter() == null)
+                throw new IllegalArgumentException("each option must have a non-null letter");
+            if (!seen.add(o.getLetter()))
+                throw new IllegalArgumentException("duplicate option letter: " + o.getLetter());
+        }
+        if (this.correctOption != null &&
+                options.stream().noneMatch(o -> o.getLetter() == this.correctOption))
+            throw new IllegalArgumentException("current correctOption is not present in new options");
+
+        this.options = List.copyOf(options);
+    }
+
+    public void setCorrectOption(OptionLetter correctOption) {
+        if (correctOption == null) throw new IllegalArgumentException("correctOption cannot be null");
+        if (this.options != null &&
+                this.options.stream().noneMatch(o -> o.getLetter() == correctOption))
+            throw new IllegalArgumentException("correctOption must exist in the options");
+        this.correctOption = correctOption;
+    }
+
+    public void setStatement(String statement) {
+        if (statement == null || statement.isBlank())
+            throw new IllegalArgumentException("statement cannot be null or blank");
+        this.statement = statement;
+    }
+
+    public void setTeacherId(Integer teacherId) {
+        if (teacherId == null || teacherId <= 0)
+            throw new IllegalArgumentException("teacherId must be a positive integer");
+        this.teacherId = teacherId;
+    }
+    public Integer getId() {return id;}
+    public String getAccessCode() {return accessCode;}
+    public OptionLetter getCorrectOption() {return correctOption;}
+    public LocalDateTime getStartAt() {return startAt;}
+    public LocalDateTime getEndAt() {return endAt;}
+    public Integer getTeacherId() {return teacherId;}
+    public List<Option> getOptions() {return options;}
+
+    private static QuestionState computeState(LocalDateTime startAt, LocalDateTime endAt, LocalDateTime now) {
+        if (now.isBefore(startAt)) return QuestionState.FUTURE;
+        if (now.isAfter(endAt))    return QuestionState.EXPIRED;
+        return QuestionState.ACTIVE;
+    }
+
+    public void refreshState() {
+        this.state = computeState(this.startAt, this.endAt, LocalDateTime.now());
+    }
+
+    private static void validate(String statement, Integer teacherId, List<Option> options,
+                                 LocalDateTime startAt, LocalDateTime endAt,
+                                 OptionLetter correctOption, String accessCode) {
+
+        if (statement == null || statement.isBlank())
+            throw new IllegalArgumentException("statement (question text) cannot be null or blank");
+
+        if (teacherId == null || teacherId <= 0)
+            throw new IllegalArgumentException("teacherId must be a positive integer");
+
+        if (options == null || options.size() < 2)
+            throw new IllegalArgumentException("there must be at least two options");
+
+        // letras únicas (coerente com UNIQUE (pergunta_id, letra) na BD)
+        Set<OptionLetter> seen = new HashSet<>();
+        for (Option o : options) {
+            if (o == null || o.getLetter() == null)
+                throw new IllegalArgumentException("each option must have a non-null letter");
+            if (!seen.add(o.getLetter()))
+                throw new IllegalArgumentException("duplicate option letter: " + o.getLetter());
+        }
+
+        if (correctOption == null)
+            throw new IllegalArgumentException("correctOption cannot be null");
+
+        boolean containsCorrect = options.stream().anyMatch(o -> o.getLetter() == correctOption);
+        if (!containsCorrect)
+            throw new IllegalArgumentException("correctOption must exist in the provided options list");
+
+        if (startAt == null || endAt == null)
+            throw new IllegalArgumentException("startAt and endAt cannot be null");
+
+        if (!endAt.isAfter(startAt))
+            throw new IllegalArgumentException("endAt must be after startAt");
+
+        if (accessCode != null && accessCode.isBlank())
+            throw new IllegalArgumentException("accessCode cannot be blank if provided");
+    }
+
+    //toString
     @Override
     public String toString() {
         return "Question{id=" + id + ", statement=" + statement + ", accessCode='" + accessCode + '\'' +

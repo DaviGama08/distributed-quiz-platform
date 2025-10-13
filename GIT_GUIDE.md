@@ -70,6 +70,16 @@ git commit -m "feat: descrição curta"
 git push
 ```
 
+### Commit básico
+```bash
+# apagar localmente
+git branch -d feature/model
+# apagar do GitHub (remoto)
+git push origin --delete feature/model
+# limpar referências antigas
+git fetch --prune
+```
+
 ### Atualizar branch local com remoto
 ```bash
 git pull

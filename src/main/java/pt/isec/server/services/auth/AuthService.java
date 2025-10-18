@@ -17,6 +17,7 @@ public class AuthService implements  IAuthService{
     private final SessionServices sessionServices;
 
     private final ConfigServices configServices;
+
     public AuthService(TeacherDAO teacherDAO, StudentDAO studentDAO, SessionServices sessionServices,
                        ConfigServices configServices) {
         this.teacherDAO = teacherDAO;
@@ -27,18 +28,27 @@ public class AuthService implements  IAuthService{
 
 
     @Override
-    public LoginResponseDTO registerTeacher(RegisterTeacherDTO registerTeacherDTO) throws SQLException {
-        //gerar o hash da password e verificar se é válido.
+    public LoginResponseDTO registerTeacher(RegisterTeacherDTO dto) throws Exception {
+        String name  = dto.name();
+        String email = dto.email();
+
+        if (!configServices.isValidEmail(email))    throw new IllegalArgumentException("Invalid email format");
+        if (!configServices.isValidName(name))      throw new IllegalArgumentException("Invalid name");
+
+        String teacherCodeHash = configServices.getTeachersRegisterHash();
+        // gerar o hash da password e verificar se é válido.
+        if (teacherCodeHash == null || !PasswordHasher.verifyPassword(dto.teacherRegisterCode(), teacherCodeHash))
+            throw new IllegalArgumentException("Invalid teacher register code");
+
+        // verificar se já existe um email igual na bd
         // ...
 
-        //verificar email e name ...
-        // ...
-
+        String passwordHash = configServices.generateHash(dto.password());
 
         Teacher t = new Teacher();
-        t.setName(registerTeacherDTO.name());
-        t.setEmail(registerTeacherDTO.email());
-        t.setPasswordHash(registerTeacherDTO.password()); // temos que fazer uma classe para gerar o hash da password
+        t.setName(dto.name());
+        t.setEmail(dto.email());
+        t.setPasswordHash(passwordHash); // temos que fazer uma classe para gerar o hash da password
         teacherDAO.add(t);
 
         // autenticação
@@ -52,18 +62,22 @@ public class AuthService implements  IAuthService{
     }
 
     @Override
-    public LoginResponseDTO registerStudent(RegisterStudentDTO registerStudentDTO) throws SQLException {
-        //gerar o hash da password e verificar se é válido.
+    public LoginResponseDTO registerStudent(RegisterStudentDTO dto) throws Exception {
+        String name  = dto.name();
+        String email = dto.email();
+
+        if (!configServices.isValidEmail(email))    throw new IllegalArgumentException("Invalid email format");
+        if (!configServices.isValidName(name))      throw new IllegalArgumentException("Invalid name");
+
+        // verificar se já existe um email e studentNumber igual na bd
         // ...
 
-        //verificar email e name ...
-        // ...
-
+        String passwordHash = configServices.generateHash(dto.password());
 
         Student s = new Student();
-        s.setName(registerStudentDTO.name());
-        s.setEmail(registerStudentDTO.email());
-        s.setPasswordHash(registerStudentDTO.password()); // temos que fazer uma classe para gerar o hash da password
+        s.setName(dto.name());
+        s.setEmail(dto.email());
+        s.setPasswordHash(passwordHash); // temos que fazer uma classe para gerar o hash da password
         studentDAO.add(s);
 
         // autenticação
@@ -72,17 +86,17 @@ public class AuthService implements  IAuthService{
         var session = sessionServices.create(s);
 
         //No retorno abaixo, em vez de fornecermos os dados do objeto Student, forneceremos de um objeto Autentication,
-        //ou seja: s.getId() ----> auth.getId().
+        //ou seja: t.getId() ----> auth.getId().
         return new LoginResponseDTO(session.getId(), s.getStudentNumber(), "STUDENT", s.getName(), s.getEmail());
     }
 
     @Override
-    public LoginResponseDTO login(LoginRequestDTO loginRequestDTO) {
+    public LoginResponseDTO login(LoginRequestDTO dto) {
         return null;
     }
 
     @Override
-    public void changePassword(ChangePasswordDTO changePasswordDTO) {
+    public void changePassword(ChangePasswordDTO dto) {
 
     }
 }

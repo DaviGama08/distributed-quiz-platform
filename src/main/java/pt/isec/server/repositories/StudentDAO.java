@@ -13,7 +13,7 @@ public class StudentDAO implements IUserDAO{
     }
 
     @Override
-    public Optional findById(long id) throws SQLException {
+    public Optional findById(String id) throws SQLException {
         return Optional.empty();
     }
 
@@ -28,7 +28,8 @@ public class StudentDAO implements IUserDAO{
     }
 
     @Override
-    public void delete(long id) throws SQLException {
+    public void delete(String id) throws SQLException {
 
     }
+
 }

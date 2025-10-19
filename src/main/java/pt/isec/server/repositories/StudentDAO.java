@@ -1,14 +1,20 @@
 package pt.isec.server.repositories;
 
+import pt.isec.common.model.user.Student;
+
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
 
-public class StudentDAO implements IUserDAO{
+public class StudentDAO implements IUserDAO<Student>{
     //classe para aceder a dados do estudante na base de dados
+    private final SQLiteConnectionFactory factory;
 
+    public StudentDAO(SQLiteConnectionFactory factory){
+        this.factory = factory;
+    }
     @Override
-    public long add(Object user) throws SQLException {
+    public long add(Student user) throws SQLException {
         return 0;
     }
 
@@ -27,9 +33,10 @@ public class StudentDAO implements IUserDAO{
     }
 
     @Override
-    public void update(Object user) throws SQLException {
+    public void update(Student user) throws SQLException {
 
     }
+
 
     @Override
     public void delete(String id) throws SQLException {

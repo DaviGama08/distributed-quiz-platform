@@ -18,12 +18,6 @@ public class AuthService implements IAuthService {
         this.studentDAO = studentDAO;
     }
 
-    // Construtor auxiliar (para usar sem injeção)
-    public AuthService() {
-        this.teacherDAO = new TeacherDAO();
-        this.studentDAO = new StudentDAO();
-    }
-
     @Override
     public LoginResponseDTO registerTeacher(RegisterTeacherDTO dto) throws Exception {
         if (dto == null) throw new IllegalArgumentException("Dados em falta");

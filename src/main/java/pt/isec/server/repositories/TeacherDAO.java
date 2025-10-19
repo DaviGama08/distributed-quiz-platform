@@ -17,7 +17,10 @@ public class TeacherDAO implements IUserDAO{
         return Optional.of(true);
         //return Optional.empty();
     }
-
+    @Override
+    public boolean existsByEmail(String email){
+        return true;
+    }
     @Override
     public List findAll() throws SQLException {
         return List.of();

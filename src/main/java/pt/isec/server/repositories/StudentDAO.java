@@ -16,6 +16,10 @@ public class StudentDAO implements IUserDAO{
     public Optional findById(String id) throws SQLException {
         return Optional.empty();
     }
+    @Override
+    public boolean existsByEmail(String email){
+        return true;
+    }
 
     @Override
     public List findAll() throws SQLException {

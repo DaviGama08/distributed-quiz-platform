@@ -16,24 +16,4 @@ public class ConfigServices implements IConfigServices{
     public String getTeachersRegisterHash(){
         return "qualquer";
     }
-
-
-    @Override
-    public boolean isValidPassword(String password) {
-        return password != null && password.matches(".*[^a-zA-Z0-9].*]");
-    }
-
-    @Override
-    public boolean isValidEmail(String email){
-        if (email == null) return false;
-        String regex = "^[A-Za-z0-9._%+-]+@(?:isec|gmail|hotmail|outlook|yahoo)\\.[A-Za-z]{2,}$";
-        return email.matches(regex);
-    }
-
-    @Override
-    public boolean isValidName(String name) {
-        if (name == null || name.isBlank()) return false;
-        String regex = "^[A-Za-zÀ-ÖØ-öø-ÿ]+(?: [A-Za-zÀ-ÖØ-öø-ÿ]+)*$";
-        return name.matches(regex);
-    }
 }

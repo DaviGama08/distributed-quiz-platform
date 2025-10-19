@@ -22,11 +22,10 @@ public class PasswordHasher {
 
         SecretKeyFactory factory = SecretKeyFactory.getInstance(ALGORITHM);
         byte[] hash = factory.generateSecret(spec).getEncoded();
-
-        return ITERATIONS + ":" + Base64.getEncoder().encodeToString(salt) +
-                ":" + Base64.getEncoder().encodeToString(hash);
+        String b64Salt = Base64.getEncoder().encodeToString(salt);
+        String b64Hash = Base64.getEncoder().encodeToString(hash);
+        return ITERATIONS + ":" + b64Salt + ":" + b64Hash;
     }
-
 
     //Esse método vai receber uma String ITERATION:SALT_BASE64:HASH_BASE64 e uma password que vai ser convertido para o formato anterior
     //para depois ser comparado byte a byte.

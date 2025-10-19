@@ -1,5 +1,6 @@
 package pt.isec.common.messages;
 
+import java.io.IOException;
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;

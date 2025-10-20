@@ -1,4 +1,4 @@
-package pt.isec.server.services.network;
+package pt.isec.server.network;
 
 import pt.isec.common.messages.MessageType;
 import pt.isec.common.messages.Messages;
@@ -44,6 +44,6 @@ public class ClientHandler extends Thread{
             case LOGIN -> authService.handleLogin(message);
             case ....continuar*/
             default -> new Messages<>(MessageType.MESSAGE, "Unknown message type");
-        }
+        };
     }
 }

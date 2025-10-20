@@ -28,14 +28,15 @@ public class Messages <T extends Serializable> implements Serializable {
 
     public T getData() {
         return data;
-    }
+    } //A confirmar
 
     public void setData(T data) {
         this.data = data;
-    }
+    } //A confirmar
 
     @Override
     public boolean equals(Object o) {
+        if (o == this) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Messages<?> messages = (Messages<?>) o;
         return msgType == messages.msgType && Objects.equals(data, messages.data);

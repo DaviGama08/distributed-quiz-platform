@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS config (
 );
 
 CREATE TABLE IF NOT EXISTS teacher (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    id             INTEGER PRIMARY KEY,
     name           TEXT    NOT NULL,
     email          TEXT    NOT NULL UNIQUE,
     password_hash  TEXT    NOT NULL,
@@ -15,8 +15,7 @@ CREATE TABLE IF NOT EXISTS teacher (
 );
 
 CREATE TABLE IF NOT EXISTS student (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    student_number  INTEGER NOT NULL UNIQUE,
+    student_number  INTEGER NOT NULL PRIMARY KEY,
     name            TEXT    NOT NULL,
     email           TEXT    NOT NULL UNIQUE,
     password_hash   TEXT    NOT NULL,
@@ -26,7 +25,7 @@ CREATE TABLE IF NOT EXISTS student (
 
 
 CREATE TABLE IF NOT EXISTS question (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    id               INTEGER PRIMARY KEY,
     teacher_id       INTEGER NOT NULL,
     statement        TEXT    NOT NULL,
     start_at         TEXT    NOT NULL,
@@ -41,7 +40,7 @@ CREATE TABLE IF NOT EXISTS question (
 
 
 CREATE TABLE IF NOT EXISTS question_option (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    id           INTEGER PRIMARY KEY,
     question_id  INTEGER NOT NULL,
     label        TEXT    NOT NULL,
     text         TEXT    NOT NULL,
@@ -51,7 +50,7 @@ CREATE TABLE IF NOT EXISTS question_option (
 
 
 CREATE TABLE IF NOT EXISTS participation (
-    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    id                 INTEGER PRIMARY KEY,
     student_id         INTEGER NOT NULL,
     question_id        INTEGER NOT NULL,
     selected_option_id INTEGER NOT NULL,

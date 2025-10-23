@@ -181,7 +181,20 @@ public class DatabaseManager {
         }
     }
 
-    //Retorna valor unico
+    //Retorna multiplas colunas
+    <T> T queryForObject(String sql, ResultSetMapper<T> mapper, Object... params) {
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            bindParams(ps, params);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? mapper.map(rs) : null;
+            }
+        } catch (SQLException e) {
+            return null;
+        }
+
+    }
+        //Retorna valor unico
     <T> T queryForSingleValue(String sql, Object... params) {
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {

@@ -1,14 +1,17 @@
 package pt.isec.server.repositories;
 
 import java.io.*;
+import java.nio.file.Path;
 import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
 
 public class DatabaseManager {
 
     private String dbUrl;
     private static DatabaseManager instance = null;
 
-    private DatabaseManager() { }
+    private DatabaseManager() {}
 
     public static DatabaseManager getInstance() {
         if (instance == null)
@@ -21,51 +24,49 @@ public class DatabaseManager {
     }
 
     public Connection getConnection() throws SQLException {
+
         if (dbUrl == null) {
             throw new IllegalStateException("Database URL not set.");
         }
+
         Connection conn = DriverManager.getConnection(dbUrl);
 
         try (Statement stmt = conn.createStatement()) {
+
             stmt.execute("PRAGMA foreign_keys = ON;");
+            stmt.execute("PRAGMA busy_timeout = 5000;");
         }
 
         return conn;
     }
 
     public boolean isInitialized() {
-        if(dbUrl == null)
-            return false;
 
-        try(Connection conn = DriverManager.getConnection(dbUrl)){
+        try (Connection conn = getConnection()) {
 
             try (Statement s = conn.createStatement()) {
-                ResultSet rs;
-                rs = s.executeQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='config';");
-                if(!rs.next()){
-                    return false;
+                try (ResultSet rs = s.executeQuery(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name='config'")) {
+                    if (!rs.next()) return false;
                 }
-                rs = s.executeQuery("SELECT COUNT(*) FROM config WHERE id=1;");
-                if (rs.next()) {
-                    int count = rs.getInt(1);
-                    return count > 0;
+
+                try (ResultSet rs = s.executeQuery(
+                        "SELECT COUNT(*) FROM config WHERE id=1")) {
+                    return rs.next() && rs.getInt(1) > 0;
                 }
             }
 
-        }  catch (SQLException e) {
+        } catch (SQLException e) {
             return false;
         }
-        return false;
     }
 
     public void initializeDatabase(String teacherCodeHash) throws SQLException, IOException {
         if (dbUrl == null) {
             throw new IllegalStateException("Database URL not set.");
         }
-        try (Connection conn = DriverManager.getConnection(dbUrl)) {
-            try (Statement s = conn.createStatement()) {
-                s.execute("PRAGMA foreign_keys = ON;");
-            }
+        try (Connection conn = getConnection()) {
+
             conn.setAutoCommit(false);
             try {
                 String schemaSql;
@@ -97,9 +98,11 @@ public class DatabaseManager {
                         hasConfig = true;
                 }
                 if (!hasConfig) {
-                    try (Statement stmt = conn.createStatement()) {
-                        stmt.execute("INSERT INTO config (id, db_version, teacher_code_hash) " +
-                                "VALUES (1, 0, '" + teacherCodeHash + "')");
+
+                    String insertSql = "INSERT INTO config (id, db_version, teacher_code_hash) VALUES (1, 0, ?)";
+                    try (PreparedStatement pstmt = conn.prepareStatement(insertSql)) {
+                        pstmt.setString(1, teacherCodeHash);
+                        pstmt.executeUpdate();
                     }
                 }
                 conn.commit();
@@ -112,86 +115,145 @@ public class DatabaseManager {
         }
     }
 
-    public String getTeacherCodeHash() {
+    public boolean databaseExistsInDir(String check_dir){
 
-        if (dbUrl == null)
+        File dir = new File(check_dir);
+
+        if (!dir.exists() || !dir.isDirectory()) {
+            return false;
+        }
+
+        File latest = null;
+        for (File f : dir.listFiles()) {
+            if (f.getName().endsWith(".db")) {
+                if (latest == null || f.lastModified() > latest.lastModified())
+                    latest = f;
+            }
+        }
+
+        if (latest == null) {
+            return false;
+        }
+
+        this.dbUrl = "jdbc:sqlite:" + latest.getAbsolutePath();
+        return true;
+    }
+
+    public Path getCurrentDbFile() {
+        if (dbUrl == null || !dbUrl.startsWith("jdbc:sqlite:"))
+            throw new IllegalStateException("Database URL not set or invalid.");
+
+        return Path.of(dbUrl.substring("jdbc:sqlite:".length()));
+    }
+
+    @FunctionalInterface
+    interface ResultSetMapper<T> {
+        T map(ResultSet rs) throws SQLException;
+    }
+
+    <T> List<T> queryList(String sql, ResultSetMapper<T> mapper, Object... params) throws SQLException {
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            bindParams(ps, params);
+            try (ResultSet rs = ps.executeQuery()) {
+                List<T> results = new ArrayList<>();
+                while (rs.next()) {
+                    results.add(mapper.map(rs));
+                }
+                return results;
+            }
+        }
+         catch (SQLException e) {
             return null;
+        }
+    }
 
-        try(Connection conn = DriverManager.getConnection(dbUrl)){
+    <T> T queryForSingleValue(String sql, Object... params) {
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
 
-            try (Statement s = conn.createStatement()) {
-                ResultSet rs;
-                rs = s.executeQuery("SELECT teacher_code_hash FROM config WHERE id = 1;");
-                if(rs.next()){
-                    return rs.getString(1);
-                }
+            bindParams(ps, params);
 
-                return null;
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) return null;
+
+                Object value = rs.getObject(1);
+                return (T) value;
             }
 
-        }  catch (SQLException e) {
-           return null;
+        } catch (SQLException e) {
+            return null;
         }
     }
 
-    public boolean updateTeacherCodeHash(String newHash){
-
-        if (dbUrl == null)
-            return false;
-
-        String sql = "UPDATE config SET teacher_code_hash = ? WHERE id = 1;";
-
-        try(Connection conn = DriverManager.getConnection(dbUrl) ;
-            PreparedStatement stmt = conn.prepareStatement(sql)){
-
-            stmt.setString(1, newHash);
-            int rowsUpdated = stmt.executeUpdate();
-
-            return rowsUpdated > 0;
-
-        }  catch (SQLException e) {
-            return false;
+    private void bindParams(PreparedStatement ps, Object... params) throws SQLException {
+        if (params == null) return;
+        for (int i = 0; i < params.length; i++) {
+            Object p = params[i];
+            int idx = i + 1;
+            if (p == null) {
+                ps.setObject(idx, null);
+            } else if (p instanceof Integer v) {
+                ps.setInt(idx, v);
+            } else if (p instanceof Long v) {
+                ps.setLong(idx, v);
+            } else if (p instanceof String v) {
+                ps.setString(idx, v);
+            } else {
+                ps.setObject(idx, p);
+            }
         }
     }
 
-    public int getDBVersion(){
-        if(dbUrl == null)
-            return -1;
+    private void updateDbVersion() {
+        try (Connection conn = getConnection();
+             Statement stmt = conn.createStatement()) {
 
-        try(Connection conn = DriverManager.getConnection(dbUrl)){
+            stmt.executeUpdate("UPDATE config SET db_version = db_version + 1 WHERE id = 1;");
 
-            try (Statement s = conn.createStatement()) {
-                ResultSet rs;
-                rs = s.executeQuery("SELECT db_version FROM config WHERE id = 1;");
-                if(rs.next()){
-                    return rs.getInt(1);
-                }
+        } catch (SQLException e) {
+            System.err.println("Failed to update DB version: " + e.getMessage());
+        }
+    }
 
-                return -1;
+    int executeUpdate(String sql, Object... params) {
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            bindParams(ps, params);
+            int res = ps.executeUpdate();
+
+            if(res > 0){
+                updateDbVersion();
             }
 
-        }  catch (SQLException e) {
+            return res;
+
+        } catch (SQLException e) {
             return -1;
         }
     }
 
-    public boolean setDbVersion(int new_version){
+    public String getTeacherCodeHash() {
+        return queryForSingleValue("SELECT teacher_code_hash FROM config WHERE id = 1;");
+    }
 
-        if (dbUrl == null)
-            return false;
 
+    public boolean updateTeacherCodeHash(String newHash) {
+        int rows = executeUpdate("UPDATE config SET teacher_code_hash = ? WHERE id = 1;", newHash);
+        return rows > 0;
+    }
+
+    public int getDBVersion() {
+        Integer v = queryForSingleValue("SELECT db_version FROM config WHERE id = 1;");
+        return v != null ? v : -1;
+    }
+
+    public boolean setDbVersion(int newVersion) {
         String sql = "UPDATE config SET db_version = ? WHERE id = 1;";
-
-        try(Connection conn = DriverManager.getConnection(dbUrl) ;
-            PreparedStatement stmt = conn.prepareStatement(sql)){
-
-            stmt.setString(1, String.valueOf(new_version));
-            int rowsUpdated = stmt.executeUpdate();
-
-            return rowsUpdated > 0;
-
-        }  catch (SQLException e) {
-            return false;
-        }
+        int rows = executeUpdate(sql, newVersion);
+        return rows > 0;
     }
+
 }

@@ -23,8 +23,8 @@ public class DatabaseManager {
         this.dbUrl = dbUrl;
     }
 
+    //Helper: Retorna o Connection
     public Connection getConnection() throws SQLException {
-
         if (dbUrl == null) {
             throw new IllegalStateException("Database URL not set.");
         }
@@ -40,11 +40,13 @@ public class DatabaseManager {
         return conn;
     }
 
+    //Funcao para saber se a bd já foi inicializada
     public boolean isInitialized() {
 
         try (Connection conn = getConnection()) {
 
             try (Statement s = conn.createStatement()) {
+                //Querys de test
                 try (ResultSet rs = s.executeQuery(
                         "SELECT name FROM sqlite_master WHERE type='table' AND name='config'")) {
                     if (!rs.next()) return false;
@@ -61,6 +63,7 @@ public class DatabaseManager {
         }
     }
 
+    //Initcializa a bd
     public void initializeDatabase(String teacherCodeHash) throws SQLException, IOException {
         if (dbUrl == null) {
             throw new IllegalStateException("Database URL not set.");
@@ -69,6 +72,7 @@ public class DatabaseManager {
 
             conn.setAutoCommit(false);
             try {
+                //Pasa o schema.sql para string
                 String schemaSql;
                 try (InputStream is = getClass().getClassLoader().getResourceAsStream("db/schema.sql")) {
                     if (is == null)
@@ -82,6 +86,8 @@ public class DatabaseManager {
                         schemaSql = sb.toString();
                     }
                 }
+
+                //Limpa a string em Statements Individuias (Cada table numa unica string)
                 String[] stmts = schemaSql.split(";(\\s*\\r?\\n|\\s*$)");
                 try (Statement stmt = conn.createStatement()) {
                     for (String raw : stmts) {
@@ -91,12 +97,14 @@ public class DatabaseManager {
                         stmt.execute(sql);
                     }
                 }
+                //Ve se a tabela config ja esta configurada (se ja estava criada)
                 boolean hasConfig = false;
                 try (Statement stmt = conn.createStatement();
                      ResultSet rs = stmt.executeQuery("SELECT 1 FROM config WHERE id = 1")) {
                     if (rs.next())
                         hasConfig = true;
                 }
+                //Se nao existem valores, insere
                 if (!hasConfig) {
 
                     String insertSql = "INSERT INTO config (id, db_version, teacher_code_hash) VALUES (1, 0, ?)";
@@ -115,6 +123,7 @@ public class DatabaseManager {
         }
     }
 
+    //Verifica se existe alguma bd na diretoria enviada
     public boolean databaseExistsInDir(String check_dir){
 
         File dir = new File(check_dir);
@@ -123,6 +132,7 @@ public class DatabaseManager {
             return false;
         }
 
+        //Verifica se ha algum ficheiro acabado em .db e qual foi o ultimo a ser modificado
         File latest = null;
         for (File f : dir.listFiles()) {
             if (f.getName().endsWith(".db")) {
@@ -146,11 +156,13 @@ public class DatabaseManager {
         return Path.of(dbUrl.substring("jdbc:sqlite:".length()));
     }
 
+    //Helper para receber info da bd e criar as respeticvas classes
     @FunctionalInterface
     interface ResultSetMapper<T> {
         T map(ResultSet rs) throws SQLException;
     }
 
+    //Retorna uma List
     <T> List<T> queryList(String sql, ResultSetMapper<T> mapper, Object... params) throws SQLException {
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -169,6 +181,7 @@ public class DatabaseManager {
         }
     }
 
+    //Retorna valor unico
     <T> T queryForSingleValue(String sql, Object... params) {
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -187,6 +200,7 @@ public class DatabaseManager {
         }
     }
 
+    //Helper para guardar com o tipo certo na bd
     private void bindParams(PreparedStatement ps, Object... params) throws SQLException {
         if (params == null) return;
         for (int i = 0; i < params.length; i++) {
@@ -206,6 +220,7 @@ public class DatabaseManager {
         }
     }
 
+    //Helper para atualizar a versao da bd
     private void updateDbVersion() {
         try (Connection conn = getConnection();
              Statement stmt = conn.createStatement()) {
@@ -217,6 +232,7 @@ public class DatabaseManager {
         }
     }
 
+    //Faz alterações nas tabelas
     int executeUpdate(String sql, Object... params) {
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {

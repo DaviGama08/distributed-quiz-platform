@@ -18,8 +18,10 @@ public class DirectoryService {
         String tcpEndpoint() { return tcpIp + ":" + tcpPort; }
     }
 
+
     private final int udpPort;
     private final int queueCapacity;
+    private volatile boolean running = true;
 
     private DatagramSocket socket;
     private final int maxPacketSize;
@@ -29,13 +31,15 @@ public class DirectoryService {
 
     //Threads
     private Thread tListener;
-    private Thread tMetrics;
-    private Thread tWorker;
     private Thread tReaper;
 
     public DirectoryService(int udpPort, int queueCapacity, int maxPacketSize) {
         this.udpPort = udpPort;
         this.queueCapacity = queueCapacity;
         this.maxPacketSize = maxPacketSize;
+
     }
+
+
+
 }

@@ -1,6 +1,6 @@
 package pt.isec.common.model.network;
 
-import pt.isec.common.messages.Messages;
+import pt.isec.common.messages.Message;
 import java.io.*;
 import java.net.Socket;
 
@@ -16,13 +16,13 @@ public class NetworkConnection {
         this.in = new ObjectInputStream(socket.getInputStream());
     }
 
-    public <T extends Serializable> void sendMessage(Messages<T> message) throws IOException {
+    public <T extends Serializable> void sendMessage(Message<T> message) throws IOException {
         out.writeObject(message);
         out.flush();
     }
 
-    public Messages<?> receiveMessage() throws IOException, ClassNotFoundException {
-        return (Messages<?>) in.readObject();
+    public Message<?> receiveMessage() throws IOException, ClassNotFoundException {
+        return (Message<?>) in.readObject();
     }
 
     public void close() throws IOException {

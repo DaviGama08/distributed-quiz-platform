@@ -1,19 +1,18 @@
 package pt.isec.common.messages;
 
-import java.io.IOException;
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
-public class Messages <T extends Serializable> implements Serializable {
+public class Message<T extends Serializable> implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
     private MessageType msgType;
     private T data;
 
-    public Messages() {}
+    public Message() {}
 
-    public Messages(MessageType msgType, T data) {
+    public Message(MessageType msgType, T data) {
         this.msgType = msgType;
         this.data = data;
     }
@@ -38,7 +37,7 @@ public class Messages <T extends Serializable> implements Serializable {
     public boolean equals(Object o) {
         if (o == this) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        Messages<?> messages = (Messages<?>) o;
+        Message<?> messages = (Message<?>) o;
         return msgType == messages.msgType && Objects.equals(data, messages.data);
     }
 

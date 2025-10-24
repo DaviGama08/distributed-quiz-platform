@@ -1,7 +1,7 @@
 package pt.isec.server.network;
 
 import pt.isec.common.messages.MessageType;
-import pt.isec.common.messages.Messages;
+import pt.isec.common.messages.Message;
 import pt.isec.common.model.network.NetworkConnection;
 import pt.isec.server.services.auth.AuthService;
 import java.io.IOException;
@@ -20,9 +20,9 @@ public class ClientHandler extends Thread{
     @Override
     public void run() {
         try{
-            Messages<?> message;
+            Message<?> message;
             while((message = connection.receiveMessage()) != null) {
-                Messages<?> response = processMessage(message);
+                Message<?> response = processMessage(message);
                 connection.sendMessage(response);
             }
         } catch (Exception e){
@@ -38,12 +38,12 @@ public class ClientHandler extends Thread{
         }
     }
 
-    private Messages<?> processMessage(Messages<?> message) {
+    private Message<?> processMessage(Message<?> message) {
         return switch (message.getMsgType()) {
             /*case REGISTER -> authService.handleRegister(message);
             case LOGIN -> authService.handleLogin(message);
             case ....continuar*/
-            default -> new Messages<>(MessageType.MESSAGE, "Unknown message type");
+            default -> new Message<>(MessageType.MESSAGE, "Unknown message type");
         };
     }
 }

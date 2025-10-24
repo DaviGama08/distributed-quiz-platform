@@ -1,16 +1,11 @@
 package pt.isec.directory.Threads;
 
-import pt.isec.directory.DirectoryService;
-import pt.isec.directory.MsgType;
+import pt.isec.common.messages.UdpMessage;
+import pt.isec.directory.IDirectoryService;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.ObjectInputStream;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 /**
  * Diretoria robusta com 4 threads (todas via Runnable):
@@ -35,74 +30,38 @@ import java.util.concurrent.ConcurrentMap;
  *  - "409 CONFLICT <motivo>"
  *  - "500 ERROR <motivo>"
  */
+public class UdpListenerRunnable implements Runnable {
+    private final IDirectoryService directoryService;
 
-public class UdpListenerRunnable implements Runnable{
-    private final int portUdp;
-    private volatile boolean running;
-
-    private final int TIMEOUT  = 10000;
-    private final int MAX_SIZE = 1024;
-
-    private final ConcurrentMap<String,
-            DirectoryService.ServerInfo> servers = new ConcurrentHashMap<>();
-
-    public UdpListenerRunnable(int portUdp, boolean running){
-        this.portUdp = portUdp;
-        this.running = running;
+    public UdpListenerRunnable(IDirectoryService directoryService) {
+        this.directoryService = directoryService;
     }
 
     @Override
     public void run() {
+        DatagramSocket socket = directoryService.getSocket();
+        System.out.println("Directoria UDP a escutar na porta " + directoryService.getUdpPort() + "...");
+        byte[] buffer         = new byte[directoryService.getMaxPacketSize()];
+        DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
 
-        try(DatagramSocket socket = new DatagramSocket(portUdp)){
-            System.out.println("Directoria UDP iniciada na porta " + portUdp + "...");
-            byte[] buffer = new byte[MAX_SIZE];
-            DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-
-            while(running){
-                System.out.println("A espera de pedidos...");
+        while (directoryService.getRunning()) {
+            try {
                 socket.receive(packet);
-                socket.setSoTimeout(TIMEOUT);
 
-                MsgType msgType;
+                byte[] data = new byte[packet.getLength()];
+                System.arraycopy(packet.getData(), packet.getOffset(), data, 0, packet.getLength());
 
-                //Desserialização da String recebida
-                try(ByteArrayInputStream bais = new ByteArrayInputStream(packet.getData(), 0, packet.getLength());
-                    ObjectInputStream ois     = new ObjectInputStream(bais)){
-                    msgType = (MsgType) ois.readObject();
-                }
-
-                //Trata o pedido
-                if(!handleRequest(msgType)){continue;}
-
-
-
-            }
-
-        }catch (IOException | ClassNotFoundException e) {
-            System.err.println("Erro na directoria UDP: " + e.getMessage());
-        }
-    }
-
-    private boolean handleRequest(MsgType m){
-        switch (m){
-            case REGISTER -> {
-
-            }
-            case DEREGISTER -> {
-
-            }
-            case HEARTBEAT -> {
-
-            }
-            case CLIENT_QUERY -> {
-
-            }
-            default -> {
-                return false;
+                directoryService.queue().put(
+                        new UdpMessage(packet.getAddress(), packet.getPort(), data, data.length)
+                );
+            } catch (IOException e) {
+                if (directoryService.getRunning())
+                    System.err.println("Erro a receber UDP: " + e.getMessage());
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                break;
             }
         }
-        return true;
+        System.out.println("UdpListenerRunnable terminou.");
     }
-
 }

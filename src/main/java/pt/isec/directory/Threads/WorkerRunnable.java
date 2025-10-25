@@ -84,8 +84,13 @@ public class WorkerRunnable implements Runnable{
                 }
                 send(msg, reply);
 
-            } catch (InterruptedException | IOException e) {
-                throw new RuntimeException(e);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }catch (IOException e) {
+                System.err.println("Erro a enviar UDP: " + e.getMessage());
+            } catch (Exception e) {
+                System.err.println("Erro inesperado no Worker: " + e.getMessage());
             }
         }
     }
@@ -94,6 +99,11 @@ public class WorkerRunnable implements Runnable{
     private String handleClientQuery() {
         // escolhe um servidor “principal” — aqui usamos o primeiro disponível
         ServerInfo principal = directoryService.getServers().values().stream().findFirst().orElse(null);
+
+        synchronized (directoryService.serversLock()) {
+            principal = directoryService.getServersOrdered().values().stream().findFirst().orElse(null);
+        }
+
         if (principal == null) return "404 NO_PRINCIPAL";
         return "200 PRINCIPAL " + principal.tcpEndpoint();
     }
@@ -118,7 +128,8 @@ public class WorkerRunnable implements Runnable{
 
         ServerInfo si = directoryService.getServers().get(id);
         if (si == null) return "409 CONFLICT UNKNOWN_ID";
-
+        //atualizar heartbeat
+        //...
         return "200 OK";
     }
 
@@ -138,10 +149,23 @@ public class WorkerRunnable implements Runnable{
         }
         if (ip.isEmpty() || port <= 0 || port > 65535) return "400 BAD_REQUEST TCP";
 
-        ConcurrentMap<String, ServerInfo> map = directoryService.getServers();
-        ServerInfo prev = map.put(id, new ServerInfo(port, id, ip));
+        ServerInfo si = directoryService.getServers().get(id);
+        if (si == null) {
+            si = new ServerInfo(id, ip, port);
+            directoryService.getServers().put(id, si);
+            synchronized (directoryService.serversLock()) {
+                directoryService.getServersOrdered().put(id, si);
+            }
+        } else {
+            //si.heartbeat(null, null); // por fazer
+        }
 
-        return "200 OK";
+        ServerInfo principal;
+        synchronized (directoryService.serversLock()) {
+            principal = directoryService.getServersOrdered().values().stream().findFirst().orElse(null);
+        }
+        if (principal == null) return "404 NO_PRINCIPAL";
+        return "200 PRINCIPAL " + principal.tcpEndpoint();
     }
 
     private void send(UdpMessage to, String text) throws IOException {

@@ -50,13 +50,14 @@ public class DirectoryService implements IDirectoryService{
     }
 
     public void start() {
+        System.out.println("Starting DirectoryService...");
         tListener.start();
         tWorker.start();
     }
 
     public void stop() {
         running = false;
-        socket.close(); // desbloqueia receives
+        if (!socket.isClosed()) socket.close();
         tListener.interrupt();
         tWorker.interrupt();
     }

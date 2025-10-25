@@ -5,7 +5,7 @@ public class ServerInfo{
     private final String id;
     private final String ip;
 
-    public ServerInfo(int tcpPort, String id, String ip) {
+    public ServerInfo(String id, String ip, int tcpPort) {
         this.tcpPort = tcpPort;
         this.id = id;
         this.ip = ip;

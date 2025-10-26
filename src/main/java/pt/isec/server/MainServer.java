@@ -1,4 +1,4 @@
-package pt.isec;
+package pt.isec.server;
 
 import java.io.*;
 import java.net.*;
@@ -10,14 +10,14 @@ import java.util.UUID;
 public class MainServer {
     /*
       Uso:
-        java pt.isec.server.pt.isec.MainServer <dirHost> <dirUdpPort> [tcpPort]
+        java pt.isec.server.MainServer <dirHost> <dirUdpPort> [tcpPort]
       Ex.:
-        java pt.isec.server.pt.isec.MainServer localhost 9999 0
+        java pt.isec.server.MainServer localhost 9999 0
       Nota: tcpPort=0 escolhe porto livre automaticamente.
     */
     public static void main(String[] args) {
         if (args.length < 2) {
-            System.out.println("Uso: java pt.isec.server.pt.isec.MainServer <dirHost> <dirUdpPort> [tcpPort]");
+            System.out.println("Uso: java pt.isec.server.MainServer <dirHost> <dirUdpPort> [tcpPort]");
             return;
         }
         String dirHost = args[0];
@@ -31,27 +31,31 @@ public class MainServer {
 
             System.out.printf("Servidor TCP ativo em %s:%d (id=%s)%n", serverIp, boundTcpPort, serverId);
 
-            // ====== REGISTO NA DIRETORIA ======
+            // ====== REGISTO / HEARTBEAT / DEREGISTER na Diretoria ======
             InetAddress dirAddr = InetAddress.getByName(dirHost);
             try (DatagramSocket udp = new DatagramSocket()) {
-                String registerMsg = "type=REGISTER|id=" + serverId + "|ip=" + serverIp + "|tcp=" + boundTcpPort;
+                // Mensagens no formato exigido pela diretoria
+                String registerMsg = "VER=1|TYPE=REGISTER|ID=" + serverId + "|TCP=" + serverIp + ":" + boundTcpPort;
                 sendUdp(udp, dirAddr, dirPort, registerMsg);
 
                 // Heartbeats periódicos (5s)
                 Timer t = new Timer("hb", true);
                 t.scheduleAtFixedRate(new TimerTask() {
                     @Override public void run() {
-                        String hb = "type=HEARTBEAT|id=" + serverId + "|ip=" + serverIp + "|tcp=" + boundTcpPort;
+                        String hb = "VER=1|TYPE=HEARTBEAT|ID=" + serverId + "|TCP=" + serverIp + ":" + boundTcpPort;
                         try { sendUdp(udp, dirAddr, dirPort, hb); } catch (Exception ignored) {}
                     }
                 }, 5000, 5000);
 
                 // Fecho limpo: desregistar
                 Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                    try { sendUdp(udp, dirAddr, dirPort, "type=DEREGISTER|id=" + serverId); } catch (Exception ignored) {}
+                    try {
+                        String dereg = "VER=1|TYPE=DEREGISTER|ID=" + serverId;
+                        sendUdp(udp, dirAddr, dirPort, dereg);
+                    } catch (Exception ignored) {}
                 }));
 
-                // ====== ATENDER CLIENTES (echo) ======
+                // ====== ATENDER CLIENTES (echo mínimo) ======
                 while (true) {
                     Socket client = serverSocket.accept();
                     new Thread(() -> handleClient(client)).start();
@@ -72,7 +76,8 @@ public class MainServer {
             String line;
             while ((line = in.readLine()) != null) {
                 if ("quit".equalsIgnoreCase(line)) { out.println("bye"); break; }
-                out.println("echo: " + line);
+                out.println("server: " + line);
+                System.out.println("client: " + line);
             }
         } catch (IOException ignored) {}
     }

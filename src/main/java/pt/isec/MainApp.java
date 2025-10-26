@@ -1,6 +1,6 @@
 package pt.isec;
 
-import pt.isec.server.network.ClientHandler;
+import pt.isec.server.network.threads.ClientHandlerRunnable;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -17,7 +17,7 @@ public class MainApp {
                 Socket clientSocket = serverSocket.accept();
                 System.out.println("Cliente conectado: " + clientSocket.getInetAddress());
 
-                ClientHandler handler = new ClientHandler(clientSocket);
+                ClientHandlerRunnable handler = new ClientHandlerRunnable(clientSocket);
                 handler.start();
             }
         } catch (IOException e) {

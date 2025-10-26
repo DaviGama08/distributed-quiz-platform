@@ -1,4 +1,4 @@
-package pt.isec;
+package pt.isec.client;
 
 import java.io.*;
 import java.net.*;
@@ -19,7 +19,9 @@ public class MainClient {
 
         try (DatagramSocket udp = new DatagramSocket()) {
             InetAddress addr = InetAddress.getByName(dirHost);
-            String query = "type=CLIENT_QUERY";
+
+            // >>> Protocolo correto da diretoria
+            String query = "VER=1|TYPE=CLIENT_QUERY";
             byte[] data = query.getBytes(StandardCharsets.UTF_8);
             DatagramPacket p = new DatagramPacket(data, data.length, addr, dirPort);
             udp.send(p);
@@ -32,27 +34,20 @@ public class MainClient {
             String payload = new String(resp.getData(), 0, resp.getLength(), StandardCharsets.UTF_8).trim();
             System.out.println("Diretoria respondeu: " + payload);
 
-            // Suporta "endpoint=ip:port" OU "ip=...|tcp=..."
-            String host; int port;
-            if (payload.startsWith("endpoint=")) {
-                String ep = payload.substring("endpoint=".length()).trim();
-                String[] hp = ep.split(":");
-                host = hp[0]; port = Integer.parseInt(hp[1]);
-            } else {
-                String[] toks = payload.split("\\|");
-                String ip=null; String tcp=null;
-                for(String t : toks){
-                    int eq = t.indexOf('=');
-                    if(eq>0){
-                        String k=t.substring(0,eq).trim();
-                        String v=t.substring(eq+1).trim();
-                        if ("ip".equalsIgnoreCase(k)) ip=v;
-                        if ("tcp".equalsIgnoreCase(k)) tcp=v;
-                    }
-                }
-                if (ip==null || tcp==null) throw new IOException("Resposta inesperada da diretoria");
-                host = ip; port = Integer.parseInt(tcp);
+            // Esperado: "200 PRINCIPAL ip:port"  ou  "404 NO_PRINCIPAL"
+            if (payload.startsWith("404")) {
+                throw new IOException("Diretoria sem principal: " + payload);
             }
+            if (!payload.startsWith("200 PRINCIPAL ")) {
+                throw new IOException("Resposta inesperada da diretoria: " + payload);
+            }
+
+            String ep = payload.substring("200 PRINCIPAL ".length()).trim();
+            String[] hp = ep.split(":");
+            if (hp.length != 2) throw new IOException("Endpoint inválido: " + ep);
+
+            String host = hp[0];
+            int port = Integer.parseInt(hp[1]);
 
             // ====== TCP com o servidor ======
             try (Socket s = new Socket(host, port);
@@ -61,7 +56,8 @@ public class MainClient {
                  BufferedReader console = new BufferedReader(new InputStreamReader(System.in))) {
 
                 System.out.println("Ligado ao servidor " + host + ":" + port);
-                System.out.println("Servidor disse: " + in.readLine());
+                String hello = in.readLine();
+                if (hello != null) System.out.println("Servidor disse: " + hello);
 
                 String line;
                 System.out.println("Escreve mensagens (ou 'quit' para sair):");

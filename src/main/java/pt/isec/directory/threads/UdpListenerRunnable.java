@@ -1,4 +1,4 @@
-package pt.isec.directory.Threads;
+package pt.isec.directory.threads;
 
 import pt.isec.common.messages.UdpMessage;
 import pt.isec.directory.IDirectoryService;
@@ -39,12 +39,12 @@ public class UdpListenerRunnable implements Runnable {
 
     @Override
     public void run() {
-        DatagramSocket socket = directoryService.getSocket();
-        System.out.println("Directoria UDP a escutar na porta " + directoryService.getUdpPort() + "...");
-        byte[] buffer         = new byte[directoryService.getMaxPacketSize()];
+        DatagramSocket socket = directoryService.socket();
+        System.out.println("Directoria UDP a escutar na porta " + directoryService.udpPort() + "...");
+        byte[] buffer         = new byte[directoryService.maxPacketSize()];
         DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
 
-        while (directoryService.getRunning()) {
+        while (directoryService.isRunning()) {
             try {
                 socket.receive(packet);
 
@@ -55,7 +55,7 @@ public class UdpListenerRunnable implements Runnable {
                         new UdpMessage(packet.getAddress(), packet.getPort(), data, data.length)
                 );
             } catch (IOException e) {
-                if (directoryService.getRunning())
+                if (directoryService.isRunning())
                     System.err.println("Erro a receber UDP: " + e.getMessage());
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();

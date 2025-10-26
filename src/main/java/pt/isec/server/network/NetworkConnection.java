@@ -1,4 +1,4 @@
-package pt.isec.common.model.network;
+package pt.isec.server.network;
 
 import pt.isec.common.messages.Message;
 import java.io.*;

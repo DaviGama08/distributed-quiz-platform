@@ -1,6 +1,4 @@
-package pt.isec;
-
-import pt.isec.directory.DirectoryService;
+package pt.isec.directory;
 
 public class MainDirectory {
     /*

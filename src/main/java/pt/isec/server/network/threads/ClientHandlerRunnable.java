@@ -1,20 +1,20 @@
-package pt.isec.server.network;
+package pt.isec.server.network.threads;
 
 import pt.isec.common.messages.MessageType;
 import pt.isec.common.messages.Message;
-import pt.isec.common.model.network.NetworkConnection;
+import pt.isec.server.network.NetworkConnection;
 import pt.isec.server.services.auth.AuthService;
 import java.io.IOException;
 import java.net.Socket;
 
-public class ClientHandler extends Thread{
+public class ClientHandlerRunnable extends Thread{
 
     private NetworkConnection connection;
     private AuthService authService;
 
-    public ClientHandler(Socket clientSocket) throws IOException {
+    public ClientHandlerRunnable(Socket clientSocket) throws IOException {
         this.connection = new NetworkConnection(clientSocket);
-        this.authService = new AuthService(); //falta implementar
+        //this.authService = new AuthService(); //falta implementar
     }
 
     @Override

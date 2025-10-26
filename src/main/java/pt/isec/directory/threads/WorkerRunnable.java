@@ -1,15 +1,14 @@
-package pt.isec.directory.Threads;
+package pt.isec.directory.threads;
 
 import pt.isec.common.messages.UdpMessage;
 import pt.isec.directory.IDirectoryService;
-import pt.isec.directory.ServerInfo;
+import pt.isec.directory.model.ServerInfo;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentMap;
 
 /*================= COMANDOS DA FILA (BlockingQueue) =================
 Listener → produz (put/offer) | Worker → consome (take/poll)
@@ -50,7 +49,7 @@ public class WorkerRunnable implements Runnable{
     @Override
     public void run() {
         System.out.println("Worker inicializado...");
-        while (directoryService.getRunning()){
+        while (directoryService.isRunning()){
             try {
                 UdpMessage msg = directoryService.queue().take();
 
@@ -98,10 +97,10 @@ public class WorkerRunnable implements Runnable{
     //Não precisamos do Map aqui já que não existem mais argumentos depois do TYPE
     private String handleClientQuery() {
         // escolhe um servidor “principal” — aqui usamos o primeiro disponível
-        ServerInfo principal = directoryService.getServers().values().stream().findFirst().orElse(null);
+        ServerInfo principal = directoryService.servers().values().stream().findFirst().orElse(null);
 
         synchronized (directoryService.serversLock()) {
-            principal = directoryService.getServersOrdered().values().stream().findFirst().orElse(null);
+            principal = directoryService.serversOrdered().values().stream().findFirst().orElse(null);
         }
 
         if (principal == null) return "404 NO_PRINCIPAL";
@@ -112,11 +111,11 @@ public class WorkerRunnable implements Runnable{
         String id = kv.get("ID");
         if(id == null || id.isEmpty()) return "400 BAD_REQUEST ID";
 
-        ServerInfo removed = directoryService.getServers().remove(id);
+        ServerInfo removed = directoryService.servers().remove(id);
         if (removed == null) return "409 CONFLICT UNKNOWN_ID";
 
         synchronized (directoryService.serversLock()) {
-            directoryService.getServersOrdered().remove(id);
+            directoryService.serversOrdered().remove(id);
         }
 
         return "200 OK";
@@ -126,10 +125,22 @@ public class WorkerRunnable implements Runnable{
         String id = kv.get("ID");
         if (id == null || id.isBlank()) return "400 BAD_REQUEST ID";
 
-        ServerInfo si = directoryService.getServers().get(id);
+        ServerInfo si = directoryService.servers().get(id);
         if (si == null) return "409 CONFLICT UNKNOWN_ID";
-        //atualizar heartbeat
-        //...
+
+        long now = System.currentTimeMillis();
+        si.setLastSeenMillis(now);
+
+        //DATA BASE VERSION - se tiver sido enviada, também mostaremos
+        String dbv = kv.get("DBV");
+
+        if(dbv != null && !dbv.isBlank()){
+            try{
+                if(Integer.parseInt(dbv.trim()) != si.getVersion())
+                    System.out.printf("[HB] %s: version %d -> %d%n", id, si.getVersion(), Integer.parseInt(dbv.trim()));
+            }catch (NumberFormatException ignore){}
+        }
+
         return "200 OK";
     }
 
@@ -149,20 +160,21 @@ public class WorkerRunnable implements Runnable{
         }
         if (ip.isEmpty() || port <= 0 || port > 65535) return "400 BAD_REQUEST TCP";
 
-        ServerInfo si = directoryService.getServers().get(id);
+        ServerInfo si = directoryService.servers().get(id);
         if (si == null) {
-            si = new ServerInfo(id, ip, port);
-            directoryService.getServers().put(id, si);
+            si = new ServerInfo(id, ip, port, 1);
+            si.setLastSeenMillis(System.currentTimeMillis());
+            directoryService.servers().put(id, si);
             synchronized (directoryService.serversLock()) {
-                directoryService.getServersOrdered().put(id, si);
+                directoryService.serversOrdered().put(id, si);
             }
         } else {
-            //si.heartbeat(null, null); // por fazer
+            si.setLastSeenMillis(System.currentTimeMillis());
         }
 
         ServerInfo principal;
         synchronized (directoryService.serversLock()) {
-            principal = directoryService.getServersOrdered().values().stream().findFirst().orElse(null);
+            principal = directoryService.serversOrdered().values().stream().findFirst().orElse(null);
         }
         if (principal == null) return "404 NO_PRINCIPAL";
         return "200 PRINCIPAL " + principal.tcpEndpoint();
@@ -171,7 +183,7 @@ public class WorkerRunnable implements Runnable{
     private void send(UdpMessage to, String text) throws IOException {
         byte[] out        = text.getBytes(StandardCharsets.UTF_8);
         DatagramPacket dp = new DatagramPacket(out, out.length, to.addr(), to.port());
-        directoryService.getSocket().send(dp);
+        directoryService.socket().send(dp);
     }
 
     private static Map<String, String> parseKv(String s){

@@ -1,4 +1,4 @@
-package pt.isec.directory;
+package pt.isec.directory.model;
 
 public class ServerInfo{
     private final int tcpPort;

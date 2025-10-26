@@ -5,21 +5,21 @@ package pt.isec.directory.threads;
 import pt.isec.directory.IDirectoryService;
 
 public class ReaperRunnable implements Runnable{
-    private final IDirectoryService directoryService;
+    private final IDirectoryService tInfo;
     private final long periodMs;
 
-    public ReaperRunnable(IDirectoryService directoryService, long periodMs) {
-        this.directoryService = directoryService;
+    public ReaperRunnable(IDirectoryService tInfo, long periodMs) {
+        this.tInfo = tInfo;
         this.periodMs = periodMs;
     }
 
     @Override
     public void run() {
-        while (directoryService.isRunning()){
+        while (tInfo.isRunning()){
             try{
                 long now = System.currentTimeMillis();
 
-                directoryService.removeServersFromList(now);
+                tInfo.removeServersFromList(now);
 
                 Thread.sleep(periodMs);
             }catch (InterruptedException ie) {

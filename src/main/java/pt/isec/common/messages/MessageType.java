@@ -7,5 +7,11 @@ public enum MessageType {
     SUBMIT_ANSWER,
     GET_QUESTION,
     CODE,
-    RESULT
+    RESULT,
+
+
+    ACK,
+    NACK,
+    PONG,
+    DB_COPY_REQUEST,
 }

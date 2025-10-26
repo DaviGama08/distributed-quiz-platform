@@ -2,19 +2,18 @@ package pt.isec.server.network.threads;
 
 import pt.isec.common.messages.MessageType;
 import pt.isec.common.messages.Message;
+import pt.isec.server.network.IServerNode;
 import pt.isec.server.network.NetworkConnection;
 import pt.isec.server.services.auth.AuthService;
 import java.io.IOException;
-import java.net.Socket;
 
-public class ClientHandlerRunnable extends Thread{
-
+public class ClientHandlerRunnable implements Runnable{
+    private final IServerNode tInfo;
     private NetworkConnection connection;
     private AuthService authService;
 
-    public ClientHandlerRunnable(Socket clientSocket) throws IOException {
-        this.connection = new NetworkConnection(clientSocket);
-        //this.authService = new AuthService(); //falta implementar
+    public ClientHandlerRunnable(IServerNode tInfo, NetworkConnection connection) {
+        this.tInfo = tInfo; this.connection = connection;
     }
 
     @Override
@@ -39,7 +38,7 @@ public class ClientHandlerRunnable extends Thread{
     }
 
     private Message<?> processMessage(Message<?> message) {
-        return switch (message.getMsgType()) {
+        return switch (message.getType()) {
             /*case REGISTER -> authService.handleRegister(message);
             case LOGIN -> authService.handleLogin(message);
             case ....continuar*/

@@ -31,33 +31,34 @@ import java.net.DatagramSocket;
  *  - "500 ERROR <motivo>"
  */
 public class UdpListenerRunnable implements Runnable {
-    private final IDirectoryService directoryService;
+    private final IDirectoryService tInfo;
 
-    public UdpListenerRunnable(IDirectoryService directoryService) {
-        this.directoryService = directoryService;
+    public UdpListenerRunnable(IDirectoryService tInfo) {
+        this.tInfo = tInfo;
     }
 
     @Override
     public void run() {
-        DatagramSocket socket = directoryService.socket();
-        System.out.println("Directoria UDP a escutar na porta " + directoryService.udpPort() + "...");
-        byte[] buffer         = new byte[directoryService.maxPacketSize()];
+        DatagramSocket socket = tInfo.socket();
+        System.out.println("Directoria UDP a escutar na porta " + tInfo.udpPort() + "...");
+        byte[] buffer         = new byte[tInfo.maxPacketSize()];
         DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
 
-        while (directoryService.isRunning()) {
+        while (tInfo.isRunning()) {
             try {
                 socket.receive(packet);
 
                 byte[] data = new byte[packet.getLength()];
                 System.arraycopy(packet.getData(), packet.getOffset(), data, 0, packet.getLength());
 
-                directoryService.queue().put(
+                tInfo.queue().put(
                         new UdpMessage(packet.getAddress(), packet.getPort(), data, data.length)
                 );
             } catch (IOException e) {
-                if (directoryService.isRunning())
+                if (tInfo.isRunning())
                     System.err.println("Erro a receber UDP: " + e.getMessage());
             } catch (InterruptedException ie) {
+                //TODO: analisar se é necessário interromper a thread.
                 Thread.currentThread().interrupt();
                 break;
             }

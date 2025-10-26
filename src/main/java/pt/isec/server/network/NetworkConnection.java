@@ -2,13 +2,14 @@ package pt.isec.server.network;
 
 import pt.isec.common.messages.Message;
 import java.io.*;
+import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.time.Duration;
 
 public class NetworkConnection {
-
-    private Socket socket;
-    private ObjectOutputStream out;
-    private ObjectInputStream in;
+    private final Socket socket;
+    private final ObjectOutputStream out;
+    private final ObjectInputStream in;
 
     public NetworkConnection(Socket socket) throws IOException {
         this.socket = socket;
@@ -16,14 +17,52 @@ public class NetworkConnection {
         this.in = new ObjectInputStream(socket.getInputStream());
     }
 
+    public static NetworkConnection connect(String host, int port, Duration timeout) throws IOException{
+        Socket s = new Socket();
+        s.connect(new InetSocketAddress(host, port), (int)Math.min(Integer.MAX_VALUE, Math.max(0, timeout.toMillis())));
+        return new NetworkConnection(s);
+    }
+
+    public void setReadTimeout(Duration timeout) throws IOException {
+        socket.setSoTimeout((int)Math.min(Integer.MAX_VALUE, Math.max(0, timeout.toMillis())));
+    }
+
     public <T extends Serializable> void sendMessage(Message<T> message) throws IOException {
         out.writeObject(message);
         out.flush();
+        out.reset();
     }
 
     public Message<?> receiveMessage() throws IOException, ClassNotFoundException {
         return (Message<?>) in.readObject();
     }
+
+    //TODO: ?
+    public long sendStream(InputStream src) throws IOException {
+        try (src) {
+            byte[] buf = new byte[64 * 1024];
+            long tot = 0;
+            int r;
+            OutputStream raw = socket.getOutputStream();
+            while ((r = src.read(buf)) >= 0) { raw.write(buf,0,r); tot += r; }
+            raw.flush();
+            return tot;
+        }
+    }
+    //TODO: ?
+    public long receiveTo(OutputStream dst) throws IOException {
+        try (dst) {
+            byte[] buf = new byte[64 * 1024];
+            long tot = 0;
+            int r;
+            InputStream raw = socket.getInputStream();
+            while ((r = raw.read(buf)) >= 0) { dst.write(buf,0,r); tot += r; }
+            dst.flush();
+            return tot;
+        }
+    }
+
+    public Socket socket() { return socket; }
 
     public void close() throws IOException {
         if(out != null) out.close();

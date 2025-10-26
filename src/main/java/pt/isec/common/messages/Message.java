@@ -17,7 +17,7 @@ public class Message<T extends Serializable> implements Serializable {
         this.data = data;
     }
 
-    public MessageType getMsgType() {
+    public MessageType getType() {
         return msgType;
     }
 

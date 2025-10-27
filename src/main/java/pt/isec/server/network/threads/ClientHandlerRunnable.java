@@ -12,9 +12,7 @@ public class ClientHandlerRunnable implements Runnable{
     private NetworkConnection connection;
     private AuthService authService;
 
-    public ClientHandlerRunnable(IServerNode tInfo, NetworkConnection connection) {
-        this.tInfo = tInfo; this.connection = connection;
-    }
+    public ClientHandlerRunnable(IServerNode tInfo, NetworkConnection connection) {this.tInfo = tInfo; this.connection = connection;}
 
     @Override
     public void run() {

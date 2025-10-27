@@ -14,9 +14,9 @@ public class MulticastReceiverRunnable implements Runnable, AutoCloseable {
     private final IServerNode tInfo;
     private MulticastSocket ms;
 
-    public MulticastReceiverRunnable(IServerNode tInfo) {
-        this.tInfo = tInfo;
-    }
+    private final int BUFFER_SIZE = 4096;
+
+    public MulticastReceiverRunnable(IServerNode tInfo) {this.tInfo = tInfo;}
 
     @Override
     public void run() {
@@ -26,7 +26,7 @@ public class MulticastReceiverRunnable implements Runnable, AutoCloseable {
             InetAddress grp = InetAddress.getByName(tInfo.mcGroup());
             _ms.joinGroup(new InetSocketAddress(grp, tInfo.mcPort()), tInfo.mcIf());
 
-            byte[] buf = new byte[4096];
+            byte[] buf = new byte[BUFFER_SIZE];
             DatagramPacket pkt = new DatagramPacket(buf, buf.length);
 
             while (tInfo.isRunning()) {

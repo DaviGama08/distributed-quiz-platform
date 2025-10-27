@@ -23,6 +23,9 @@ public class NetworkConnection {
         return new NetworkConnection(s);
     }
 
+    //Explicação das funções Math que usamos na função a seguir:
+    //O Math.min(...): garante que nunca ultrapasse o limite dos inteiros.
+    //O Math.max(...): garante que seja sempre positivo.
     public void setReadTimeout(Duration timeout) throws IOException {
         socket.setSoTimeout((int)Math.min(Integer.MAX_VALUE, Math.max(0, timeout.toMillis())));
     }
@@ -37,21 +40,23 @@ public class NetworkConnection {
         return (Message<?>) in.readObject();
     }
 
-    //TODO: ?
+    //Esses dois métodos a seguir terão o principal intuito de copiar os ficheiros .db
+    //do servidor master para os servidores de backup.
     public long sendStream(InputStream src) throws IOException {
         try (src) {
-            byte[] buf = new byte[64 * 1024];
-            long tot = 0;
-            int r;
-            OutputStream raw = socket.getOutputStream();
-            while ((r = src.read(buf)) >= 0) { raw.write(buf,0,r); tot += r; }
-            raw.flush();
-            return tot;
+                //TODO: definir constante
+                byte[] buf = new byte[64 * 1024];
+                long tot = 0;
+                int r;
+                OutputStream raw = socket.getOutputStream();
+                while ((r = src.read(buf)) >= 0) { raw.write(buf,0,r); tot += r; }
+                raw.flush();
+                return tot;
         }
     }
-    //TODO: ?
     public long receiveTo(OutputStream dst) throws IOException {
         try (dst) {
+            //TODO: definir constante
             byte[] buf = new byte[64 * 1024];
             long tot = 0;
             int r;

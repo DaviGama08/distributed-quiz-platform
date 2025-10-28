@@ -42,79 +42,66 @@ public class DatabaseManager {
 
     //Funcao para saber se a bd já foi inicializada
     public boolean isInitialized() {
-
-        try (Connection conn = getConnection()) {
-
-            try (Statement s = conn.createStatement()) {
-                //Querys de test
-                try (ResultSet rs = s.executeQuery(
-                        "SELECT name FROM sqlite_master WHERE type='table' AND name='config'")) {
-                    if (!rs.next()) return false;
-                }
-
-                try (ResultSet rs = s.executeQuery(
-                        "SELECT COUNT(*) FROM config WHERE id=1")) {
-                    return rs.next() && rs.getInt(1) > 0;
-                }
-            }
-
+        try (Connection conn = getConnection();
+             Statement s = conn.createStatement();
+             ResultSet rs = s.executeQuery(
+                     "SELECT name FROM sqlite_master WHERE type='table' AND name='config'")) {
+            return rs.next();
         } catch (SQLException e) {
             return false;
         }
     }
 
-    //Initcializa a bd
+        //Initcializa a bd
     public void initializeDatabase(String teacherCodeHash) throws SQLException, IOException {
         if (dbUrl == null) {
             throw new IllegalStateException("Database URL not set.");
         }
-        try (Connection conn = getConnection()) {
+        try (Connection conn = getConnection()){
 
-            conn.setAutoCommit(false);
-            try {
-                //Pasa o schema.sql para string
-                String schemaSql;
-                try (InputStream is = getClass().getClassLoader().getResourceAsStream("db/schema.sql")) {
-                    if (is == null)
-                        throw new IOException("schema.sql not found in resources/db/");
-                    try (BufferedReader br = new BufferedReader(new InputStreamReader(is))) {
-                        StringBuilder sb = new StringBuilder();
-                        String line;
-                        while ((line = br.readLine()) != null) {
-                            sb.append(line).append('\n');
+            try(InputStream is = getClass().getClassLoader().getResourceAsStream("db/schema.sql");
+                BufferedReader br = new BufferedReader(new InputStreamReader(is))){
+
+                    conn.setAutoCommit(false);
+
+                    //Pasa o schema.sql para string
+                    String schemaSql;
+
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        sb.append(line).append('\n');
+                    }
+                    schemaSql = sb.toString();
+
+                    //Limpa a string em Statements Individuias (Cada table numa unica string)
+                    String[] stmts = schemaSql.split(";(\\s*\\r?\\n|\\s*$)");
+                    try (Statement stmt = conn.createStatement()) {
+                        for (String raw : stmts) {
+                            String sql = raw.trim();
+                            if (sql.isEmpty() || sql.startsWith("--"))
+                                continue;
+                            stmt.execute(sql);
                         }
-                        schemaSql = sb.toString();
                     }
-                }
+                    //Ve se a tabela config ja esta configurada (se ja estava criada)
+                    boolean hasConfig = false;
+                    try (Statement stmt = conn.createStatement();
+                         ResultSet rs = stmt.executeQuery("SELECT 1 FROM config WHERE id = 1")) {
+                        if (rs.next())
+                            hasConfig = true;
+                    }
+                    //Se nao existem valores, insere
+                    if (!hasConfig) {
 
-                //Limpa a string em Statements Individuias (Cada table numa unica string)
-                String[] stmts = schemaSql.split(";(\\s*\\r?\\n|\\s*$)");
-                try (Statement stmt = conn.createStatement()) {
-                    for (String raw : stmts) {
-                        String sql = raw.trim();
-                        if (sql.isEmpty() || sql.startsWith("--"))
-                            continue;
-                        stmt.execute(sql);
+                        String insertSql = "INSERT INTO config (id, db_version, teacher_code_hash) VALUES (1, 0, ?)";
+                        try (PreparedStatement pstmt = conn.prepareStatement(insertSql)) {
+                            pstmt.setString(1, teacherCodeHash);
+                            pstmt.executeUpdate();
+                        }
                     }
-                }
-                //Ve se a tabela config ja esta configurada (se ja estava criada)
-                boolean hasConfig = false;
-                try (Statement stmt = conn.createStatement();
-                     ResultSet rs = stmt.executeQuery("SELECT 1 FROM config WHERE id = 1")) {
-                    if (rs.next())
-                        hasConfig = true;
-                }
-                //Se nao existem valores, insere
-                if (!hasConfig) {
-
-                    String insertSql = "INSERT INTO config (id, db_version, teacher_code_hash) VALUES (1, 0, ?)";
-                    try (PreparedStatement pstmt = conn.prepareStatement(insertSql)) {
-                        pstmt.setString(1, teacherCodeHash);
-                        pstmt.executeUpdate();
-                    }
-                }
-                conn.commit();
-            } catch (SQLException | IOException e) {
+                    conn.commit();
+            }catch (SQLException | IOException e) {
                 conn.rollback();
                 throw e;
             } finally {

@@ -12,8 +12,8 @@ public final class Teacher extends User implements Serializable {
     }
 
     public Teacher(Integer id, String name, String email, String passwordHash) {
-        validate(id);
         super(name, email, passwordHash);
+        validate(id);
         this.id = id;
     }
 

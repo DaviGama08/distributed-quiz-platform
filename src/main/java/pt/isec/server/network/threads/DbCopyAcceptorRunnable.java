@@ -14,11 +14,11 @@ import java.time.Duration;
  * TCP: aceita pedidos de cópia de BD.
  * Espera DB_COPY_REQUEST, responde ACK e envia o ficheiro .db em bytes brutos.
  */
-public class DpCopyAcceptorRunnable implements Runnable, AutoCloseable {
+public class DbCopyAcceptorRunnable implements Runnable, AutoCloseable {
     private final IServerNode tInfo;
     private ServerSocket ss;
 
-    public DpCopyAcceptorRunnable(IServerNode tInfo) {
+    public DbCopyAcceptorRunnable(IServerNode tInfo) {
         this.tInfo = tInfo;
     }
 

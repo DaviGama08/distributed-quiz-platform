@@ -50,7 +50,7 @@ public class NetworkConnection {
     public Message<?> receiveMessage() throws IOException, ClassNotFoundException {
         return (Message<?>) in.readObject();
     }
-
+    //TODO: ver para que serve sendStream()
     public long sendStream(InputStream src) throws IOException {
         try (src) {
             byte[] buf = new byte[BUFFER_SIZE];
@@ -63,10 +63,11 @@ public class NetworkConnection {
                 total += read;
             }
             raw.flush();
-            return total;
+            return total; //n.º de bytes enviados
         }
     }
 
+    //TODO: ver para que serve isto receiveTo()
     public long receiveTo(OutputStream dst) throws IOException {
         try (dst) {
             byte[] buf = new byte[BUFFER_SIZE];

@@ -29,7 +29,7 @@ public class ServerNode implements IServerNode, Runnable, AutoCloseable{
     private volatile Principal master;
     private final AtomicLong dbVersion = new AtomicLong(0);
 
-    private Thread tMulticastReceiver, tDirectoryHB, tDpCopy, tMulticastSender, tTcpClient;
+    private Thread tMulticastReceiver, tDirectoryHB, tDbCopy, tMulticastSender, tTcpClient;
 
     public ServerNode(String dirHost, int dirPort, String mcIfIp,
                       int clientPort, int dbCopyPort, Path dbPath) throws Exception {
@@ -65,13 +65,13 @@ public class ServerNode implements IServerNode, Runnable, AutoCloseable{
 
         if(tMulticastReceiver != null)  tMulticastReceiver.interrupt();
         if(tDirectoryHB != null)        tDirectoryHB.interrupt();
-        if(tDpCopy != null)             tDpCopy.interrupt();
+        if(tDbCopy != null)             tDbCopy.interrupt();
         if(tMulticastSender != null)    tMulticastSender.interrupt();
         if(tTcpClient != null)          tTcpClient.interrupt();
     }
     public void start() {
         tDirectoryHB       = new Thread(new DirectoryHeartbeatRunnable(this), "directory-hb");
-        tDpCopy            = new Thread(new DpCopyAcceptorRunnable(this), "db-copy");
+        tDbCopy            = new Thread(new DbCopyAcceptorRunnable(this), "db-copy");
         tMulticastSender   = new Thread(new MulticastSenderRunnable(this), "multicast-sender");
         tMulticastReceiver = new Thread(new MulticastReceiverRunnable(this), "multicast-receiver");
         tTcpClient         = new Thread(new TcpClientAcceptorRunnable(this), "tcp-client");
@@ -79,7 +79,7 @@ public class ServerNode implements IServerNode, Runnable, AutoCloseable{
         tMulticastReceiver.start();
         tMulticastSender.start();
         tDirectoryHB.start();
-        tDpCopy.start();
+        tDbCopy.start();
         tTcpClient.start();
     }
 }

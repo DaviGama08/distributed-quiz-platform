@@ -1,7 +1,7 @@
-package pt.isec.directory;
+package pt.isec.directory.service;
 
 import pt.isec.common.messages.UdpMessage;
-import pt.isec.directory.model.ServerInfo;
+import pt.isec.directory.ServerInfo;
 
 import java.net.DatagramSocket;
 import java.util.Map;

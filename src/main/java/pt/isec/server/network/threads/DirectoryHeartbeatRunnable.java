@@ -82,7 +82,6 @@ public class DirectoryHeartbeatRunnable implements Runnable, AutoCloseable {
                     boolean iAmPrim = Objects.equals(update.ip, tInfo.ip()) && update.port == tInfo.clientPort();
                     System.out.printf("[DIR] PRINCIPAL %s:%d | iAmPrimary=%s%n", update.ip, update.port, iAmPrim);
                 }
-
                 Thread.sleep(SLEEP_INTERVAL_MS);
             }
 

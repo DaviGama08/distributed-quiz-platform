@@ -1,6 +1,6 @@
-package pt.isec.directory;
+package pt.isec.directory.service;
 import pt.isec.common.messages.UdpMessage;
-import pt.isec.directory.model.ServerInfo;
+import pt.isec.directory.ServerInfo;
 import pt.isec.directory.threads.MetricsRunnable;
 import pt.isec.directory.threads.ReaperRunnable;
 import pt.isec.directory.threads.UdpListenerRunnable;

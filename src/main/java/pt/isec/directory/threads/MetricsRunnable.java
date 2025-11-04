@@ -1,6 +1,6 @@
 package pt.isec.directory.threads;
 
-import pt.isec.directory.DirectoryService;
+import pt.isec.directory.service.DirectoryService;
 
 public class MetricsRunnable implements Runnable{
     private final DirectoryService tInfo;

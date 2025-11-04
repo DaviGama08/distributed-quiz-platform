@@ -1,7 +1,7 @@
 package pt.isec.directory.threads;
 
 import pt.isec.common.messages.UdpMessage;
-import pt.isec.directory.IDirectoryService;
+import pt.isec.directory.service.IDirectoryService;
 
 import java.io.IOException;
 import java.net.DatagramPacket;

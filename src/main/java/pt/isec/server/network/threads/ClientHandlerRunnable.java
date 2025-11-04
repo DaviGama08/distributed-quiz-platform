@@ -7,7 +7,7 @@ import pt.isec.server.network.NetworkConnection;
 import pt.isec.server.services.auth.AuthService;
 import java.io.IOException;
 
-public class ClientHandlerRunnable implements Runnable{
+public class    ClientHandlerRunnable implements Runnable{
     private final IServerNode tInfo;
     private NetworkConnection connection;
     private AuthService authService;

@@ -2,7 +2,7 @@ package pt.isec.directory.threads;
 
 /*Remove servidores inativos de x em x tempo*/
 
-import pt.isec.directory.IDirectoryService;
+import pt.isec.directory.service.IDirectoryService;
 
 public class ReaperRunnable implements Runnable{
     private final IDirectoryService tInfo;

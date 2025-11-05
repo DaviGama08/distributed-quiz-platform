@@ -4,20 +4,20 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
-public class Messages <T extends Serializable> implements Serializable {
+public class Message<T extends Serializable> implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
     private MessageType msgType;
     private T data;
 
-    public Messages() {}
+    public Message() {}
 
-    public Messages(MessageType msgType, T data) {
+    public Message(MessageType msgType, T data) {
         this.msgType = msgType;
         this.data = data;
     }
 
-    public MessageType getMsgType() {
+    public MessageType getType() {
         return msgType;
     }
 
@@ -27,16 +27,17 @@ public class Messages <T extends Serializable> implements Serializable {
 
     public T getData() {
         return data;
-    }
+    } //A confirmar
 
     public void setData(T data) {
         this.data = data;
-    }
+    } //A confirmar
 
     @Override
     public boolean equals(Object o) {
+        if (o == this) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        Messages<?> messages = (Messages<?>) o;
+        Message<?> messages = (Message<?>) o;
         return msgType == messages.msgType && Objects.equals(data, messages.data);
     }
 

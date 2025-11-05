@@ -1,0 +1,174 @@
+package pt.isec.directory.service;
+import pt.isec.common.messages.UdpMessage;
+import pt.isec.directory.ServerInfo;
+import pt.isec.directory.threads.MetricsRunnable;
+import pt.isec.directory.threads.ReaperRunnable;
+import pt.isec.directory.threads.UdpListenerRunnable;
+import pt.isec.directory.threads.WorkerRunnable;
+import java.net.DatagramSocket;
+import java.net.SocketException;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+
+public class DirectoryService implements IDirectoryService{
+    //Base
+    private final int udpPort;
+    private final int queueCapacity;
+    private volatile boolean running = true;
+
+    //Socket e fila
+    private DatagramSocket socket;
+    private BlockingQueue<UdpMessage> queue;
+    private final int MAXPACKETSIZE = 512;
+
+    //Lista de servidores
+    //  - servers:        acesso concorrente por UUID -> ServerInfo
+    //  - serversOrdered: preserva ordem de registo (para master = 1º)
+    //  - serversLock:    lock para acessos ao mapa ordenado
+    private final ConcurrentMap<String, ServerInfo> servers = new ConcurrentHashMap<>();
+    private final Map<String, ServerInfo> serversOrdered    = new LinkedHashMap<>();
+    private final Object serversLock                        = new Object();
+
+    // TTL (17s) + períodos das threads
+    private final long ttlMs;
+    private final long reaperEveryMs;
+    private final long metricsEveryMs;
+    private static final long DEFAULT_TTL_MS         = 17_000;
+    private static final long DEFAULT_REAPER_EVERY   = 2_000;
+    private static final long DEFAULT_METRICS_EVERY  = 5_000;
+
+    //Threads
+    private Thread tListener;
+    private Thread tReaper;
+    private Thread tMetrics;
+    private final Thread[] tWorkers;
+
+
+    public DirectoryService(int udpPort, int queueCapacity, int maxWorkers) {
+        this(udpPort, queueCapacity, maxWorkers, DEFAULT_TTL_MS, DEFAULT_REAPER_EVERY, DEFAULT_METRICS_EVERY);
+    }
+
+    public DirectoryService(int udpPort, int queueCapacity, int maxWorkers,
+                            long ttlMs, long reaperEveryMs, long metricsEveryMs) {
+        this.udpPort = udpPort;
+        this.queueCapacity = queueCapacity;
+
+        this.ttlMs = ttlMs;
+        this.reaperEveryMs = reaperEveryMs;
+        this.metricsEveryMs = metricsEveryMs;
+
+        this.tWorkers = new Thread[Math.max(1, maxWorkers)];
+    }
+
+    public void start() {
+        System.out.println("Starting DirectoryService...");
+
+        //Sockets + fila
+        try {
+            this.socket = new DatagramSocket(udpPort);
+        } catch (SocketException e) {
+            throw new RuntimeException("Não foi possível abrir o socket UDP na porta " + udpPort, e);
+        }
+        this.queue = new ArrayBlockingQueue<>(queueCapacity);
+
+        //Threads
+        tListener = new Thread(new UdpListenerRunnable(this), "dir-udp_listener");
+        tListener.start();
+
+        for(int i = 0; i < tWorkers.length; i++){
+            tWorkers[i] = new Thread(new WorkerRunnable(this), "dir-worker_" + i);
+            tWorkers[i].start();
+        }
+
+        tReaper = new Thread(new ReaperRunnable(this, reaperEveryMs), "dir-reaper");
+        tReaper.start();
+
+        tMetrics = new Thread(new MetricsRunnable(this, metricsEveryMs), "dir-metrics");
+        tMetrics.start();
+    }
+
+    public void stop() {
+        running = false;
+        if (socket != null && !socket.isClosed()) socket.close();
+
+        if(tListener != null) tListener.interrupt();
+
+        for(Thread t : tWorkers) if(t != null) t.interrupt();
+
+        if(tReaper != null) tReaper.interrupt();
+
+        if(tMetrics != null) tMetrics.interrupt();
+    }
+
+    @Override public int udpPort() { return udpPort; }
+    @Override public int queueCapacity() { return queueCapacity; }
+    @Override public boolean isRunning() { return running; }
+    @Override public DatagramSocket socket() { return socket; }
+    @Override public int maxPacketSize() { return MAXPACKETSIZE; }
+    @Override public BlockingQueue<UdpMessage> queue() { return queue; }
+
+    @Override public ConcurrentMap<String, ServerInfo> servers() { return servers; }
+    @Override public Map<String, ServerInfo> serversOrdered() { return serversOrdered; }
+    @Override public Object serversLock() { return serversLock; }
+
+    @Override
+    public int serversCount() {return servers.size();}
+
+    @Override
+    //serversOrdered.keySet(): devolve todas as chaves, na ordem de inserção.
+    //
+    //iterator().next(): devolve a primeira chave (master)
+    public String masterServerUuid() {
+        synchronized (serversLock){return serversOrdered.isEmpty() ? null : serversOrdered.keySet().iterator().next();}
+    }
+
+    @Override
+    public int serverTcpPort(String uuid) {
+        if(uuid == null) return -1;
+        ServerInfo info = servers.get(uuid);
+        return info == null ? -1 : info.getTcpPort();
+    }
+
+    @Override
+    public int serverVersion(String uuid) {
+        if(uuid == null) return -1;
+        ServerInfo info = servers.get(uuid);
+        return info == null ? -1 : info.getVersion();
+    }
+
+    @Override public long ttlMillis() { return ttlMs; }
+
+    /**
+     * Remove servidores inativos (now - lastSeen > TTL).
+     * Mantém a ordem em serversOrdered (o 1º é o master).
+     * <p>
+     * Nota: requer que ServerInfo tenha getLastSeenMillis().
+     */
+    @Override
+    public void removeServersFromList(long currTime) {
+        synchronized (serversLock){
+            if(serversOrdered.isEmpty())
+                return;
+
+            //Map.Entry -> serve para representar apenas um par
+            Iterator<Map.Entry<String, ServerInfo>> it = serversOrdered.entrySet().iterator();
+            while(it.hasNext()){
+                Map.Entry<String, ServerInfo> entry = it.next();
+                String     uuid                     = entry.getKey();
+                ServerInfo info                     = entry.getValue();
+
+                long lastSeen = (info != null) ? info.getLastSeenMillis() : 0L;
+                if(currTime - lastSeen > ttlMs){
+                    it.remove();
+                    servers.remove(uuid);
+                    System.out.printf("[Diretoria] Removido inativo (TTL=%d ms): %s%n", ttlMs, uuid);
+                }
+            }
+        }
+    }
+}

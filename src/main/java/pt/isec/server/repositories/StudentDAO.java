@@ -10,9 +10,9 @@ import java.util.Optional;
 
 public class StudentDAO implements IUserDAO<Student>{
     //classe para aceder a dados do estudante na base de dados
-    DatabaseManager db;
+    private final DatabaseManager db;
 
-    StudentDAO(){
+    public StudentDAO(){
         db = DatabaseManager.getInstance();
     }
     @Override

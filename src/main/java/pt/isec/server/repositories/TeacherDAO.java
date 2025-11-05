@@ -9,9 +9,9 @@ import java.util.Optional;
 
 public class TeacherDAO implements IUserDAO<Teacher> {
     //classe para aceder a dados do docente na base de dadosxx
-    DatabaseManager db;
+    private final DatabaseManager db;
 
-    TeacherDAO(){
+    public TeacherDAO(){
         db = DatabaseManager.getInstance();
     }
 

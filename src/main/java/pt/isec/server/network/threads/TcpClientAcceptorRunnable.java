@@ -18,8 +18,9 @@ import java.util.concurrent.Executors;
 public class TcpClientAcceptorRunnable implements Runnable, AutoCloseable {
 
     private static final int THREAD_POOL_SIZE = 8;
-    private final IServerNode tInfo;
     private final ExecutorService pool = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+
+    private final IServerNode tInfo;
     private ServerSocket serverSocket;
 
     public TcpClientAcceptorRunnable(IServerNode tInfo) {this.tInfo = tInfo;}

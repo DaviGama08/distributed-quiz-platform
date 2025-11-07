@@ -9,7 +9,7 @@ public class SQLiteConnectionFactory {
     private final String dbUrl;
 
     public SQLiteConnectionFactory(String dbPath){
-        this.dbUrl = "jdbc:sqlite: " + dbPath;
+        this.dbUrl = "jdbc:sqlite:" + dbPath;
     }
 
     public Connection getConnection() throws SQLException {

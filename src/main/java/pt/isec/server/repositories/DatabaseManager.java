@@ -145,12 +145,12 @@ public class DatabaseManager {
 
     //Helper para receber info da bd e criar as respeticvas classes
     @FunctionalInterface
-    interface ResultSetMapper<T> {
+    public interface ResultSetMapper<T> {
         T map(ResultSet rs) throws SQLException;
     }
 
     //Retorna uma List
-    <T> List<T> queryList(String sql, ResultSetMapper<T> mapper, Object... params) throws SQLException {
+    public <T> List<T> queryList(String sql, ResultSetMapper<T> mapper, Object... params) throws SQLException {
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
 
@@ -169,7 +169,7 @@ public class DatabaseManager {
     }
 
     //Retorna multiplas colunas
-    <T> T queryForObject(String sql, ResultSetMapper<T> mapper, Object... params) {
+    public <T> T queryForObject(String sql, ResultSetMapper<T> mapper, Object... params) {
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             bindParams(ps, params);
@@ -182,7 +182,7 @@ public class DatabaseManager {
 
     }
         //Retorna valor unico
-    <T> T queryForSingleValue(String sql, Object... params) {
+    public <T> T queryForSingleValue(String sql, Object... params) {
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
 
@@ -233,7 +233,7 @@ public class DatabaseManager {
     }
 
     //Faz alterações nas tabelas
-    int executeUpdate(String sql, Object... params) {
+    public int executeUpdate(String sql, Object... params) {
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
 

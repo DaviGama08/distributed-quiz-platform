@@ -4,10 +4,13 @@ import pt.isec.common.messages.Message;
 import pt.isec.common.messages.MessageType;
 import pt.isec.server.network.IServerNode;
 import pt.isec.server.network.NetworkConnection;
+import pt.isec.server.repositories.DatabaseManager;
+import pt.isec.server.services.config.ConfigServices;
 
 import java.io.FileInputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.file.Files;
 import java.time.Duration;
 
 /**
@@ -39,6 +42,19 @@ public class DbCopyAcceptorRunnable implements Runnable, AutoCloseable {
                     if (req == null || req.getType() != MessageType.DB_REQUEST_COPY) {
                         conn.sendMessage(new Message<>(MessageType.NACK, "bad request"));
                         continue;
+                    }
+
+                    if(!tInfo.isPrimary()){
+                        conn.sendMessage(new Message<>(MessageType.NACK, "not-primary", String.class));
+                        continue;
+                    }
+
+                    // garante que a BD existe e está inicializada
+                    DatabaseManager db = DatabaseManager.getInstance();
+                    db.setDbUrl("jdbc:sqlite" + tInfo.dbPath());
+                    if(!Files.exists(tInfo.dbPath())){
+                        ConfigServices cfg = new ConfigServices();
+                        db.initializeDatabase(cfg.getTeachersRegisterHash());
                     }
 
                     conn.sendMessage(new Message<>(MessageType.ACK, "copy-start"));

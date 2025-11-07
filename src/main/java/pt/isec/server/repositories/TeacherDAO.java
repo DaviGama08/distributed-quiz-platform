@@ -27,6 +27,12 @@ public class TeacherDAO implements IUserDAO<Teacher> {
     }
 
     @Override
+    public boolean existsByEmail(String email) {
+        Integer one = db.queryForSingleValue("SELECT 1 FROM teacher WHERE email = ? LIMIT 1",email);
+        return one != null;
+    }
+
+    @Override
     public Optional<Teacher> findById(long id) throws SQLException {
         String sql = "SELECT id, name, email, password_hash FROM teacher WHERE id = ?";
         Teacher aux = db.queryForObject(sql, rs -> new Teacher(
@@ -39,6 +45,21 @@ public class TeacherDAO implements IUserDAO<Teacher> {
         if(aux == null)
             return Optional.empty();
         return Optional.of(aux);
+    }
+
+    @Override
+    public Optional<Teacher> findByEmail(String email){
+        //Optional.ofNullable: Se não existe, retorna Optional.empty() em vez de lançar exceção ou retornar null
+        return Optional.ofNullable(db.queryForObject(
+                "SELECT id, name, email, password_hash FROM teacher WHERE email = ? LIMIT 1;",
+                rs -> new Teacher(
+                        rs.getInt("id"),
+                        rs.getString("name"),
+                        rs.getString("email"),
+                        rs.getString("password_hash")
+                ),
+                email
+        ));
     }
 
     @Override

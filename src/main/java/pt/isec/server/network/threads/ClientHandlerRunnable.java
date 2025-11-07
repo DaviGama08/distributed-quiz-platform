@@ -1,5 +1,6 @@
 package pt.isec.server.network.threads;
 
+import pt.isec.common.dto.auth.LoginRequestDTO;
 import pt.isec.common.dto.auth.LoginResponseDTO;
 import pt.isec.common.dto.auth.RegisterStudentDTO;
 import pt.isec.common.dto.auth.RegisterTeacherDTO;
@@ -27,8 +28,6 @@ public class ClientHandlerRunnable implements Runnable{
             // o cliente deve enviar a 1ª mensagem em até 30 segundos
             connection.setReadTimeout(Duration.ofSeconds(FIRST_MESSAGE_TIMEOUT_SEC));
 
-            Message<?> first = connection.receiveMessage();
-
             // se o servidor não for primário, rejeita o cliente
             if (!tInfo.isPrimary()) {
                 connection.sendMessage(new Message<>(MessageType.NACK, "not-primary"));
@@ -49,7 +48,6 @@ public class ClientHandlerRunnable implements Runnable{
 
                 Message<?> response = processMessage(msg);
 
-                // TODO: processar comandos reais vindos do cliente
                 connection.sendMessage(response);
             }
 
@@ -68,13 +66,14 @@ public class ClientHandlerRunnable implements Runnable{
     private Message<?> processMessage(Message<?> message) throws Exception {
         //TODO: falta implementar o resto das mensagens
         switch (message.getType()) {
+            //Autenticação
             case REGISTER_STUDENT ->{
                 try{
                     //Faz a conversão do genérico T para o RegisterStudentDTO, já que em runtime não sabemos
                     //qual o tipo do genérico em si, só sabemos que ele é do tipo T, com momento de compilação que
                     //é preciso para comparar os tipos.
                     RegisterStudentDTO dto   = message.getDataAs(RegisterStudentDTO.class);
-                    LoginResponseDTO res     = authService.registerStudent(dto);
+                    LoginResponseDTO   res   = authService.registerStudent(dto);
                     return new Message<>(MessageType.LOGIN_OK, res, LoginResponseDTO.class);
                 }catch (ClassCastException e){
                     //Se passarmos um type de Message diferente do que está no data, é lançada essa exceção, já
@@ -85,8 +84,41 @@ public class ClientHandlerRunnable implements Runnable{
                     return new Message<>(MessageType.ERROR, e.getMessage(), String.class);
                 }
             }
-            //case LOGIN -> authService.handleLogin(message);
-            case REGISTER_TEACHER -> {}
+            case REGISTER_TEACHER -> {
+                try{
+                    RegisterTeacherDTO dto = message.getDataAs(RegisterTeacherDTO.class);
+                    LoginResponseDTO   res = authService.registerTeacher(dto);
+                    return new Message<>(MessageType.LOGIN_OK, res,LoginResponseDTO.class);
+                }catch (ClassCastException e){
+                    return new Message<>(MessageType.ERROR, "Tipo de payload inválido para REGISTER_TEACHER", String.class);
+                }catch (Exception e) {
+                    return new Message<>(MessageType.ERROR, e.getMessage(), String.class);
+                }
+
+            }
+            case LOGIN -> {
+                try{
+                    LoginRequestDTO   dto = message.getDataAs(LoginRequestDTO.class);
+                    LoginResponseDTO  res = authService.login(dto);
+                    return new Message<>(MessageType.LOGIN_OK, res, LoginResponseDTO.class);
+                }catch (ClassCastException e){
+                    return new Message<>(MessageType.ERROR, "Tipo de payload inválido para LOGIN", String.class);
+                }catch (Exception e) {
+                    return new Message<>(MessageType.ERROR, e.getMessage(), String.class);
+                }
+            }
+            case LOGOUT -> {
+                try{
+                    //TODO: Por fazer
+                }catch (ClassCastException e){
+
+                }catch (Exception e) {
+                    return new Message<>(MessageType.ERROR, e.getMessage(), String.class);
+                }
+            }
+            //TODO: Funcionalidades dos docentes
+            //...
+            //TODO: Funcionalidades dos alunos
         }
         return message;
     }

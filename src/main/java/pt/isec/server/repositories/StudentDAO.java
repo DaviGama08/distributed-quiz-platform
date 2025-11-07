@@ -15,6 +15,7 @@ public class StudentDAO implements IUserDAO<Student>{
     public StudentDAO(){
         db = DatabaseManager.getInstance();
     }
+
     @Override
     public long add(Student s) throws SQLException {
         String sql = "INSERT INTO student (student_number, name, email, password_hash) VALUES (?, ?, ?, ?)";
@@ -24,6 +25,12 @@ public class StudentDAO implements IUserDAO<Student>{
                 s.getEmail(),
                 s.getPasswordHash()
         );
+    }
+
+    @Override
+    public boolean existsByEmail(String email) {
+        Integer one = db.queryForSingleValue("SELECT 1 FROM student WHERE email = ? LIMIT 1",email);
+        return one != null;
     }
 
     @Override
@@ -39,6 +46,21 @@ public class StudentDAO implements IUserDAO<Student>{
         if(aux == null)
             return Optional.empty();
         return Optional.of(aux);
+    }
+
+    @Override
+    public Optional<Student> findByEmail(String email){
+        //Optional.ofNullable: Se não existe, retorna Optional.empty() em vez de lançar exceção ou retornar null
+        return Optional.ofNullable(db.queryForObject(
+                "SELECT studentNumber, name, email, password_hash FROM teacher WHERE email = ? LIMIT 1;",
+                rs -> new Student(
+                        rs.getInt("id"),
+                        rs.getString("name"),
+                        rs.getString("email"),
+                        rs.getString("password_hash")
+                ),
+                email
+        ));
     }
 
     @Override

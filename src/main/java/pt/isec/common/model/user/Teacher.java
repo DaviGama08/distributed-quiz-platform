@@ -19,12 +19,12 @@ public final class Teacher extends User implements Serializable {
 
     // gets/sets
     public void setId(Integer id) {
-        if (id != null && id <= 0)
-            throw new IllegalArgumentException("id must be positive if provided");
+        validate(id);
         this.id = id;
     }
 
     public Integer getId() {
+        validate(id);
         return id;
     }
 

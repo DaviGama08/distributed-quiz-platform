@@ -3,7 +3,7 @@ package pt.isec.server.repositories.entity;
 import java.time.Instant;
 
 public class Session {
-    private Integer id; // token aleatório (ex.: UUID ou 256-bit base64)
+    private String id; // token aleatório (ex.: UUID ou 256-bit base64)
     private String userId;
     private String role; // "TEACHER"
     private String name;
@@ -12,11 +12,11 @@ public class Session {
     private Instant createdAt;
     private Instant expiresAt;
 
-    public Integer getId() {
+    public String getId() {
         return id;
     }
 
-    public void setId(Integer id) {
+    public void setId(String id) {
         this.id = id;
     }
 

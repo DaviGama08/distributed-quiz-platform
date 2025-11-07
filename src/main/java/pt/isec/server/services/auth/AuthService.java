@@ -3,86 +3,118 @@ package pt.isec.server.services.auth;
 import pt.isec.common.dto.auth.*;
 import pt.isec.common.model.user.Student;
 import pt.isec.common.model.user.Teacher;
-import pt.isec.server.repositories.entity.SessionServices;
 import pt.isec.server.repositories.StudentDAO;
 import pt.isec.server.repositories.TeacherDAO;
+import pt.isec.server.repositories.entity.SessionServices;
 import pt.isec.server.services.config.ConfigServices;
 
-import java.sql.SQLException;
-
-public class AuthService implements  IAuthService{
+public class AuthService implements IAuthService {
     private final TeacherDAO teacherDAO;
     private final StudentDAO studentDAO;
+    private final ConfigServices configServices = new ConfigServices();
 
-    private final SessionServices sessionServices;
-
-    private final ConfigServices configServices;
-    public AuthService(TeacherDAO teacherDAO, StudentDAO studentDAO, SessionServices sessionServices,
-                       ConfigServices configServices) {
+    public AuthService(TeacherDAO teacherDAO, StudentDAO studentDAO) {
         this.teacherDAO = teacherDAO;
         this.studentDAO = studentDAO;
-        this.sessionServices = sessionServices;
-        this.configServices = configServices;
-    }
-
-
-    @Override
-    public LoginResponseDTO registerTeacher(RegisterTeacherDTO registerTeacherDTO) throws SQLException {
-        //gerar o hash da password e verificar se é válido.
-        // ...
-
-        //verificar email e name ...
-        // ...
-
-
-        Teacher t = new Teacher();
-        t.setName(registerTeacherDTO.name());
-        t.setEmail(registerTeacherDTO.email());
-        t.setPasswordHash(registerTeacherDTO.password()); // temos que fazer uma classe para gerar o hash da password
-        teacherDAO.add(t);
-
-        // autenticação
-        // ...
-
-        var session = sessionServices.create(t);
-
-        //No retorno abaixo, em vez de fornecermos os dados do objeto Teacher, forneceremos de um objeto Autentication,
-        //ou seja: t.getId() ----> auth.getId().
-        return new LoginResponseDTO(session.getId(), t.getId(), "TEACHER", t.getName(), t.getEmail());
     }
 
     @Override
-    public LoginResponseDTO registerStudent(RegisterStudentDTO registerStudentDTO) throws SQLException {
-        //gerar o hash da password e verificar se é válido.
-        // ...
+    public LoginResponseDTO registerTeacher(RegisterTeacherDTO dto) throws Exception {
+        if (dto == null) throw new IllegalArgumentException("Dados em falta");
 
-        //verificar email e name ...
-        // ...
+        String name  = dto.name();
+        String email = dto.email();
+        String pw    = dto.password();
+        String code  = dto.teacherRegisterCode();
 
+        // validações básicas
+        if (!Validators.isValidName(name))   throw new IllegalArgumentException("Nome inválido");
+        if (!Validators.isValidEmail(email)) throw new IllegalArgumentException("Email inválido");
+        if (!Validators.isValidPassword(pw)) throw new IllegalArgumentException("Password fraca");
+        if (code == null || code.isBlank())  throw new IllegalArgumentException("Código de registo obrigatório");
 
-        Student s = new Student();
-        s.setName(registerStudentDTO.name());
-        s.setEmail(registerStudentDTO.email());
-        s.setPasswordHash(registerStudentDTO.password()); // temos que fazer uma classe para gerar o hash da password
-        studentDAO.add(s);
+        // email único
+        if (teacherDAO.existsByEmail(email) || studentDAO.existsByEmail(email))
+            throw new IllegalArgumentException("Email já existe");
 
-        // autenticação
-        // ...
+        // verificar código de registo do docente
+        String storedHash = configServices.getTeachersRegisterHash();
+        if (storedHash == null || storedHash.isBlank()
+                || !PasswordHasher.verifyPassword(code, storedHash))
+            throw new IllegalArgumentException("Código de registo inválido");
 
-        var session = sessionServices.create(s);
+        // hash da password
+        String passwordHash = PasswordHasher.hashPassword(pw);
 
-        //No retorno abaixo, em vez de fornecermos os dados do objeto Student, forneceremos de um objeto Autentication,
-        //ou seja: s.getId() ----> auth.getId().
-        return new LoginResponseDTO(session.getId(), s.getStudentNumber(), "STUDENT", s.getName(), s.getEmail());
+        // criar e guardar docente
+        Teacher teacher = new Teacher();
+        teacher.setName(name);
+        teacher.setEmail(email);
+        teacher.setPasswordHash(passwordHash);
+
+        long newId = teacherDAO.add(teacher);
+        teacher.setId((int) newId);
+
+        // criar sessão
+        var session = new SessionServices<Teacher>().create(teacher);
+
+        // resposta
+        return new LoginResponseDTO(
+                session.getId(),
+                String.valueOf(teacher.getId()),
+                "TEACHER",
+                teacher.getName(),
+                teacher.getEmail()
+        );
+    }
+
+    @Override
+    public LoginResponseDTO registerStudent(RegisterStudentDTO dto) throws Exception {
+        if (dto == null) throw new IllegalArgumentException("Dados em falta");
+
+        String  name   = dto.name();
+        String  email  = dto.email();
+        String  pw     = dto.password();
+        Integer number = dto.studentNumber();
+
+        if (!Validators.isValidName(name))   throw new IllegalArgumentException("Nome inválido");
+        if (!Validators.isValidEmail(email)) throw new IllegalArgumentException("Email inválido");
+        if (!Validators.isValidPassword(pw)) throw new IllegalArgumentException("Password fraca");
+        if (number == null || number.intValue() <= 0)
+            throw new IllegalArgumentException("Número de estudante obrigatório e positivo");
+
+        if (teacherDAO.existsByEmail(email) || studentDAO.existsByEmail(email))
+            throw new IllegalArgumentException("Email já existe");
+
+        String passwordHash = PasswordHasher.hashPassword(pw);
+
+        Student student = new Student();
+        student.setName(name);
+        student.setEmail(email);
+        student.setPasswordHash(passwordHash);
+        student.setStudentNumber(number);
+
+        studentDAO.add(student);
+
+        var session = new SessionServices<Student>().create(student);
+
+        return new LoginResponseDTO(
+                session.getId(),
+                String.valueOf(number),
+                "STUDENT",
+                student.getName(),
+                student.getEmail()
+        );
     }
 
     @Override
     public LoginResponseDTO login(LoginRequestDTO loginRequestDTO) {
+        // TODO implementar login
         return null;
     }
 
     @Override
     public void changePassword(ChangePasswordDTO changePasswordDTO) {
-
+        // TODO implementar troca de senha
     }
 }

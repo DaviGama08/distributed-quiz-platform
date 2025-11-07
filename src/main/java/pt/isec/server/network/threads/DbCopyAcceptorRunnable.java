@@ -36,7 +36,7 @@ public class DbCopyAcceptorRunnable implements Runnable, AutoCloseable {
                     conn.setReadTimeout(Duration.ofSeconds(5));
 
                     Message<?> req = conn.receiveMessage();
-                    if (req == null || req.getType() != MessageType.DB_COPY_REQUEST) {
+                    if (req == null || req.getType() != MessageType.DB_REQUEST_COPY) {
                         conn.sendMessage(new Message<>(MessageType.NACK, "bad request"));
                         continue;
                     }

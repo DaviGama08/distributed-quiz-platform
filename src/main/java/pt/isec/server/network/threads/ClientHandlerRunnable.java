@@ -1,5 +1,8 @@
 package pt.isec.server.network.threads;
 
+import pt.isec.common.dto.auth.LoginResponseDTO;
+import pt.isec.common.dto.auth.RegisterStudentDTO;
+import pt.isec.common.dto.auth.RegisterTeacherDTO;
 import pt.isec.common.messages.MessageType;
 import pt.isec.common.messages.Message;
 import pt.isec.server.network.IServerNode;
@@ -44,10 +47,10 @@ public class ClientHandlerRunnable implements Runnable{
                 if (msg == null)
                     break;
 
-                processMessage(msg);
+                Message<?> response = processMessage(msg);
 
                 // TODO: processar comandos reais vindos do cliente
-                connection.sendMessage(new Message<>(MessageType.PONG, "ok"));
+                connection.sendMessage(response);
             }
 
         } catch (Exception ignore) {
@@ -62,12 +65,29 @@ public class ClientHandlerRunnable implements Runnable{
         }
     }
 
-    private Message<?> processMessage(Message<?> message) {
+    private Message<?> processMessage(Message<?> message) throws Exception {
         //TODO: falta implementar o resto das mensagens
-        return switch (message.getType()) {
-            //case REGISTER -> authService.handleRegister(message);
+        switch (message.getType()) {
+            case REGISTER_STUDENT ->{
+                try{
+                    //Faz a conversão do genérico T para o RegisterStudentDTO, já que em runtime não sabemos
+                    //qual o tipo do genérico em si, só sabemos que ele é do tipo T, com momento de compilação que
+                    //é preciso para comparar os tipos.
+                    RegisterStudentDTO dto   = message.getDataAs(RegisterStudentDTO.class);
+                    LoginResponseDTO res     = authService.registerStudent(dto);
+                    return new Message<>(MessageType.LOGIN_OK, res, LoginResponseDTO.class);
+                }catch (ClassCastException e){
+                    //Se passarmos um type de Message diferente do que está no data, é lançada essa exceção, já
+                    //que tentaremos fazer o cast de um genérico para um Objeto que não corresponde com a
+                    //o payload que passamos, nesse caso, RegisterStudentDTO
+                    return new Message<>(MessageType.ERROR, "Tipo de payload inválido para REGISTER_STUDENT", String.class);
+                }catch (Exception e) {
+                    return new Message<>(MessageType.ERROR, e.getMessage(), String.class);
+                }
+            }
             //case LOGIN -> authService.handleLogin(message);
-            default -> new Message<>(MessageType.MESSAGE, "Unknown message type");
-        };
+            case REGISTER_TEACHER -> {}
+        }
+        return message;
     }
 }

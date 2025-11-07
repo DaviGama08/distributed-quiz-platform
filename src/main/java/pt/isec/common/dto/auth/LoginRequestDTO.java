@@ -1,4 +1,6 @@
 package pt.isec.common.dto.auth;
 
-public record LoginRequestDTO(String email, String password) {}
+import java.io.Serializable;
+
+public record LoginRequestDTO(String email, String password) implements Serializable {}
 

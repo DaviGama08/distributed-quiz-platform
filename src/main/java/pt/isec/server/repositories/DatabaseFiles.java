@@ -1,6 +1,4 @@
-// FILE: src/main/java/pt/isec/server/app/DatabaseFiles.java
-package pt.isec.server.app;
-
+package pt.isec.server.repositories;
 import java.io.InputStream;
 import java.nio.file.*;
 import java.sql.Connection;

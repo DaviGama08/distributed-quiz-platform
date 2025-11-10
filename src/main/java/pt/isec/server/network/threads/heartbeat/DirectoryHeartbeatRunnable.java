@@ -2,9 +2,9 @@
 package pt.isec.server.network.threads.heartbeat;
 
 import pt.isec.server.network.IServerNode;
+import pt.isec.server.repositories.DatabaseFiles;
 import pt.isec.server.repositories.Db;
 import pt.isec.server.services.config.ConfigServices;
-import pt.isec.server.app.DatabaseFiles;
 import pt.isec.server.network.threads.db.DbCopyRequesterRunnable;
 
 import java.io.IOException;

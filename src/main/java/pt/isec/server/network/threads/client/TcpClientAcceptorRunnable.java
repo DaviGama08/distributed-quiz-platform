@@ -1,13 +1,10 @@
-package pt.isec.server.network.threads;
+package pt.isec.server.network.threads.client;
 
-import pt.isec.common.messages.Message;
-import pt.isec.common.messages.MessageType;
 import pt.isec.server.network.IServerNode;
 import pt.isec.server.network.NetworkConnection;
 
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.time.Duration;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 

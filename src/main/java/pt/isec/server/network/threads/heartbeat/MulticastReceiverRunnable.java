@@ -1,22 +1,24 @@
-package pt.isec.server.network.threads;
+// FILE: src/main/java/pt/isec/server/network/threads/heartbeat/MulticastReceiverRunnable.java
+package pt.isec.server.network.threads.heartbeat;
 
 import pt.isec.server.network.IServerNode;
+import pt.isec.server.network.threads.db.DbCopyRequesterRunnable;
 
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 /**
- * Recebe heartbeats multicast de outros nós e valida a versão da BD.
- * Se não for primário e detectar divergência, apenas avisa (não podemos alterar running).
+ * Recebe heartbeats multicast e, se for BACKUP e a versão divergir,
+ * pede cópia completa ao emissor.
  */
 public class MulticastReceiverRunnable implements Runnable, AutoCloseable {
     private final IServerNode tInfo;
     private MulticastSocket ms;
 
-    private final int BUFFER_SIZE = 4096;
+    private static final int BUFFER_SIZE = 4096;
 
-    public MulticastReceiverRunnable(IServerNode tInfo) {this.tInfo = tInfo;}
+    public MulticastReceiverRunnable(IServerNode tInfo) { this.tInfo = tInfo; }
 
     @Override
     public void run() {
@@ -31,18 +33,22 @@ public class MulticastReceiverRunnable implements Runnable, AutoCloseable {
 
             while (tInfo.isRunning()) {
                 _ms.receive(pkt);
+
                 if (Objects.equals(pkt.getAddress().getHostAddress(), tInfo.ip()))
                     continue;
 
                 String s = new String(pkt.getData(), 0, pkt.getLength(), StandardCharsets.UTF_8);
-                if (s.startsWith("MC_HB;version=")) {
-                    int semi = s.indexOf(';', "MC_HB;version=".length());
-                    long v = Long.parseLong(s.substring("MC_HB;version=".length(), semi > 0 ? semi : s.length()).trim());
-                    if (!tInfo.isPrimary() && v != tInfo.dbVersion()) {
-                        System.err.printf("[MC-RX] versão divergente: local=%d rx=%d — (aviso)\n",
-                                tInfo.dbVersion(), v);
-                        // Não podemos alterar running porque IServerNode não expõe setter.
-                    }
+                if (!s.startsWith("MC_HB;version=")) continue;
+
+                int semi = s.indexOf(';', "MC_HB;version=".length());
+                long v = Long.parseLong(s.substring("MC_HB;version=".length(), semi > 0 ? semi : s.length()).trim());
+
+                if (!tInfo.isPrimary() && v != tInfo.dbVersion()) {
+                    System.err.printf("[MC-RX] versão divergente: local=%d rx=%d — pedindo cópia ao %s:%d%n",
+                            tInfo.dbVersion(), v, pkt.getAddress().getHostAddress(), tInfo.dbCopyPort());
+                    new Thread(new DbCopyRequesterRunnable(
+                            tInfo, pkt.getAddress().getHostAddress(), tInfo.dbCopyPort()
+                    ), "dbcopy-request").start();
                 }
             }
         } catch (Exception e) {

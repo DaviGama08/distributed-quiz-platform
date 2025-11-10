@@ -1,16 +1,24 @@
-package pt.isec.server.network.threads;
+// FILE: src/main/java/pt/isec/server/network/threads/heartbeat/DirectoryHeartbeatRunnable.java
+package pt.isec.server.network.threads.heartbeat;
 
 import pt.isec.server.network.IServerNode;
+import pt.isec.server.repositories.Db;
+import pt.isec.server.services.config.ConfigServices;
+import pt.isec.server.app.DatabaseFiles;
+import pt.isec.server.network.threads.db.DbCopyRequesterRunnable;
 
 import java.io.IOException;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Objects;
 
 /**
- * gere o envio e receção de mensagens udp entre o servidor e o serviço de diretoria
- * envia "register" ao iniciar, envia "heartbeat" a cada 5s, e "deregister" ao terminar
- * recebe "200 principal ip:port" para saber quem é o servidor principal
+ * UDP com a diretoria:
+ * - envia REGISTER/HEARTBEAT/DEREGISTER
+ * - recebe "200 PRINCIPAL ip:port"
+ * - PRIMÁRIO: cria BD se faltar e semeia config
+ * - BACKUP: se faltar BD, pede cópia ao primário
  */
 public class DirectoryHeartbeatRunnable implements Runnable, AutoCloseable {
     private static final int SOCKET_TIMEOUT_MS = 3000;
@@ -19,10 +27,10 @@ public class DirectoryHeartbeatRunnable implements Runnable, AutoCloseable {
     private static final int SLEEP_INTERVAL_MS = 50;
     private static final int BUFFER_SIZE = 512;
 
-    private final IServerNode tInfo; // referência ao servidor local (informações e estado)
-    private DatagramSocket socket;   // socket udp usado para comunicação
+    private final IServerNode tInfo;
+    private DatagramSocket socket;
 
-    public DirectoryHeartbeatRunnable(IServerNode tInfo) {this.tInfo = tInfo;}
+    public DirectoryHeartbeatRunnable(IServerNode tInfo) { this.tInfo = tInfo; }
 
     @Override
     public void run() {
@@ -33,10 +41,9 @@ public class DirectoryHeartbeatRunnable implements Runnable, AutoCloseable {
             InetAddress dirAddr = InetAddress.getByName(tInfo.directoryHost());
             int dirPort = tInfo.directoryPort();
 
-            // enviar pedido de registo à diretoria
+            // REGISTER
             String registerMsg = kv(
-                    "VER", "1",
-                    "TYPE", "REGISTER",
+                    "VER","1","TYPE","REGISTER",
                     "ID", tInfo.id(),
                     "TCP", tInfo.ip() + ":" + tInfo.clientPort(),
                     "DBV", String.valueOf(tInfo.dbVersion()),
@@ -44,49 +51,67 @@ public class DirectoryHeartbeatRunnable implements Runnable, AutoCloseable {
             );
             send(s, dirAddr, dirPort, registerMsg);
 
-            // aguardar resposta com o principal
+            // PRINCIPAL
             Endpoint principal = waitPrincipal(s);
             if (principal == null) {
                 System.err.println("[DIR] sem resposta da diretoria; thread terminada");
                 return;
             }
 
-            // atualiza a informação sobre o servidor principal
             tInfo.setPrimary(principal.ip, principal.port);
             boolean iAmPrimary = Objects.equals(principal.ip, tInfo.ip()) && principal.port == tInfo.clientPort();
+
+            if (iAmPrimary) {
+                // cria BD se faltar
+                DatabaseFiles.createIfMissing(tInfo.dbPath(), "/db/schema.sql");
+
+                // semear config mínima (exemplo)
+                Db db = new Db("jdbc:sqlite:" + tInfo.dbPath().toAbsolutePath());
+                var cfg = new ConfigServices();
+                db.executeUpdate("INSERT OR IGNORE INTO config(key, value) VALUES ('teacher_hash', ?)",
+                        cfg.getTeachersRegisterHash());
+            } else {
+                // backup: se não tem BD local, pede cópia
+                if (!Files.exists(tInfo.dbPath())) {
+                    new Thread(new DbCopyRequesterRunnable(tInfo, principal.ip, tInfo.dbCopyPort()),
+                            "dbcopy-request").start();
+                }
+            }
+
             System.out.printf("[DIR] PRINCIPAL %s:%d | iAmPrimary=%s%n", principal.ip, principal.port, iAmPrimary);
 
             long last = 0;
 
-            // loop principal enquanto o servidor estiver a correr
+            // HEARTBEAT loop
             while (tInfo.isRunning()) {
                 long now = System.currentTimeMillis();
 
-                // envia heartbeat a cada 5 segundos
                 if (now - last >= HEARTBEAT_INTERVAL_MS) {
-                    String hb = kv(
-                            "VER", "1",
-                            "TYPE", "HEARTBEAT",
+                    String hb = kv("VER","1","TYPE","HEARTBEAT",
                             "ID", tInfo.id(),
                             "DBV", String.valueOf(tInfo.dbVersion()),
-                            "DBP", String.valueOf(tInfo.dbCopyPort())
-                    );
+                            "DBP", String.valueOf(tInfo.dbCopyPort()));
                     send(s, dirAddr, dirPort, hb);
                     last = now;
                 }
 
-                // tenta receber nova informação sobre o principal
                 Endpoint update = tryReceivePrincipal(s);
                 if (update != null) {
                     tInfo.setPrimary(update.ip, update.port);
                     boolean iAmPrim = Objects.equals(update.ip, tInfo.ip()) && update.port == tInfo.clientPort();
                     System.out.printf("[DIR] PRINCIPAL %s:%d | iAmPrimary=%s%n", update.ip, update.port, iAmPrim);
+
+                    if (!iAmPrim && !Files.exists(tInfo.dbPath())) {
+                        new Thread(new DbCopyRequesterRunnable(tInfo, update.ip, tInfo.dbCopyPort()),
+                                "dbcopy-request").start();
+                    }
                 }
+
                 Thread.sleep(SLEEP_INTERVAL_MS);
             }
 
-            // ao terminar, envia pedido de remoção
-            String deregMsg = kv("VER", "1", "TYPE", "DEREGISTER", "ID", tInfo.id());
+            // DEREGISTER
+            String deregMsg = kv("VER","1","TYPE","DEREGISTER","ID", tInfo.id());
             send(s, dirAddr, dirPort, deregMsg);
 
         } catch (Exception e) {
@@ -95,48 +120,39 @@ public class DirectoryHeartbeatRunnable implements Runnable, AutoCloseable {
         }
     }
 
-    // classe simples que guarda ip e porto do servidor principal
+    /* ---------- helpers UDP ---------- */
+
     private record Endpoint(String ip, int port) {}
 
-    // função utilitária que constrói mensagens tipo "CHAVE=VALOR|CHAVE=VALOR|..."
     private static String kv(String... kv) {
         StringBuilder b = new StringBuilder();
-        for (int i = 0; i < kv.length; i += 2)
-            //Ao encontrar o "=" insere os próximos caracteres e o "|" no fim.
-            b.append(kv[i]).append('=').append(kv[i + 1]).append('|');
+        for (int i = 0; i < kv.length; i += 2) b.append(kv[i]).append('=').append(kv[i + 1]).append('|');
         return b.toString();
     }
 
-    // envia uma mensagem udp
     private void send(DatagramSocket s, InetAddress addr, int port, String msg) throws IOException {
         byte[] data = msg.getBytes(StandardCharsets.UTF_8);
         s.send(new DatagramPacket(data, data.length, addr, port));
     }
 
-    // tenta receber resposta "200 principal ip:port" algumas vezes
     private Endpoint waitPrincipal(DatagramSocket s) {
         for (int i = 0; i < RETRY_COUNT; i++) {
             Endpoint ep = tryReceivePrincipal(s);
-            if (ep != null)
-                return ep;
+            if (ep != null) return ep;
         }
         return null;
     }
 
-    // tenta ler um pacote udp e verificar se é uma resposta com o principal
     private Endpoint tryReceivePrincipal(DatagramSocket s) {
         try {
             byte[] buf = new byte[BUFFER_SIZE];
             DatagramPacket dp = new DatagramPacket(buf, buf.length);
-            s.receive(dp); // pode lançar SocketTimeoutException se nada vier
+            s.receive(dp);
             String resp = new String(dp.getData(), 0, dp.getLength(), StandardCharsets.UTF_8).trim();
 
-            if (!resp.startsWith("200 PRINCIPAL "))
-                return null;
-
+            if (!resp.startsWith("200 PRINCIPAL ")) return null;
             String[] parts = resp.substring("200 PRINCIPAL ".length()).split(":");
-            if (parts.length != 2)
-                return null;
+            if (parts.length != 2) return null;
 
             return new Endpoint(parts[0], Integer.parseInt(parts[1]));
         } catch (SocketTimeoutException e) {
@@ -146,10 +162,8 @@ public class DirectoryHeartbeatRunnable implements Runnable, AutoCloseable {
         }
     }
 
-    // fecha o socket udp quando for necessário
     @Override
     public void close() {
-        if (socket != null && !socket.isClosed())
-            socket.close();
+        if (socket != null && !socket.isClosed()) socket.close();
     }
 }

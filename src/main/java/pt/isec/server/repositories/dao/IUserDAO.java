@@ -1,6 +1,4 @@
-package pt.isec.server.repositories;
-
-import pt.isec.common.model.user.Teacher;
+package pt.isec.server.repositories.dao;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -12,7 +10,7 @@ public interface IUserDAO<T> {
     Optional<T> findById(long id) throws SQLException;
     Optional<T> findByEmail(String email) throws SQLException;
 
-    boolean existsByEmail(String email);
+    boolean existsByEmail(String email) throws SQLException;
 
     List<T> findAll() throws SQLException;
     void update(T user) throws SQLException;

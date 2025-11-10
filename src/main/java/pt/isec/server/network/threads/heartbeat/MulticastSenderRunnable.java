@@ -1,4 +1,4 @@
-package pt.isec.server.network.threads;
+package pt.isec.server.network.threads.heartbeat;
 
 import pt.isec.server.network.IServerNode;
 

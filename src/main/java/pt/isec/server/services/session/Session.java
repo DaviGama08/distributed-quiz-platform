@@ -1,4 +1,4 @@
-package pt.isec.server.repositories.entity;
+package pt.isec.server.services.session;
 
 import java.time.Instant;
 

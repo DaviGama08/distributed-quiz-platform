@@ -1,8 +1,53 @@
 package pt.isec.client.threads;
 
+import pt.isec.client.ClientService;
+import pt.isec.common.messages.Message;
+
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.Serializable;
+
+/**
+ * Thread que escuta continuamente mensagens vindas do servidor via TCP
+ * e coloca-as na fila de respostas para serem processadas
+ */
 public class ClientListenerRunnable implements Runnable{
+    private final ClientService service;
+
+    public ClientListenerRunnable(ClientService service) {
+        this.service = service;
+    }
+
     @Override
     public void run() {
+        ObjectInputStream in = service.getInputStream();
 
+        System.out.println("[ClientListener] Started listening for server messages...");
+
+        while(service.isRunning() && !Thread.currentThread().isInterrupted()) {
+            try {
+                // Blocking read - espera até receber mensagem
+                Message<? extends Serializable> response = (Message<? extends Serializable>) in.readObject();
+
+                if(response != null) {
+                    System.out.println("[ClientListener] Received: " + response.getType());
+                    service.getResponseQueue().put(response);
+                }
+            } catch (IOException e) {
+                if(service.isRunning()) {
+                    System.err.println("[ClientListener] Connection lost: " + e.getMessage());
+                    service.handleConnectionLost();
+                }
+                break;
+            } catch (ClassNotFoundException e) {
+                System.err.println("[ClientListener] Unknown message type: " + e.getMessage());
+            } catch (InterruptedException e) {
+                System.out.println("[ClientListener] Interrupted");
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+
+        System.out.println("[ClientListener] Stopped");
     }
 }

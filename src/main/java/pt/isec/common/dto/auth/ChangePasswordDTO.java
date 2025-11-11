@@ -1,4 +1,9 @@
 package pt.isec.common.dto.auth;
 
-public record ChangePasswordDTO(Integer sessionId, String oldPassword,
-                                String newPassword) {}
+import java.io.Serializable;
+
+public record ChangePasswordDTO(
+        Integer sessionId,
+        String oldPassword,
+        String newPassword
+) implements Serializable {}

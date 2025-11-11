@@ -1,0 +1,18 @@
+package pt.isec.common.dto.question;
+
+import pt.isec.common.model.common.OptionLetter;
+import pt.isec.common.model.question.Option;
+
+import java.io.Serializable;
+import java.time.LocalDateTime;
+import java.util.List;
+
+public record CreateQuestionDTO(
+        String statement,
+        Integer teacherId,
+        List<Option> options,
+        OptionLetter correctOption,
+        LocalDateTime startAt,
+        LocalDateTime endAt
+) implements Serializable {}
+

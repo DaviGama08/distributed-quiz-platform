@@ -1,7 +1,7 @@
-package pt.isec.server.repositories.dao;
+package pt.isec.server.db.dao;
 
 import pt.isec.common.model.user.Teacher;
-import pt.isec.server.repositories.Db;
+import pt.isec.server.db.Db;
 
 import java.sql.SQLException;
 import java.time.LocalDateTime;

@@ -1,4 +1,4 @@
-package pt.isec.server.repositories.dao;
+package pt.isec.server.db.dao;
 
 import java.sql.SQLException;
 import java.util.List;

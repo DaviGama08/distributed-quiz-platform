@@ -1,5 +1,5 @@
 // FILE: src/main/java/pt/isec/server/repositories/Db.java
-package pt.isec.server.repositories;
+package pt.isec.server.db;
 
 import java.sql.*;
 import java.util.LinkedHashMap;

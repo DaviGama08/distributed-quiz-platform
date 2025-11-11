@@ -1,4 +1,4 @@
-package pt.isec.server.repositories;
+package pt.isec.server.db;
 import java.io.InputStream;
 import java.nio.file.*;
 import java.sql.Connection;

@@ -1,7 +1,6 @@
-package pt.isec.server.threads.heartbeat;
+package pt.isec.server.threads;
 
 import pt.isec.server.IServerNode;
-import pt.isec.server.threads.db.DbCopyRequesterRunnable;
 
 import java.net.*;
 import java.nio.charset.StandardCharsets;

@@ -1,10 +1,9 @@
 package pt.isec.server.network;
 
-import pt.isec.server.network.threads.client.TcpClientAcceptorRunnable;
-import pt.isec.server.network.threads.heartbeat.DirectoryHeartbeatRunnable;
-import pt.isec.server.network.threads.heartbeat.MulticastReceiverRunnable;
-import pt.isec.server.network.threads.heartbeat.MulticastSenderRunnable;
-import pt.isec.server.network.threads.db.DbCopyAcceptorRunnable;
+import pt.isec.server.threads.client.TcpClientAcceptorRunnable;
+import pt.isec.server.threads.heartbeat.DirectoryHeartbeatRunnable;
+import pt.isec.server.threads.heartbeat.MulticastRunnable;
+import pt.isec.server.threads.db.DbCopyAcceptorRunnable;
 
 import java.net.InetAddress;
 import java.net.NetworkInterface;
@@ -33,7 +32,7 @@ public class ServerNode implements IServerNode, Runnable, AutoCloseable {
     private volatile Principal master;
     private final AtomicLong dbVersion = new AtomicLong(0);
 
-    private Thread tMulticastReceiver, tDirectoryHB, tMulticastSender, tTcpClient, tDbCopyAcceptor;
+    private Thread tMulticastReceiver, tDirectoryHB, tTcpClient, tDbCopyAcceptor;
 
     public ServerNode(String dirHost, int dirPort, String mcIfIp,
                       int clientPort, int dbCopyPort, Path dbPath) throws Exception {
@@ -74,20 +73,17 @@ public class ServerNode implements IServerNode, Runnable, AutoCloseable {
 
         if (tMulticastReceiver != null)  tMulticastReceiver.interrupt();
         if (tDirectoryHB != null)        tDirectoryHB.interrupt();
-        if (tMulticastSender != null)    tMulticastSender.interrupt();
         if (tTcpClient != null)          tTcpClient.interrupt();
         if (tDbCopyAcceptor != null)     tDbCopyAcceptor.interrupt();
     }
 
     public void start() {
         tDirectoryHB       = new Thread(new DirectoryHeartbeatRunnable(this), "directory-hb");
-        tMulticastSender   = new Thread(new MulticastSenderRunnable(this), "multicast-sender");
-        tMulticastReceiver = new Thread(new MulticastReceiverRunnable(this), "multicast-receiver");
+        tMulticastReceiver = new Thread(new MulticastRunnable(this), "multicast-receiver");
         tTcpClient         = new Thread(new TcpClientAcceptorRunnable(this), "tcp-client");
         tDbCopyAcceptor    = new Thread(new DbCopyAcceptorRunnable(this), "dbcopy-acceptor");
 
         tMulticastReceiver.start();
-        tMulticastSender.start();
         tDirectoryHB.start();
         tTcpClient.start();
         tDbCopyAcceptor.start(); // fica à escuta; só envia se for primário

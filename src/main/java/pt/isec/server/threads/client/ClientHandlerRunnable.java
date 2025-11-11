@@ -1,4 +1,4 @@
-package pt.isec.server.network.threads.client;
+package pt.isec.server.threads.client;
 
 import pt.isec.common.dto.auth.LoginRequestDTO;
 import pt.isec.common.dto.auth.LoginResponseDTO;

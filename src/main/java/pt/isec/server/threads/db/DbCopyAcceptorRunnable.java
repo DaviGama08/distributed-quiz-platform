@@ -1,5 +1,5 @@
 // FILE: src/main/java/pt/isec/server/network/threads/db/DbCopyAcceptorRunnable.java
-package pt.isec.server.network.threads.db;
+package pt.isec.server.threads.db;
 
 import pt.isec.common.messages.Message;
 import pt.isec.common.messages.MessageType;

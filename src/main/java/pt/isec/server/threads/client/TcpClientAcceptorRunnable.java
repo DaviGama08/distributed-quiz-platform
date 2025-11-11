@@ -1,4 +1,4 @@
-package pt.isec.server.network.threads.client;
+package pt.isec.server.threads.client;
 
 import pt.isec.server.network.IServerNode;
 import pt.isec.server.network.NetworkConnection;

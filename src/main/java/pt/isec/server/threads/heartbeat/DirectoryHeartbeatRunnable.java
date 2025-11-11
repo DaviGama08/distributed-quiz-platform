@@ -1,11 +1,11 @@
 // FILE: src/main/java/pt/isec/server/network/threads/heartbeat/DirectoryHeartbeatRunnable.java
-package pt.isec.server.network.threads.heartbeat;
+package pt.isec.server.threads.heartbeat;
 
 import pt.isec.server.network.IServerNode;
 import pt.isec.server.repositories.DatabaseFiles;
 import pt.isec.server.repositories.Db;
 import pt.isec.server.services.config.ConfigServices;
-import pt.isec.server.network.threads.db.DbCopyRequesterRunnable;
+import pt.isec.server.threads.db.DbCopyRequesterRunnable;
 
 import java.io.IOException;
 import java.net.*;
@@ -52,14 +52,14 @@ public class DirectoryHeartbeatRunnable implements Runnable, AutoCloseable {
             send(s, dirAddr, dirPort, registerMsg);
 
             // PRINCIPAL
-            Endpoint principal = waitPrincipal(s);
-            if (principal == null) {
+            Endpoint waited = waitPrincipal(s);
+            if (waited == null) {
                 System.err.println("[DIR] sem resposta da diretoria; thread terminada");
                 return;
             }
 
-            tInfo.setPrimary(principal.ip, principal.port);
-            boolean iAmPrimary = Objects.equals(principal.ip, tInfo.ip()) && principal.port == tInfo.clientPort();
+            tInfo.setPrimary(waited.ip, waited.port);
+            boolean iAmPrimary = Objects.equals(waited.ip, tInfo.ip()) && waited.port == tInfo.clientPort();
 
             if (iAmPrimary) {
                 // cria BD se faltar
@@ -73,12 +73,12 @@ public class DirectoryHeartbeatRunnable implements Runnable, AutoCloseable {
             } else {
                 // backup: se não tem BD local, pede cópia
                 if (!Files.exists(tInfo.dbPath())) {
-                    new Thread(new DbCopyRequesterRunnable(tInfo, principal.ip, tInfo.dbCopyPort()),
+                    new Thread(new DbCopyRequesterRunnable(tInfo, waited.ip, tInfo.dbCopyPort()),
                             "dbcopy-request").start();
                 }
             }
 
-            System.out.printf("[DIR] PRINCIPAL %s:%d | iAmPrimary=%s%n", principal.ip, principal.port, iAmPrimary);
+            System.out.printf("[DIR] PRINCIPAL %s:%d | iAmPrimary=%s%n", waited.ip, waited.port, iAmPrimary);
 
             long last = 0;
 
@@ -95,18 +95,18 @@ public class DirectoryHeartbeatRunnable implements Runnable, AutoCloseable {
                     last = now;
                 }
 
-                Endpoint update = tryReceivePrincipal(s);
-                if (update != null) {
-                    tInfo.setPrimary(update.ip, update.port);
-                    boolean iAmPrim = Objects.equals(update.ip, tInfo.ip()) && update.port == tInfo.clientPort();
-                    System.out.printf("[DIR] PRINCIPAL %s:%d | iAmPrimary=%s%n", update.ip, update.port, iAmPrim);
+                Endpoint currentPrimary = tryReceivePrincipal(s);
+                if (currentPrimary != null) {
+                    tInfo.setPrimary(currentPrimary.ip, currentPrimary.port);
+                    boolean iAmPrim = Objects.equals(currentPrimary.ip, tInfo.ip()) && currentPrimary.port == tInfo.clientPort();
+                    System.out.printf("[DIR] PRINCIPAL %s:%d | iAmPrimary=%s%n", currentPrimary.ip, currentPrimary.port, iAmPrim);
 
+                    //se não tiver o ficheiro do principal da base de dados, então cria uma thread para recebe-lo
                     if (!iAmPrim && !Files.exists(tInfo.dbPath())) {
-                        new Thread(new DbCopyRequesterRunnable(tInfo, update.ip, tInfo.dbCopyPort()),
+                        new Thread(new DbCopyRequesterRunnable(tInfo, currentPrimary.ip, tInfo.dbCopyPort()),
                                 "dbcopy-request").start();
                     }
                 }
-
                 Thread.sleep(SLEEP_INTERVAL_MS);
             }
 

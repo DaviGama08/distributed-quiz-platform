@@ -1,5 +1,5 @@
 // FILE: src/main/java/pt/isec/server/network/threads/db/DbCopyRequesterRunnable.java
-package pt.isec.server.network.threads.db;
+package pt.isec.server.threads.db;
 
 import pt.isec.common.messages.Message;
 import pt.isec.common.messages.MessageType;
@@ -16,6 +16,13 @@ import java.nio.file.Files;
  * e grava os bytes recebidos no caminho local do .db.
  */
 public class DbCopyRequesterRunnable implements Runnable {
+
+    private static final int BUFFER_SIZE = 64 * 1024;        // 64 KiB para I/O de ficheiro
+    private static final String REQ_PAYLOAD = "please";       // payload simples do pedido
+    private static final String LOG_OK_PREFIX = "[DBCOPY/RQ] cópia concluída em ";
+    private static final String LOG_ERR_PREFIX = "[DBCOPY/RQ] erro: ";
+    private static final String LOG_BAD_RESP = "[DBCOPY/RQ] NACK/bad response";
+
     private final IServerNode tInfo;
     private final String primaryIp;
     private final int primaryDbCopyPort;
@@ -32,12 +39,12 @@ public class DbCopyRequesterRunnable implements Runnable {
              NetworkConnection conn = new NetworkConnection(s)) {
 
             // pede cópia
-            conn.sendMessage(new Message<>(MessageType.DB_REQUEST_COPY, "please"));
+            conn.sendMessage(new Message<>(MessageType.DB_REQUEST_COPY, REQ_PAYLOAD));
 
             // espera ACK
             var resp = conn.receiveMessage();
             if (resp == null || resp.getType() != MessageType.ACK) {
-                System.err.println("[DBCOPY/RQ] NACK/bad response");
+                System.err.println(LOG_BAD_RESP);
                 return;
             }
 
@@ -46,7 +53,7 @@ public class DbCopyRequesterRunnable implements Runnable {
             try (InputStream in = s.getInputStream();
                  FileOutputStream fos = new FileOutputStream(tInfo.dbPath().toFile())) {
 
-                byte[] buf = new byte[64 * 1024];
+                byte[] buf = new byte[BUFFER_SIZE];
                 int n;
                 while ((n = in.read(buf)) != -1) {
                     fos.write(buf, 0, n);
@@ -54,10 +61,10 @@ public class DbCopyRequesterRunnable implements Runnable {
                 fos.flush();
             }
 
-            System.out.println("[DBCOPY/RQ] cópia concluída em " + tInfo.dbPath());
+            System.out.println(LOG_OK_PREFIX + tInfo.dbPath());
 
         } catch (Exception e) {
-            System.err.println("[DBCOPY/RQ] erro: " + e.getMessage());
+            System.err.println(LOG_ERR_PREFIX + e.getMessage());
         }
     }
 }

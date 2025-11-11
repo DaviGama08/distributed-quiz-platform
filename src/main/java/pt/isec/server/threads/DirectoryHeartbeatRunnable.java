@@ -1,9 +1,9 @@
 // FILE: src/main/java/pt/isec/server/network/threads/heartbeat/DirectoryHeartbeatRunnable.java
 package pt.isec.server.threads.heartbeat;
 
-import pt.isec.server.network.IServerNode;
-import pt.isec.server.repositories.DatabaseFiles;
-import pt.isec.server.repositories.Db;
+import pt.isec.server.IServerNode;
+import pt.isec.server.db.DatabaseFiles;
+import pt.isec.server.db.Db;
 import pt.isec.server.services.config.ConfigServices;
 import pt.isec.server.threads.db.DbCopyRequesterRunnable;
 

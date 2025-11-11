@@ -3,8 +3,8 @@ package pt.isec.server.threads.db;
 
 import pt.isec.common.messages.Message;
 import pt.isec.common.messages.MessageType;
-import pt.isec.server.network.NetworkConnection;
-import pt.isec.server.network.IServerNode;
+import pt.isec.server.NetworkConnection;
+import pt.isec.server.IServerNode;
 
 import java.io.FileOutputStream;
 import java.io.InputStream;

@@ -1,7 +1,7 @@
 package pt.isec.server.threads.client;
 
-import pt.isec.server.network.IServerNode;
-import pt.isec.server.network.NetworkConnection;
+import pt.isec.server.IServerNode;
+import pt.isec.server.NetworkConnection;
 
 import java.net.ServerSocket;
 import java.net.Socket;

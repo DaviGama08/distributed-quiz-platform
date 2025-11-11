@@ -1,6 +1,6 @@
 package pt.isec.server.threads.heartbeat;
 
-import pt.isec.server.network.IServerNode;
+import pt.isec.server.IServerNode;
 import pt.isec.server.threads.db.DbCopyRequesterRunnable;
 
 import java.net.*;

@@ -129,12 +129,49 @@ public final class Question implements Serializable {
         this.teacherId = teacherId;
     }
     public Integer getId() {return id;}
+    public QuestionState getState() {return state;}
+    public String getStatement() {return statement;}
     public String getAccessCode() {return accessCode;}
     public OptionLetter getCorrectOption() {return correctOption;}
     public LocalDateTime getStartAt() {return startAt;}
     public LocalDateTime getEndAt() {return endAt;}
     public Integer getTeacherId() {return teacherId;}
     public List<Option> getOptions() {return options;}
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    /**
+     * Verifica se a questão está ativa no momento atual
+     */
+    public boolean isActive() {
+        refreshState();
+        return state == QuestionState.ACTIVE;
+    }
+
+    /**
+     * Verifica se a questão já expirou
+     */
+    public boolean isExpired() {
+        refreshState();
+        return state == QuestionState.EXPIRED;
+    }
+
+    /**
+     * Verifica se a questão é futura
+     */
+    public boolean isFuture() {
+        refreshState();
+        return state == QuestionState.FUTURE;
+    }
+
+    /**
+     * Verifica se uma resposta está correta
+     */
+    public boolean isCorrectAnswer(OptionLetter answer) {
+        return correctOption.equals(answer);
+    }
 
     private static QuestionState computeState(LocalDateTime startAt, LocalDateTime endAt, LocalDateTime now) {
         if (now.isBefore(startAt)) return QuestionState.FUTURE;

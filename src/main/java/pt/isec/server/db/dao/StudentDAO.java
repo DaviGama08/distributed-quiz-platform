@@ -20,21 +20,23 @@ public class StudentDAO implements IUserDAO<Student> {
             if (s.getStudentNumber() > 0) {
                 // PK fornecida
                 db.executeUpdate(
-                        "INSERT INTO student (student_number, name, email, password_hash, created_at) VALUES (?, ?, ?, ?, datetime('now'))",
+                        "INSERT INTO student (student_number, name, email, password_hash, created_at) " +
+                                "VALUES (?, ?, ?, ?, datetime('now'))",
                         s.getStudentNumber(), s.getName(), s.getEmail(), s.getPasswordHash()
                 );
                 return s.getStudentNumber();
             } else {
-                // Caso raro: se student_number for autogerado (não comum). Usa ROWID.
+                final long[] newNr = { -1L };
                 db.runInTransaction(tx -> {
                     tx.executeUpdate(
-                            "INSERT INTO student (name, email, password_hash, created_at) VALUES (?, ?, ?, datetime('now'))",
+                            "INSERT INTO student (name, email, password_hash, created_at) " +
+                                    "VALUES (?, ?, ?, datetime('now'))",
                             s.getName(), s.getEmail(), s.getPasswordHash()
                     );
-                    long id = tx.getLastInsertId();
-                    s.setStudentNumber(id);
+                    newNr[0] = tx.getLastInsertId();    // rowid == student_number
+                    s.setStudentNumber((int) newNr[0]); // setter aceita Integer
                 });
-                return s.getStudentNumber();
+                return newNr[0];
             }
         } catch (Exception e) {
             throw new SQLException("Erro ao inserir student", e);
@@ -53,31 +55,44 @@ public class StudentDAO implements IUserDAO<Student> {
     @Override
     public Optional<Student> findById(long id) throws SQLException {
         Map<String,Object> r = db.selectOne(
-                "SELECT student_number, name, email, password_hash FROM student WHERE student_number = ?",
+                "SELECT student_number, name, email, password_hash, created_at FROM student WHERE student_number = ?",
                 id
         );
         if (r == null) return Optional.empty();
+
+        long studentNumber = ((Number) r.get("student_number")).longValue();
+        LocalDateTime createdAt = parseTs((String) r.get("created_at"));
+
+        // usamos student_number também como 'id' do User
         Student s = new Student(
-                ((Number)r.get("student_number")).longValue(),
+                studentNumber,                        // id (User)
                 (String) r.get("name"),
                 (String) r.get("email"),
-                (String) r.get("password_hash")
+                (String) r.get("password_hash"),
+                studentNumber,                        // studentNumber
+                createdAt
         );
         return Optional.of(s);
     }
 
     @Override
-    public Optional<Student> findByEmail(String email) {
+    public Optional<Student> findByEmail(String email) throws SQLException {
         Map<String,Object> r = db.selectOne(
-                "SELECT student_number, name, email, password_hash FROM student WHERE email = ? LIMIT 1",
+                "SELECT student_number, name, email, password_hash, created_at FROM student WHERE email = ? LIMIT 1",
                 email
         );
         if (r == null) return Optional.empty();
+
+        long studentNumber = ((Number) r.get("student_number")).longValue();
+        LocalDateTime createdAt = parseTs((String) r.get("created_at"));
+
         Student s = new Student(
-                ((Number)r.get("student_number")).longValue(),
+                studentNumber,                        // id (User)
                 (String) r.get("name"),
                 (String) r.get("email"),
-                (String) r.get("password_hash")
+                (String) r.get("password_hash"),
+                studentNumber,                        // studentNumber
+                createdAt
         );
         return Optional.of(s);
     }
@@ -85,16 +100,23 @@ public class StudentDAO implements IUserDAO<Student> {
     @Override
     public List<Student> findAll() throws SQLException {
         try (var c = java.sql.DriverManager.getConnection(extractUrlFromDb());
-             var ps = c.prepareStatement("SELECT student_number, name, email, password_hash FROM student ORDER BY name");
+             @SuppressWarnings({"SqlResolve","SqlNoDataSourceInspection"})
+             var ps = c.prepareStatement(
+                     "SELECT student_number, name, email, password_hash, created_at FROM student ORDER BY name");
              var rs = ps.executeQuery()) {
 
             List<Student> out = new ArrayList<>();
             while (rs.next()) {
+                long studentNumber = rs.getLong("student_number");
+                LocalDateTime createdAt = parseTs(rs.getString("created_at"));
+
                 out.add(new Student(
-                        rs.getLong("student_number"),
+                        studentNumber,                  // id (User)
                         rs.getString("name"),
                         rs.getString("email"),
-                        rs.getString("password_hash")
+                        rs.getString("password_hash"),
+                        studentNumber,                  // studentNumber
+                        createdAt
                 ));
             }
             return out;
@@ -124,5 +146,12 @@ public class StudentDAO implements IUserDAO<Student> {
         } catch (Exception e) {
             throw new RuntimeException("Não consegui obter a URL da Db; adicione um getter público", e);
         }
+    }
+
+    private static LocalDateTime parseTs(String s) {
+        if (s == null || s.isBlank()) return null;
+        var F = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        try { return LocalDateTime.parse(s.replace('T',' '), F); }
+        catch (Exception ignore) { return LocalDateTime.parse(s); }
     }
 }

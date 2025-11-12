@@ -11,35 +11,35 @@ import java.util.Objects;
 public final class Student extends User implements Serializable {
     private static final long serialVersionUID = 1L;
 
-    private Integer studentNumber; // Número de estudante único
+    private long studentNumber; // Número de estudante único
 
     public Student() {
         super();
     }
 
-    public Student(String name, String email, String passwordHash, Integer studentNumber) {
+    public Student(String name, String email, String passwordHash, long studentNumber) {
         super(name, email, passwordHash);
         validateStudentNumber(studentNumber);
         this.studentNumber = studentNumber;
     }
 
-    public Student(Integer id, String name, String email, String passwordHash,
-                   Integer studentNumber, LocalDateTime createdAt) {
+    public Student(long id, String name, String email, String passwordHash,
+                   long studentNumber, LocalDateTime createdAt) {
         super(id, name, email, passwordHash, createdAt);
         validateStudentNumber(studentNumber);
         this.studentNumber = studentNumber;
     }
 
     // getters/setters
-    public Integer getStudentNumber() { return studentNumber; }
+    public long getStudentNumber() { return studentNumber; }
 
     public void setStudentNumber(Integer studentNumber) {
         validateStudentNumber(studentNumber);
         this.studentNumber = studentNumber;
     }
 
-    private static void validateStudentNumber(Integer studentNumber) {
-        if (studentNumber == null || studentNumber <= 0)
+    private static void validateStudentNumber(long studentNumber) {
+        if (studentNumber <= 0)
             throw new IllegalArgumentException("studentNumber must be a positive integer");
     }
 

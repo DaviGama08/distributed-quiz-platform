@@ -10,37 +10,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/*================= COMANDOS DA FILA (BlockingQueue) =================
-Listener → produz (put/offer) | Worker → consome (take/poll)
-
-queue.put(e)      // Adiciona, BLOQUEIA se cheia
-queue.offer(e)    // Adiciona, NÃO bloqueia
-queue.take()      // Retira, BLOQUEIA se vazia
-queue.poll()      // Retira, NÃO bloqueia
-queue.poll(t,u)   // Retira, espera até timeout   ⏱
-queue.peek()      // Lê sem remover (debug)
-queue.isEmpty()   // Verifica se está vazia
-queue.size()      // Quantidade de elementos (aprox.)
-====================================================================*/
-
-/**
- * Worker — retira mensagens da fila, interpreta o protocolo e responde.
- * VER=1|TYPE=<tipo>|(outros campos)
- *  - VER=1 é obrigatório
- *  - TYPE=REGISTER   | ID=<serverId> | TCP=<ip:port>
- *  - TYPE=HEARTBEAT  | ID=<serverId> | DBV=<dbVersion>     (DBV opcional se não usares)
- *  - TYPE=DEREGISTER | ID=<serverId>
- *  - TYPE=CLIENT_QUERY
- *
- * Respostas:
- *  - "200 OK"
- *  - "200 PRINCIPAL <ip:port>"
- *  - "400 BAD_REQUEST <motivo>"
- *  - "404 NO_PRINCIPAL"
- *  - "409 CONFLICT <motivo>"
- *  - "500 ERROR <motivo>"
- */
-
 public class WorkerRunnable implements Runnable{
     private final IDirectoryService tInfo;
 
@@ -58,25 +27,21 @@ public class WorkerRunnable implements Runnable{
 
                 Map<String, String> kv = parseKv(payload);
 
-                //TODO: MUDAR
                 String ver = kv.get("VER");
                 if (!"1".equals(ver)) {
                     send(msg, "400 BAD_REQUEST VER");
                     continue;
                 }
-                //Estrutura do request está inválido
                 String type = kv.get("TYPE");
                 if (type == null) {
                     send(msg, "400 BAD_REQUEST TYPE");
                     continue;
                 }
 
-                //Verifica o TYPE e de acordo com ele chama a função associada a ele
-                // e fazer o tratamento dos próximos argumentos.
                 String reply;
                 switch (type) {
-                    case "REGISTER" -> reply = handleRegister(kv);
-                    case "HEARTBEAT" -> reply = handleHeartbeat(kv);
+                    case "REGISTER"   -> reply = handleRegister(kv);
+                    case "HEARTBEAT"  -> reply = handleHeartbeat(kv);
                     case "DEREGISTER" -> reply = handleDeregister(kv);
                     case "CLIENT_QUERY" -> reply = handleClientQuery();
                     default -> reply = "400 BAD_REQUEST TYPE";
@@ -86,7 +51,7 @@ public class WorkerRunnable implements Runnable{
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
-            }catch (IOException e) {
+            } catch (IOException e) {
                 System.err.println("Erro a enviar UDP: " + e.getMessage());
             } catch (Exception e) {
                 System.err.println("Erro inesperado no Worker: " + e.getMessage());
@@ -94,15 +59,11 @@ public class WorkerRunnable implements Runnable{
         }
     }
 
-    //Não precisamos do Map aqui já que não existem mais argumentos depois do TYPE
     private String handleClientQuery() {
-        // escolhe um servidor “principal” — aqui usamos o primeiro disponível
-        ServerInfo principal = tInfo.servers().values().stream().findFirst().orElse(null);
-
+        ServerInfo principal;
         synchronized (tInfo.serversLock()) {
             principal = tInfo.serversOrdered().values().stream().findFirst().orElse(null);
         }
-
         if (principal == null) return "404 NO_PRINCIPAL";
         return "200 PRINCIPAL " + principal.tcpEndpoint();
     }
@@ -131,14 +92,15 @@ public class WorkerRunnable implements Runnable{
         long now = System.currentTimeMillis();
         si.setLastSeenMillis(now);
 
-        //DATA BASE VERSION - se tiver sido enviada, também mostaremos
         String dbv = kv.get("DBV");
-
-        if(dbv != null && !dbv.isBlank()){
-            try{
-                if(Integer.parseInt(dbv.trim()) != si.getVersion())
-                    System.out.printf("[HB] %s: version %d -> %d%n", id, si.getVersion(), Integer.parseInt(dbv.trim()));
-            }catch (NumberFormatException ignore){}
+        if (dbv != null && !dbv.isBlank()) {
+            try {
+                int newVer = Integer.parseInt(dbv.trim());
+                if(newVer != si.getVersion()) {
+                    System.out.printf("[HB] %s: version %d -> %d%n", si.displayName(), si.getVersion(), newVer);
+                    si.setVersion(newVer); // atualiza valor guardado
+                }
+            } catch (NumberFormatException ignore) {}
         }
 
         return "200 OK";
@@ -147,6 +109,8 @@ public class WorkerRunnable implements Runnable{
     private String handleRegister(Map<String, String> kv) {
         String id = kv.get("ID");
         String tcp = kv.get("TCP");
+        String dbv = kv.get("DBV"); // se vier, aproveitamos
+
         if (id == null || id.isBlank()) return "400 BAD_REQUEST ID";
         if (tcp == null || !tcp.contains(":")) return "400 BAD_REQUEST TCP";
 
@@ -160,9 +124,12 @@ public class WorkerRunnable implements Runnable{
         }
         if (ip.isEmpty() || port <= 0 || port > 65535) return "400 BAD_REQUEST TCP";
 
+        int version = 1;
+        try { if (dbv != null) version = Integer.parseInt(dbv.trim()); } catch (Exception ignore) {}
+
         ServerInfo si = tInfo.servers().get(id);
         if (si == null) {
-            si = new ServerInfo(id, ip, port, 1);
+            si = new ServerInfo(id, ip, port, version);
             si.setLastSeenMillis(System.currentTimeMillis());
             tInfo.servers().put(id, si);
             synchronized (tInfo.serversLock()) {
@@ -170,6 +137,7 @@ public class WorkerRunnable implements Runnable{
             }
         } else {
             si.setLastSeenMillis(System.currentTimeMillis());
+            si.setVersion(version);
         }
 
         ServerInfo principal;
@@ -200,4 +168,3 @@ public class WorkerRunnable implements Runnable{
         return m;
     }
 }
-

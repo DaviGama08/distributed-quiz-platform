@@ -11,7 +11,7 @@ import java.util.Objects;
 public abstract class User implements Serializable {
     private static final long serialVersionUID = 1L;
 
-    protected Integer id;
+    protected long id;
     protected String name;
     protected String email;
     protected String passwordHash;
@@ -29,7 +29,7 @@ public abstract class User implements Serializable {
         this.createdAt = LocalDateTime.now();
     }
 
-    public User(Integer id, String name, String email, String passwordHash, LocalDateTime createdAt){
+    public User(long id, String name, String email, String passwordHash, LocalDateTime createdAt){
         validate(name, email, passwordHash);
         this.id = id;
         this.name = name;
@@ -39,13 +39,13 @@ public abstract class User implements Serializable {
     }
 
     // getters/setters
-    public Integer getId() { return id; }
+    public long getId() { return id; }
     public String getName() { return name; }
     public String getEmail() { return email; }
     public String getPasswordHash() { return passwordHash; }
     public LocalDateTime getCreatedAt() { return createdAt; }
 
-    public void setId(Integer id) { this.id = id; }
+    public void setId(long id) { this.id = id; }
 
     public void setName(String name) {
         if (name == null || name.isBlank())

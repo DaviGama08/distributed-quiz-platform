@@ -20,11 +20,13 @@ public class MetricsRunnable implements Runnable{
                 int port = (master != null) ? tInfo.serverTcpPort(master) : -1;
                 int ver  = (master != null) ? tInfo.serverVersion(master) : -1;
 
+                String masterName = (master == null || port <= 0) ? "NONE" : ("servidor" + port);
+
                 System.out.printf(
                         "[Diretoria][Metrics] servers=%d, master=%s, tcpPort=%d, version=%d%n",
-                        total, (master == null ? "NONE" : master), port, ver
+                        total, masterName, port, ver
                 );
-                //TODO: é o mais indicado?
+
                 Thread.sleep(periodMs);
             } catch (InterruptedException ie) {
                 break;

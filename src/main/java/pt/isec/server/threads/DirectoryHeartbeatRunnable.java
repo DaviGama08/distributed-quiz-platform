@@ -1,8 +1,6 @@
-// FILE: src/main/java/pt/isec/server/network/threads/heartbeat/DirectoryHeartbeatRunnable.java
 package pt.isec.server.threads;
 
 import pt.isec.server.IServerNode;
-import pt.isec.server.db.DatabaseFiles;
 import pt.isec.server.db.Db;
 import pt.isec.server.services.config.ConfigServices;
 
@@ -17,7 +15,7 @@ import java.util.Objects;
  * - envia REGISTER/HEARTBEAT/DEREGISTER
  * - recebe "200 PRINCIPAL ip:port"
  * - PRIMÁRIO: cria BD se faltar e semeia config
- * - BACKUP: se faltar BD, pede cópia ao primário
+ * - BACKUP: aguarda heartbeat para saber o dbPort do primário e pedir cópia
  */
 public class DirectoryHeartbeatRunnable implements Runnable, AutoCloseable {
     private static final int SOCKET_TIMEOUT_MS = 3000;
@@ -61,19 +59,27 @@ public class DirectoryHeartbeatRunnable implements Runnable, AutoCloseable {
             boolean iAmPrimary = Objects.equals(waited.ip, tInfo.ip()) && waited.port == tInfo.clientPort();
 
             if (iAmPrimary) {
-                // cria BD se faltar
-                DatabaseFiles.createIfMissing(tInfo.dbPath(), "/db/schema.sql");
+                try {
+                    // cria BD se faltar / sem schema
+                    pt.isec.server.db.DbFiles.createIfMissing(tInfo.dbPath(), "/db/schema.sql");
+                    System.out.println("[DIR][DB] bootstrap ok: " + tInfo.dbPath());
+                } catch (Exception e) {
+                    System.err.println("[DIR][DB] falha no bootstrap: " + e.getMessage());
+                }
 
                 // semear config mínima (exemplo)
                 Db db = new Db("jdbc:sqlite:" + tInfo.dbPath().toAbsolutePath());
                 var cfg = new ConfigServices();
-                db.executeUpdate("INSERT OR IGNORE INTO config(key, value) VALUES ('teacher_hash', ?)",
-                        cfg.getTeachersRegisterHash());
+                db.executeUpdate(
+                        "INSERT INTO config (id, db_version, teacher_code_hash) VALUES (1, 0, ?) " +
+                                "ON CONFLICT(id) DO UPDATE SET teacher_code_hash=excluded.teacher_code_hash",
+                        cfg.getTeachersRegisterHash()
+                );
             } else {
-                // backup: se não tem BD local, pede cópia
+                // BACKUP: não sabemos ainda o dbPort do primário por via da diretoria.
+                // Se não existir BD local, aguardamos HB multicast (que traz dbPort)
                 if (!Files.exists(tInfo.dbPath())) {
-                    new Thread(new DbCopyRequesterRunnable(tInfo, waited.ip, tInfo.dbCopyPort()),
-                            "dbcopy-request").start();
+                    System.out.println("[DIR] backup sem BD local; aguardando MC_HB para obter dbPort e pedir cópia.");
                 }
             }
 
@@ -99,12 +105,8 @@ public class DirectoryHeartbeatRunnable implements Runnable, AutoCloseable {
                     tInfo.setPrimary(currentPrimary.ip, currentPrimary.port);
                     boolean iAmPrim = Objects.equals(currentPrimary.ip, tInfo.ip()) && currentPrimary.port == tInfo.clientPort();
                     System.out.printf("[DIR] PRINCIPAL %s:%d | iAmPrimary=%s%n", currentPrimary.ip, currentPrimary.port, iAmPrim);
-
-                    //se não tiver o ficheiro do principal da base de dados, então cria uma thread para recebe-lo
-                    if (!iAmPrim && !Files.exists(tInfo.dbPath())) {
-                        new Thread(new DbCopyRequesterRunnable(tInfo, currentPrimary.ip, tInfo.dbCopyPort()),
-                                "dbcopy-request").start();
-                    }
+                    // NOTA: o pedido de cópia (se necessário) fica a cargo do MulticastRunnable,
+                    // pois é lá que temos o dbPort do primário.
                 }
                 Thread.sleep(SLEEP_INTERVAL_MS);
             }

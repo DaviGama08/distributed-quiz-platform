@@ -18,7 +18,7 @@ public final class Teacher extends User implements Serializable {
         super(name, email, passwordHash);
     }
 
-    public Teacher(Integer id, String name, String email, String passwordHash, LocalDateTime createdAt) {
+    public Teacher(long id, String name, String email, String passwordHash, LocalDateTime createdAt) {
         super(id, name, email, passwordHash, createdAt);
     }
 

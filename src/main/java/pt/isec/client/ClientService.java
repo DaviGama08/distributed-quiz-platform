@@ -177,11 +177,17 @@ public class ClientService implements IClientService{
     }
 
     // Getters for threads
+    @Override
     public ObjectInputStream getInputStream() { return in; }
+    @Override
     public ObjectOutputStream getOutputStream() { return out; }
+    @Override
     public BlockingQueue<Message<? extends Serializable>> getRequestQueue() { return requestQueue; }
+    @Override
     public BlockingQueue<Message<? extends Serializable>> getResponseQueue() { return responseQueue; }
+    @Override
     public boolean isRunning() { return running; }
+    @Override
     public Socket getTcpSocket() { return tcpSocket; }
 
     // Public API methods for sending requests

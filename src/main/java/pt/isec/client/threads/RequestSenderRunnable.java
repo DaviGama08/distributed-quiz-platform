@@ -1,6 +1,6 @@
 package pt.isec.client.threads;
 
-import pt.isec.client.ClientService;
+import pt.isec.client.IClientService;
 import pt.isec.common.messages.Message;
 
 import java.io.IOException;
@@ -11,9 +11,9 @@ import java.io.Serializable;
  * Thread que envia mensagens da fila de pedidos para o servidor via TCP
  */
 public class RequestSenderRunnable implements Runnable{
-    private final ClientService service;
+    private final IClientService service;
 
-    public RequestSenderRunnable(ClientService service) {
+    public RequestSenderRunnable(IClientService service) {
         this.service = service;
     }
 
@@ -23,7 +23,7 @@ public class RequestSenderRunnable implements Runnable{
 
         System.out.println("[RequestSender] Started sending requests...");
 
-        while(service.isRunning() && !Thread.currentThread().isInterrupted()) {
+        while(service.isRunning()) {
             try {
                 // Blocking take - espera até haver mensagem na fila
                 Message<? extends Serializable> request = service.getRequestQueue().take();

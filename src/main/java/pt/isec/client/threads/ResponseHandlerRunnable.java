@@ -1,6 +1,7 @@
 package pt.isec.client.threads;
 
 import pt.isec.client.ClientService;
+import pt.isec.client.IClientService;
 import pt.isec.common.messages.Message;
 import pt.isec.common.messages.MessageType;
 
@@ -11,9 +12,9 @@ import java.io.Serializable;
  * e executa a lógica apropriada para cada tipo de mensagem
  */
 public class ResponseHandlerRunnable implements Runnable{
-    private final ClientService service;
+    private final IClientService service;
 
-    public ResponseHandlerRunnable(ClientService service) {
+    public ResponseHandlerRunnable(IClientService service) {
         this.service = service;
     }
 
@@ -21,7 +22,7 @@ public class ResponseHandlerRunnable implements Runnable{
     public void run() {
         System.out.println("[ResponseHandler] Started processing responses...");
 
-        while(service.isRunning() && !Thread.currentThread().isInterrupted()) {
+        while(service.isRunning()) {
             try {
                 // Blocking take - espera até haver resposta na fila
                 Message<? extends Serializable> response = service.getResponseQueue().take();

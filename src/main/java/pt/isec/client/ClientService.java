@@ -59,7 +59,11 @@ public class ClientService implements IClientService{
             }
             udpSocket.setSoTimeout(DISCOVERY_TIMEOUT_MS);
 
-            byte[] data = "LOGIN".getBytes();
+            // Enviar pedido de login/descoberta no formato simplificado (cliente não precisa de VER)
+            String request = "TYPE=LOGIN";
+            byte[] data = request.getBytes();
+            System.out.println("[ClientService] Enviando para diretoria: " + request);
+
             DatagramPacket packet = new DatagramPacket(data,
                                                        data.length,
                                                        InetAddress.getByName(directoryHost),
@@ -71,17 +75,19 @@ public class ClientService implements IClientService{
             udpSocket.receive(receive);
 
             String msg = new String(receive.getData(), 0, receive.getLength()).trim();
+            System.out.println("[ClientService] Resposta da diretoria: " + msg);
 
-            if(!msg.startsWith("SERVER")){
-                System.err.println("[ClientService] Esperado: SERVER 192.168.1.10:5000");
+            // Resposta esperada: "200 PRINCIPAL <ip:port>"
+            if(!msg.startsWith("200 PRINCIPAL")){
+                System.err.println("[ClientService] Resposta inválida da diretoria: " + msg);
                 return false;
             }
 
-            //pular o server, ficando apenas com o endereço e porta no target
-            String target = msg.substring("SERVER ".length()).trim();
+            // Extrair o endereço e porta após "200 PRINCIPAL "
+            String target = msg.substring("200 PRINCIPAL ".length()).trim();
             int idx = target.lastIndexOf(':');
             if(idx <= 0){
-                System.err.println("[ClientService] Esperado: 192.168.1.10':'5000");
+                System.err.println("[ClientService] Formato inválido. Esperado: <ip>:<porta>, recebido: " + target);
                 return false;
             }
 
@@ -90,7 +96,7 @@ public class ClientService implements IClientService{
 
             this.serverTcpHost = host;
             this.serverTcpPort = port;
-            System.out.println("[ClientService] Servidor descoberto: " + host + ":" + port);
+            System.out.println("[ClientService] Servidor principal descoberto: " + host + ":" + port);
             return true;
         }catch (IOException | NumberFormatException e) {
             System.err.println("[ClientService] Discovery failed: " + e.getMessage());
@@ -126,7 +132,7 @@ public class ClientService implements IClientService{
             System.err.println("[ClientService] Erro ao fechar conexão: " + e.getMessage());
         }
     }
-    @Override
+
     public void run(){
         boolean connected = false;
         for(int i = 0; i < 3; i++) {
@@ -147,7 +153,6 @@ public class ClientService implements IClientService{
         running = true;
         start();
     }
-    @Override
     public void start() {
         tListener = new Thread(new ClientListenerRunnable(this),  "ClientListenerRunnable");
         tSender   = new Thread(new RequestSenderRunnable(this), "RequestSenderRunnable");
@@ -157,7 +162,7 @@ public class ClientService implements IClientService{
         tSender.start();
         tResponse.start();
     }
-    @Override
+
     public void stop() {
         running = false;
 

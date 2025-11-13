@@ -15,12 +15,14 @@ import java.net.DatagramSocket;
  *  (4) MetricsRunnable         — imprime estado e métricas periodicamente
  *
  * Protocolo (texto, K=V separados por pipe '|'):
- *  - Campos obrigatórios: VER=1 | TYPE=<...>
- *  - Mensagens:
- *    * TYPE=REGISTER   | ID=<serverId> | TCP=<ip:port>
- *    * TYPE=HEARTBEAT  | ID=<serverId> | DBV=<dbVersion>
- *    * TYPE=DEREGISTER | ID=<serverId>
- *    * TYPE=CLIENT_QUERY
+ *
+ * === MENSAGENS DE CLIENTE (sem VER) ===
+ *  - TYPE=LOGIN
+ *
+ * === MENSAGENS DE SERVIDOR (requerem VER=1) ===
+ *  - VER=1 | TYPE=REGISTER   | ID=<serverId> | TCP=<ip:port> | DBV=<dbVersion>
+ *  - VER=1 | TYPE=HEARTBEAT  | ID=<serverId> | DBV=<dbVersion>
+ *  - VER=1 | TYPE=DEREGISTER | ID=<serverId>
  *
  * Respostas (texto):
  *  - "200 OK"

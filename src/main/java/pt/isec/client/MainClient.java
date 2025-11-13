@@ -1,8 +1,6 @@
 package pt.isec.client;
 
 
-import pt.isec.directory.service.DirectoryService;
-
 public class MainClient {
     public static void main(String[] args) {
         if(args.length < 2){
@@ -12,7 +10,7 @@ public class MainClient {
         System.out.printf("=== Cliente ===%nUDP: " + args[0] + ":" + args[1]);
 
         try {
-            ClientManager manager = new ClientManager(Integer.parseInt(args[0]), args[1]);
+            ClientManager manager = new ClientManager(args[0], Integer.parseInt(args[1]));
 
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 try { manager.stop(); } catch (Exception ignored) {}

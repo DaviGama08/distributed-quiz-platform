@@ -23,17 +23,9 @@ public class WorkerRunnable implements Runnable{
                 UdpMessage msg = tInfo.queue().take();
 
                 String payload = new String(msg.data(), 0, msg.length(), StandardCharsets.UTF_8);
-                System.out.println("Recebido: " + payload);
+                System.out.println("[Worker] Recebido: " + payload);
 
                 Map<String, String> kv = parseKv(payload);
-
-                String ver = kv.get("VER");
-
-                if (!"1".equals(ver)) {
-                    send(msg, "400 BAD_REQUEST VER");
-                    continue;
-                }
-
 
                 String type = kv.get("TYPE");
                 if (type == null) {
@@ -42,13 +34,48 @@ public class WorkerRunnable implements Runnable{
                 }
 
                 String reply;
+
+                // Distinguir entre mensagens de CLIENTE (sem VER) e SERVIDOR (com VER)
                 switch (type) {
-                    case "REGISTER"   -> reply = handleRegister(kv);
-                    case "HEARTBEAT"  -> reply = handleHeartbeat(kv);
-                    case "DEREGISTER" -> reply = handleDeregister(kv);
-                    case "CLIENT_QUERY" -> reply = handleClientQuery();
-                    default -> reply = "400 BAD_REQUEST TYPE";
+                    // === MENSAGENS DE CLIENTE (sem VER requerido) ===
+                    case "LOGIN" -> {
+                        System.out.println("[Worker] → Cliente pede descoberta de servidor");
+                        reply = handleLogin();
+                    }
+
+                    // === MENSAGENS DE SERVIDOR (requerem VER=1) ===
+                    case "REGISTER", "HEARTBEAT", "DEREGISTER" -> {
+                        String ver = kv.get("VER");
+                        //TODO ANALISAR PARA O CASO DE A VERSÃO DA BASE DE DADOS MUDAR
+                        if (!"1".equals(ver)) {
+                            send(msg, "400 BAD_REQUEST VER");
+                            continue;
+                        }
+
+                        //Para o servidor
+                        reply = switch (type) {
+                            case "REGISTER" -> {
+                                System.out.println("[Worker] → Servidor pede registo");
+                                yield handleRegister(kv);
+                            }
+                            case "HEARTBEAT" -> {
+                                System.out.println("[Worker] → Servidor envia heartbeat");
+                                yield handleHeartbeat(kv);
+                            }
+                            case "DEREGISTER" -> {
+                                System.out.println("[Worker] → Servidor pede desregisto");
+                                yield handleDeregister(kv);
+                            }
+                            default -> "500 INTERNAL_ERROR";
+                        };
+                    }
+
+                    default -> {
+                        System.out.println("[Worker] → Tipo desconhecido: " + type);
+                        reply = "400 BAD_REQUEST TYPE";
+                    }
                 }
+
                 send(msg, reply);
 
             } catch (InterruptedException e) {
@@ -60,17 +87,38 @@ public class WorkerRunnable implements Runnable{
                 System.err.println("Erro inesperado no Worker: " + e.getMessage());
             }
         }
+        System.out.println("Worker terminou.");
     }
 
-    private String handleClientQuery() {
+
+    /**
+     * Trata pedido de login/descoberta do servidor principal por parte do cliente.
+     *
+     * Protocolo esperado:
+     * REQUEST:  TYPE=LOGIN
+     * RESPONSE: 200 PRINCIPAL <ip>:<port> (servidor principal disponível via TCP)
+     *           404 NO_PRINCIPAL (nenhum servidor registado)
+     */
+    private String handleLogin() {
         ServerInfo principal;
         synchronized (tInfo.serversLock()) {
-            principal = tInfo.serversOrdered().values().stream().findFirst().orElse(null);
+            //vai buscar o servidor mais recente "Master"
+            var iterator = tInfo.serversOrdered().values().iterator();
+            principal = iterator.hasNext() ? iterator.next() : null;
         }
         if (principal == null) return "404 NO_PRINCIPAL";
         return "200 PRINCIPAL " + principal.tcpEndpoint();
     }
 
+    /**
+     * Trata pedido de desregisto de um servidor.
+     *
+     * Protocolo esperado:
+     * REQUEST:  VER=1|TYPE=DEREGISTER|ID=<uuid>
+     * RESPONSE: 200 OK (servidor removido com sucesso)
+     *           400 BAD_REQUEST ID (ID ausente ou vazio)
+     *           409 CONFLICT UNKNOWN_ID (ID desconhecido)
+     */
     private String handleDeregister(Map<String, String> kv) {
         String id = kv.get("ID");
         if(id == null || id.isEmpty()) return "400 BAD_REQUEST ID";
@@ -85,6 +133,15 @@ public class WorkerRunnable implements Runnable{
         return "200 OK";
     }
 
+    /**
+     * Trata pedido de heartbeat (manter servidor ativo).
+     *
+     * Protocolo esperado:
+     * REQUEST:  VER=1|TYPE=HEARTBEAT|ID=<uuid>|DBV=<versão_bd>
+     * RESPONSE: 200 OK (heartbeat recebido, timestamp atualizado)
+     *           400 BAD_REQUEST ID (ID ausente ou vazio)
+     *           409 CONFLICT UNKNOWN_ID (ID desconhecido)
+     */
     private String handleHeartbeat(Map<String, String> kv) {
         String id = kv.get("ID");
         if (id == null || id.isBlank()) return "400 BAD_REQUEST ID";
@@ -109,6 +166,17 @@ public class WorkerRunnable implements Runnable{
         return "200 OK";
     }
 
+    /**
+     * Trata pedido de registo de um novo servidor.
+     *
+     * Protocolo esperado:
+     * REQUEST:  VER=1|TYPE=REGISTER|ID=<uuid>|TCP=<ip>:<port>|DBV=<versão_bd>
+     * RESPONSE: 200 PRINCIPAL <ip>:<port> (registo OK, retorna servidor principal)
+     *           400 BAD_REQUEST ID (ID ausente ou vazio)
+     *           400 BAD_REQUEST TCP (endereço TCP inválido)
+     *           400 BAD_REQUEST TCP_PORT (porta TCP inválida)
+     *           404 NO_PRINCIPAL (nenhum servidor disponível)
+     */
     private String handleRegister(Map<String, String> kv) {
         String id = kv.get("ID");
         String tcp = kv.get("TCP");
@@ -145,18 +213,35 @@ public class WorkerRunnable implements Runnable{
 
         ServerInfo principal;
         synchronized (tInfo.serversLock()) {
-            principal = tInfo.serversOrdered().values().stream().findFirst().orElse(null);
+            var iterator = tInfo.serversOrdered().values().iterator();
+            principal = iterator.hasNext() ? iterator.next() : null;
         }
         if (principal == null) return "404 NO_PRINCIPAL";
         return "200 PRINCIPAL " + principal.tcpEndpoint();
     }
 
+    /**
+     * Envia resposta UDP de volta ao remetente.
+     *
+     * @param to Mensagem UDP original (contém endereço e porta do remetente)
+     * @param text Resposta em formato texto (ex: "200 OK", "404 NO_PRINCIPAL")
+     * @throws IOException se houver erro ao enviar o datagrama
+     */
     private void send(UdpMessage to, String text) throws IOException {
         byte[] out        = text.getBytes(StandardCharsets.UTF_8);
         DatagramPacket dp = new DatagramPacket(out, out.length, to.addr(), to.port());
         tInfo.socket().send(dp);
     }
 
+    /**
+     * Faz parsing de uma mensagem no formato KEY=VALUE|KEY=VALUE|...
+     *
+     * Exemplo: "VER=1|TYPE=REGISTER|ID=abc123|TCP=192.168.1.10:9999"
+     * Resultado: Map{"VER"->"1", "TYPE"->"REGISTER", "ID"->"abc123", "TCP"->"192.168.1.10:9999"}
+     *
+     * @param s String com pares KEY=VALUE separados por pipe '|'
+     * @return Map com os pares chave-valor extraídos
+     */
     private static Map<String, String> parseKv(String s){
         Map<String, String> m = new LinkedHashMap<>();
         for(String token : s.split("\\|")){

@@ -1,6 +1,7 @@
 package pt.isec.client.threads;
 
 import pt.isec.client.ClientService;
+import pt.isec.client.IClientService;
 import pt.isec.common.messages.Message;
 
 import java.io.IOException;
@@ -12,9 +13,9 @@ import java.io.Serializable;
  * e coloca-as na fila de respostas para serem processadas
  */
 public class ClientListenerRunnable implements Runnable{
-    private final ClientService service;
+    private final IClientService service;
 
-    public ClientListenerRunnable(ClientService service) {
+    public ClientListenerRunnable(IClientService service) {
         this.service = service;
     }
 
@@ -24,7 +25,7 @@ public class ClientListenerRunnable implements Runnable{
 
         System.out.println("[ClientListener] Started listening for server messages...");
 
-        while(service.isRunning() && !Thread.currentThread().isInterrupted()) {
+        while(service.isRunning()) {
             try {
                 // Blocking read - espera até receber mensagem
                 Message<? extends Serializable> response = (Message<? extends Serializable>) in.readObject();

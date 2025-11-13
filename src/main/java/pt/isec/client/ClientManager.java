@@ -18,7 +18,7 @@ public class ClientManager {
     private final QuestionClientService questionService;
     private final AnswerClientService answerService;
 
-    public ClientManager(int port, String ip){
+    public ClientManager(String ip, int port){
         this.port = port;
         this.ip = ip;
         this.service = new ClientService(this, port, ip);
@@ -31,7 +31,8 @@ public class ClientManager {
 
     public void start(){
         System.out.println("[ClientManager] Starting client...");
-        new Thread(service, "ClientService").start();
+        service.start(); //cria e lança as threads
+        service.run(); //tenta ligar-se ao servidor
     }
 
     public void stop(){

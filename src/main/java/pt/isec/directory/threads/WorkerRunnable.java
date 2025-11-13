@@ -28,10 +28,13 @@ public class WorkerRunnable implements Runnable{
                 Map<String, String> kv = parseKv(payload);
 
                 String ver = kv.get("VER");
+
                 if (!"1".equals(ver)) {
                     send(msg, "400 BAD_REQUEST VER");
                     continue;
                 }
+
+
                 String type = kv.get("TYPE");
                 if (type == null) {
                     send(msg, "400 BAD_REQUEST TYPE");

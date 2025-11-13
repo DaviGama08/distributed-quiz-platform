@@ -1,14 +1,12 @@
 package pt.isec.server;
 
 import pt.isec.common.messages.Message;
+
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.time.Duration;
 
-/**
- * classe que gere a comunicação tcp (envio/receção de mensagens e streams)
- */
 public class NetworkConnection implements AutoCloseable {
     private static final int BUFFER_SIZE = 64 * 1024;
     private static final int MAX_INT_TIMEOUT = Integer.MAX_VALUE;
@@ -20,10 +18,9 @@ public class NetworkConnection implements AutoCloseable {
     public NetworkConnection(Socket socket) throws IOException {
         this.socket = socket;
         this.out = new ObjectOutputStream(socket.getOutputStream());
-        this.in = new ObjectInputStream(socket.getInputStream());
+        this.in  = new ObjectInputStream(socket.getInputStream());
     }
 
-    // cria uma nova ligação tcp para um determinado host/porto, com timeout configurável
     public static NetworkConnection connect(String host, int port, Duration timeout) throws IOException {
         Socket s = new Socket();
         int to = (int) Math.min(MAX_INT_TIMEOUT, Math.max(0, timeout.toMillis()));
@@ -31,50 +28,89 @@ public class NetworkConnection implements AutoCloseable {
         return new NetworkConnection(s);
     }
 
-    // define o tempo máximo de espera por leitura
-    // math.min evita overflow (valores acima do valor max. dos inteiros)
-    // math.max evita valores negativos
     public void setReadTimeout(Duration timeout) throws IOException {
         int to = (int) Math.min(MAX_INT_TIMEOUT, Math.max(0, timeout.toMillis()));
         socket.setSoTimeout(to);
     }
 
-    // envia um objeto serializável (mensagem genérica)
     public <T extends Serializable> void sendMessage(Message<T> message) throws IOException {
         out.writeObject(message);
         out.flush();
         out.reset();
     }
 
-    // recebe um objeto (mensagem)
     public Message<?> receiveMessage() throws IOException, ClassNotFoundException {
         return (Message<?>) in.readObject();
     }
-    //TODO: ver para que serve sendStream()
+
+    /* ===== NOVO: tipos primitivos e fluxo binário pelo MESMO ObjectStream ===== */
+
+    public void writeLong(long v) throws IOException {
+        out.writeLong(v);
+        out.flush();
+        out.reset();
+    }
+
+    public long readLong() throws IOException {
+        return in.readLong();
+    }
+
+    /** Envia exatamente 'size' bytes usando o MESMO ObjectOutputStream. */
+    public long sendStreamViaObjectOut(InputStream src, long size) throws IOException {
+        try (src) {
+            byte[] buf = new byte[BUFFER_SIZE];
+            long sent = 0;
+            int read;
+            while (sent < size && (read = src.read(buf, 0, (int)Math.min(buf.length, size - sent))) >= 0) {
+                out.write(buf, 0, read);
+                sent += read;
+            }
+            out.flush();
+            out.reset();
+            return sent;
+        }
+    }
+
+    /** Lê exatamente 'size' bytes usando o MESMO ObjectInputStream. */
+    public long receiveExactly(OutputStream dst, long size) throws IOException {
+        try (dst) {
+            byte[] buf = new byte[BUFFER_SIZE];
+            long got = 0;
+            while (got < size) {
+                int want = (int)Math.min(buf.length, size - got);
+                int read = in.read(buf, 0, want);
+                if (read < 0) throw new EOFException("terminou antes de receber todos os bytes");
+                dst.write(buf, 0, read);
+                got += read;
+            }
+            dst.flush();
+            return got;
+        }
+    }
+
+    /* ===== métodos antigos (mantidos para compatibilidade) ===== */
+
     public long sendStream(InputStream src) throws IOException {
         try (src) {
             byte[] buf = new byte[BUFFER_SIZE];
             long total = 0;
             int read;
             OutputStream raw = socket.getOutputStream();
-
             while ((read = src.read(buf)) >= 0) {
                 raw.write(buf, 0, read);
                 total += read;
             }
             raw.flush();
-            return total; //n.º de bytes enviados
+            return total;
         }
     }
 
-    //TODO: ver para que serve isto receiveTo()
-    public long receiveTo(OutputStream dst) throws IOException {
+    public long receiveStreamAfterAck(OutputStream dst) throws IOException {
         try (dst) {
             byte[] buf = new byte[BUFFER_SIZE];
             long total = 0;
             int read;
-            InputStream raw = socket.getInputStream();
-
+            InputStream raw = this.in; // usa o ObjectInputStream como InputStream
             while ((read = raw.read(buf)) >= 0) {
                 dst.write(buf, 0, read);
                 total += read;
@@ -84,13 +120,27 @@ public class NetworkConnection implements AutoCloseable {
         }
     }
 
-    public Socket socket() {
-        return socket;
+    public long receiveTo(OutputStream dst) throws IOException {
+        try (dst) {
+            byte[] buf = new byte[BUFFER_SIZE];
+            long total = 0;
+            int read;
+            InputStream raw = socket.getInputStream();
+            while ((read = raw.read(buf)) >= 0) {
+                dst.write(buf, 0, read);
+                total += read;
+            }
+            dst.flush();
+            return total;
+        }
     }
 
+    public Socket socket() { return socket; }
+
+    @Override
     public void close() throws IOException {
-        if (out != null) out.close();
-        if (in != null) in.close();
-        if (socket != null) socket.close();
+        try { if (out != null) out.close(); } catch (Exception ignore) {}
+        try { if (in  != null) in.close();  } catch (Exception ignore) {}
+        try { if (socket != null) socket.close(); } catch (Exception ignore) {}
     }
 }

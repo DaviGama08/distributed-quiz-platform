@@ -1,4 +1,3 @@
-// pt/isec/server/ServerNode.java — CLASSE COMPLETA (essência igual, sem scan inicial)
 package pt.isec.server;
 
 import pt.isec.server.threads.client.TcpClientAcceptorRunnable;
@@ -11,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Enumeration;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class ServerNode implements IServerNode, Runnable, AutoCloseable {
@@ -35,6 +35,9 @@ public class ServerNode implements IServerNode, Runnable, AutoCloseable {
     private volatile Principal master;
     private final AtomicLong dbVersion = new AtomicLong(0);
 
+    // NOVO: “fusível” para impedir cópias concorrentes
+    private final AtomicBoolean copying = new AtomicBoolean(false);
+
     private Thread tMulticastReceiver, tDirectoryHB, tTcpClient, tDbCopyAcceptor;
 
     public ServerNode(String dirHost, int dirPort, String mcIfIp,
@@ -49,7 +52,6 @@ public class ServerNode implements IServerNode, Runnable, AutoCloseable {
         this.dataDir = (initialDbPath.getParent() != null) ? initialDbPath.getParent().toAbsolutePath()
                 : Paths.get(".").toAbsolutePath();
 
-        // arranca como "backup" com versão 0; a diretoria/MC vai definir a versão real
         this.isPrimary = false;
         refreshDbPath();
 
@@ -132,6 +134,10 @@ public class ServerNode implements IServerNode, Runnable, AutoCloseable {
 
     @Override public Path dbPath() { return dbPath; }
 
+    // “fusível” para MulticastRunnable
+    public boolean tryLockCopy()  { return copying.compareAndSet(false, true); }
+    public void    unlockCopy()   { copying.set(false); }
+
     @Override public void run() { start(); }
 
     @Override
@@ -146,7 +152,7 @@ public class ServerNode implements IServerNode, Runnable, AutoCloseable {
     public void start() {
         tDirectoryHB       = new Thread(new DirectoryHeartbeatRunnable(this), "directory-hb");
         tMulticastReceiver = new Thread(new MulticastRunnable(this), "multicast-receiver");
-        tTcpClient         = new Thread(new pt.isec.server.threads.client.TcpClientAcceptorRunnable(this), "tcp-client");
+        tTcpClient         = new Thread(new TcpClientAcceptorRunnable(this), "tcp-client");
         tDbCopyAcceptor    = new Thread(new DbCopyAcceptorRunnable(this), "dbcopy-acceptor");
 
         tMulticastReceiver.start();

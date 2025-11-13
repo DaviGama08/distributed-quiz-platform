@@ -11,8 +11,8 @@ public class MulticastRunnable implements Runnable, AutoCloseable {
     private static final int HEARTBEAT_INTERVAL_MS = 5000;
     private static final int LOOP_SLEEP_MS = 50;
     private static final int MULTICAST_TTL = 1;
-    private static final int RX_TIMEOUT_MS = 500;    // para não bloquear o loop
-    private static final int BUFFER_SIZE = 4096;     // tamanho do buffer de receção
+    private static final int RX_TIMEOUT_MS = 500;
+    private static final int BUFFER_SIZE = 4096;
 
     private final IServerNode tInfo;
     private MulticastSocket ms;
@@ -24,15 +24,11 @@ public class MulticastRunnable implements Runnable, AutoCloseable {
         try (MulticastSocket _ms = new MulticastSocket(tInfo.mcPort())) {
             this.ms = _ms;
 
-            // ===== CONFIGURAÇÃO DO SOCKET =====
             _ms.setReuseAddress(true);
             _ms.setSoTimeout(RX_TIMEOUT_MS);
             _ms.setTimeToLive(MULTICAST_TTL);
             _ms.setNetworkInterface(tInfo.mcIf());
-            try {
-                // Em muitos Windows, isto precisa estar "false" (desabilitar=FALSE → loopback ATIVADO)
-                _ms.setLoopbackMode(false);
-            } catch (Throwable ignore) { /* alguns JDKs marcam deprecated mas funciona */ }
+            try { _ms.setLoopbackMode(false); } catch (Throwable ignore) {}
 
             InetAddress grp = InetAddress.getByName(tInfo.mcGroup());
             _ms.joinGroup(new InetSocketAddress(grp, tInfo.mcPort()), tInfo.mcIf());
@@ -45,53 +41,61 @@ public class MulticastRunnable implements Runnable, AutoCloseable {
             while (tInfo.isRunning()) {
                 long now = System.currentTimeMillis();
 
-                // Identificador humano: "servidor<portoCliente>" (ex.: 5002 → servidor5002)
-                String serverId = "servidor" + tInfo.clientPort();
-
-                // 1) Envio (só se for primário e deu o intervalo)
+                // 1) envio (só master)
                 if (tInfo.isPrimary() && now - lastSent >= HEARTBEAT_INTERVAL_MS) {
-                    String beat = "MC_HB;id=" + serverId +
-                            ";role=" + (tInfo.isPrimary() ? "MASTER" : "BACKUP") +
-                            ";version=" + tInfo.dbVersion() +
-                            ";dbPort=" + tInfo.dbCopyPort();
+                    String beat = "MC_HB;"
+                            + "id=servidor" + tInfo.clientPort()
+                            + ";role=" + (tInfo.isPrimary() ? "MASTER" : "BACKUP")
+                            + ";version=" + tInfo.dbVersion()
+                            + ";dbPort=" + tInfo.dbCopyPort()
+                            + ";clientPort=" + tInfo.clientPort();
                     byte[] data = beat.getBytes(StandardCharsets.UTF_8);
                     _ms.send(new DatagramPacket(data, data.length, grp, tInfo.mcPort()));
                     lastSent = now;
-                    // log útil para validação
-                    // System.out.println("[MC] sent: " + beat);
                 }
 
-                // 2) Receção (se não for primário, tenta ler com timeout curto)
+                // 2) receção (backups)
                 if (!tInfo.isPrimary()) {
                     try {
                         _ms.receive(pkt);
                         String senderIp = pkt.getAddress().getHostAddress();
-                        if (!senderIp.equals(tInfo.ip())) {
-                            String s = new String(pkt.getData(), 0, pkt.getLength(), StandardCharsets.UTF_8);
+                        String s = new String(pkt.getData(), 0, pkt.getLength(), StandardCharsets.UTF_8);
 
-                            if (s.startsWith("MC_HB;")) {
-                                long rxVersion = extractLong(s, "version");
-                                int  rxDbPort  = (int) extractLong(s, "dbPort");
+                        if (s.startsWith("MC_HB;")) {
+                            long rxClientPort = extractLong(s, "clientPort");
+                            boolean fromMe = senderIp.equals(tInfo.ip()) && rxClientPort == tInfo.clientPort();
+                            if (fromMe) continue;
 
-                                boolean needCopyBecauseMissing = !Files.exists(tInfo.dbPath());
-                                boolean needCopyBecauseVersion = (rxVersion >= 0 && rxVersion != tInfo.dbVersion());
+                            long rxVersion = extractLong(s, "version");
+                            int  rxDbPort  = (int) extractLong(s, "dbPort");
 
-                                if (needCopyBecauseMissing || needCopyBecauseVersion) {
-                                    System.err.printf("[%s][MC] copy-request: missing=%s version(local=%d, rx=%d) → pedir a %s:%d%n",
-                                            Instant.now(), needCopyBecauseMissing, tInfo.dbVersion(), rxVersion, senderIp, rxDbPort);
+                            boolean needCopyBecauseMissing = !Files.exists(tInfo.dbPath());
+                            boolean needCopyBecauseVersion = (rxVersion >= 0 && rxVersion != tInfo.dbVersion());
 
-                                    if (rxDbPort > 0) {
-                                        new Thread(new DbCopyRequesterRunnable(
-                                                tInfo, senderIp, rxDbPort
-                                        ), "dbcopy-request").start();
+                            if (needCopyBecauseMissing || needCopyBecauseVersion) {
+                                System.err.printf("[%s][MC] pedir cópia: falta=%s versao(local=%d, rx=%d) → %s:%d%n",
+                                        Instant.now(), needCopyBecauseMissing, tInfo.dbVersion(), rxVersion, senderIp, rxDbPort);
+
+                                if (rxDbPort > 0) {
+                                    // NOVO: usa o “fusível” do ServerNode para evitar múltiplas cópias
+                                    if (tInfo instanceof pt.isec.server.ServerNode sn) {
+                                        if (!sn.tryLockCopy()) {
+                                            continue; // já há uma cópia em curso
+                                        }
+                                        new Thread(() -> {
+                                            try { new DbCopyRequesterRunnable(tInfo, senderIp, rxDbPort).run(); }
+                                            finally { sn.unlockCopy(); }
+                                        }, "dbcopy-request").start();
                                     } else {
-                                        System.err.println("[MC] hb sem dbPort → não posso pedir cópia.");
+                                        new Thread(new DbCopyRequesterRunnable(tInfo, senderIp, rxDbPort), "dbcopy-request").start();
                                     }
+                                } else {
+                                    System.err.println("[MC] heartbeat sem dbPort → não posso pedir cópia.");
                                 }
                             }
                         }
                     } catch (SocketTimeoutException ignore) {
-                        // sem pacote → segue o loop
+                        // sem pacote
                     } catch (Exception e) {
                         if (tInfo.isRunning())
                             System.err.println("[MC-LOOP] erro rx: " + e.getMessage());
@@ -106,7 +110,6 @@ public class MulticastRunnable implements Runnable, AutoCloseable {
         }
     }
 
-    /** extrai um número longo de um payload tipo "k1=v1;k2=v2;..." (retorna -1 se não achar) */
     private static long extractLong(String payload, String key) {
         String needle = key + "=";
         int i = payload.indexOf(needle);

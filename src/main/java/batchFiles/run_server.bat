@@ -14,7 +14,7 @@ pause
 
 java --enable-native-access=ALL-UNNAMED ^
  -cp "..\bin\server.pt.isec;..\..\resources;..\lib\sqlite-jdbc-3.45.2.0.jar;..\lib\slf4j-api-2.0.13.jar;..\lib\slf4j-simple-2.0.13.jar" ^
- pt.isec.server.MainServer localhost 9999 PROJECT 192.168.1.50 5003 17003
+ pt.isec.server.MainServer localhost 9999 PROJECT 192.168.1.50 5005 17005
 
 pause
 

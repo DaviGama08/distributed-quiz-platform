@@ -10,13 +10,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Objects;
 
-/**
- * UDP com a diretoria:
- * - envia REGISTER/HEARTBEAT/DEREGISTER
- * - recebe "200 PRINCIPAL ip:port"
- * - PRIMÁRIO: cria BD se faltar e semeia config
- * - BACKUP: aguarda heartbeat para saber o dbPort do primário e pedir cópia
- */
 public class DirectoryHeartbeatRunnable implements Runnable, AutoCloseable {
     private static final int SOCKET_TIMEOUT_MS = 3000;
     private static final int HEARTBEAT_INTERVAL_MS = 5000;
@@ -48,26 +41,33 @@ public class DirectoryHeartbeatRunnable implements Runnable, AutoCloseable {
             );
             send(s, dirAddr, dirPort, registerMsg);
 
-            // PRINCIPAL
-            Endpoint waited = waitPrincipal(s);
-            if (waited == null) {
-                System.err.println("[DIR] sem resposta da diretoria; thread terminada");
+            // espera "200 PRINCIPAL ip:port[|DBV=X]"
+            Endpoint reply = waitPrincipal(s);
+            if (reply == null) {
+                System.err.println("[DIR] sem resposta da diretoria");
                 return;
             }
 
-            tInfo.setPrimary(waited.ip, waited.port);
-            boolean iAmPrimary = Objects.equals(waited.ip, tInfo.ip()) && waited.port == tInfo.clientPort();
+            tInfo.setPrimary(reply.ip, reply.port);
+            boolean iAmPrimary = Objects.equals(reply.ip, tInfo.ip()) && reply.port == tInfo.clientPort();
+
+            // versão enviada pela diretoria: -1 = primeira vez
+            if (reply.dbv != null) {
+                if (reply.dbv == -1 && iAmPrimary) {
+                    tInfo.setDbVersion(1); // primeira vez: cria quiz-01.db
+                } else if (reply.dbv >= 0) {
+                    tInfo.setDbVersion(reply.dbv);
+                }
+            }
 
             if (iAmPrimary) {
                 try {
-                    // cria BD se faltar / sem schema
                     pt.isec.server.db.DbFiles.createIfMissing(tInfo.dbPath(), "/db/schema.sql");
-                    System.out.println("[DIR][DB] bootstrap ok: " + tInfo.dbPath());
+                    System.out.println("[DB] base de dados criada: " + tInfo.dbPath());
                 } catch (Exception e) {
-                    System.err.println("[DIR][DB] falha no bootstrap: " + e.getMessage());
+                    System.err.println("[DB] erro a criar base de dados: " + e.getMessage());
                 }
 
-                // semear config mínima (exemplo)
                 Db db = new Db("jdbc:sqlite:" + tInfo.dbPath().toAbsolutePath());
                 var cfg = new ConfigServices();
                 db.executeUpdate(
@@ -76,37 +76,36 @@ public class DirectoryHeartbeatRunnable implements Runnable, AutoCloseable {
                         cfg.getTeachersRegisterHash()
                 );
             } else {
-                // BACKUP: não sabemos ainda o dbPort do primário por via da diretoria.
-                // Se não existir BD local, aguardamos HB multicast (que traz dbPort)
                 if (!Files.exists(tInfo.dbPath())) {
-                    System.out.println("[DIR] backup sem BD local; aguardando MC_HB para obter dbPort e pedir cópia.");
+                    System.out.println("[DB] backup sem base de dados local; vai aguardar heartbeat multicast para copiar.");
                 }
             }
 
-            System.out.printf("[DIR] PRINCIPAL %s:%d | iAmPrimary=%s%n", waited.ip, waited.port, iAmPrimary);
+            System.out.printf("[DIR] principal %s:%d | souPrimario=%s | versao=%d%n",
+                    reply.ip, reply.port, iAmPrimary, tInfo.dbVersion());
 
             long last = 0;
 
-            // HEARTBEAT loop
+            // HEARTBEAT — envia a versão atual (NÃO é 1 fixo; usa tInfo.dbVersion())
             while (tInfo.isRunning()) {
                 long now = System.currentTimeMillis();
 
                 if (now - last >= HEARTBEAT_INTERVAL_MS) {
-                    String hb = kv("VER","1","TYPE","HEARTBEAT",
+                    String hb = kv(
+                            "VER","1","TYPE","HEARTBEAT",
                             "ID", tInfo.id(),
                             "DBV", String.valueOf(tInfo.dbVersion()),
-                            "DBP", String.valueOf(tInfo.dbCopyPort()));
+                            "DBP", String.valueOf(tInfo.dbCopyPort())
+                    );
                     send(s, dirAddr, dirPort, hb);
                     last = now;
                 }
 
-                Endpoint currentPrimary = tryReceivePrincipal(s);
-                if (currentPrimary != null) {
-                    tInfo.setPrimary(currentPrimary.ip, currentPrimary.port);
-                    boolean iAmPrim = Objects.equals(currentPrimary.ip, tInfo.ip()) && currentPrimary.port == tInfo.clientPort();
-                    System.out.printf("[DIR] PRINCIPAL %s:%d | iAmPrimary=%s%n", currentPrimary.ip, currentPrimary.port, iAmPrim);
-                    // NOTA: o pedido de cópia (se necessário) fica a cargo do MulticastRunnable,
-                    // pois é lá que temos o dbPort do primário.
+                Endpoint cur = tryReceivePrincipal(s);
+                if (cur != null) {
+                    tInfo.setPrimary(cur.ip, cur.port);
+                    boolean prim = Objects.equals(cur.ip, tInfo.ip()) && cur.port == tInfo.clientPort();
+                    System.out.printf("[DIR] principal %s:%d | souPrimario=%s%n", cur.ip, cur.port, prim);
                 }
                 Thread.sleep(SLEEP_INTERVAL_MS);
             }
@@ -121,9 +120,9 @@ public class DirectoryHeartbeatRunnable implements Runnable, AutoCloseable {
         }
     }
 
-    /* ---------- helpers UDP ---------- */
+    /* ---------- auxiliares UDP ---------- */
 
-    private record Endpoint(String ip, int port) {}
+    private record Endpoint(String ip, int port, Integer dbv) { }
 
     private static String kv(String... kv) {
         StringBuilder b = new StringBuilder();
@@ -144,6 +143,7 @@ public class DirectoryHeartbeatRunnable implements Runnable, AutoCloseable {
         return null;
     }
 
+    // aceita "200 PRINCIPAL ip:port" ou "200 PRINCIPAL ip:port|DBV=NN"
     private Endpoint tryReceivePrincipal(DatagramSocket s) {
         try {
             byte[] buf = new byte[BUFFER_SIZE];
@@ -151,17 +151,44 @@ public class DirectoryHeartbeatRunnable implements Runnable, AutoCloseable {
             s.receive(dp);
             String resp = new String(dp.getData(), 0, dp.getLength(), StandardCharsets.UTF_8).trim();
 
-            if (!resp.startsWith("200 PRINCIPAL ")) return null;
-            String[] parts = resp.substring("200 PRINCIPAL ".length()).split(":");
-            if (parts.length != 2) return null;
+            if (resp.startsWith("409 CONFLICT DUP_ENDPOINT")) {
+                System.err.println("[DIR] ja existe servidor ativo com este ip:porto. a terminar.");
+                System.exit(2); // encerra para não ficar dois no mesmo endpoint
+                return null;    // unreachable
+            }
 
-            return new Endpoint(parts[0], Integer.parseInt(parts[1]));
+            if (!resp.startsWith("200 PRINCIPAL ")) return null;
+
+            String body = resp.substring("200 PRINCIPAL ".length());
+            String[] mainAndRest = body.split("\\|", 2);
+            String[] ipPort = mainAndRest[0].split(":");
+            if (ipPort.length != 2) return null;
+
+            String ip = ipPort[0];
+            int port = Integer.parseInt(ipPort[1]);
+            Integer dbv = null;
+
+            if (mainAndRest.length == 2) {
+                for (String tok : mainAndRest[1].split("\\|")) {
+                    String t = tok.trim();
+                    int eq = t.indexOf('=');
+                    if (eq > 0) {
+                        String k = t.substring(0, eq).trim();
+                        String v = t.substring(eq + 1).trim();
+                        if ("DBV".equalsIgnoreCase(k)) {
+                            try { dbv = Integer.parseInt(v); } catch (Exception ignore) {}
+                        }
+                    }
+                }
+            }
+            return new Endpoint(ip, port, dbv);
         } catch (SocketTimeoutException e) {
             return null;
         } catch (Exception e) {
             return null;
         }
     }
+
 
     @Override
     public void close() {

@@ -169,18 +169,16 @@ public class WorkerRunnable implements Runnable{
     /**
      * Trata pedido de registo de um novo servidor.
      *
-     * Protocolo esperado:
      * REQUEST:  VER=1|TYPE=REGISTER|ID=<uuid>|TCP=<ip>:<port>|DBV=<versão_bd>
-     * RESPONSE: 200 PRINCIPAL <ip>:<port> (registo OK, retorna servidor principal)
-     *           400 BAD_REQUEST ID (ID ausente ou vazio)
-     *           400 BAD_REQUEST TCP (endereço TCP inválido)
-     *           400 BAD_REQUEST TCP_PORT (porta TCP inválida)
-     *           404 NO_PRINCIPAL (nenhum servidor disponível)
+     * RESPONSE: 200 PRINCIPAL <ip>:<port>|DBV=<versão_global_ou_-1>
+     *           400 BAD_REQUEST ID/TCP/TCP_PORT
+     *           404 NO_PRINCIPAL
      */
+    // WorkerRunnable.java
     private String handleRegister(Map<String, String> kv) {
-        String id = kv.get("ID");
+        String id  = kv.get("ID");
         String tcp = kv.get("TCP");
-        String dbv = kv.get("DBV"); // se vier, aproveitamos
+        String dbv = kv.get("DBV"); // opcional
 
         if (id == null || id.isBlank()) return "400 BAD_REQUEST ID";
         if (tcp == null || !tcp.contains(":")) return "400 BAD_REQUEST TCP";
@@ -195,8 +193,17 @@ public class WorkerRunnable implements Runnable{
         }
         if (ip.isEmpty() || port <= 0 || port > 65535) return "400 BAD_REQUEST TCP";
 
-        int version = 1;
-        try { if (dbv != null) version = Integer.parseInt(dbv.trim()); } catch (Exception ignore) {}
+        // === regra: não permitir dois servidores no MESMO <ip:port> com IDs diferentes
+        for (ServerInfo other : tInfo.servers().values()) {
+            if (other.getIp().equals(ip) && other.getTcpPort() == port && !other.getId().equals(id)) {
+                System.out.printf("[Diretoria] rejeitado REGISTER: endpoint duplicado %s:%d para ID=%s (já existe %s)%n",
+                        ip, port, id, other.getId());
+                return "409 CONFLICT DUP_ENDPOINT";
+            }
+        }
+
+        int version = 0;
+        try { if (dbv != null && !dbv.isBlank()) version = Integer.parseInt(dbv.trim()); } catch (Exception ignore) {}
 
         ServerInfo si = tInfo.servers().get(id);
         if (si == null) {
@@ -207,6 +214,7 @@ public class WorkerRunnable implements Runnable{
                 tInfo.serversOrdered().put(id, si);
             }
         } else {
+            // mesmo ID a voltar: atualiza dados
             si.setLastSeenMillis(System.currentTimeMillis());
             si.setVersion(version);
         }
@@ -217,9 +225,49 @@ public class WorkerRunnable implements Runnable{
             principal = iterator.hasNext() ? iterator.next() : null;
         }
         if (principal == null) return "404 NO_PRINCIPAL";
+
+        // devolve também a versão global se quiseres (opcional). Se não usas, podes remover "|DBV=..."
         return "200 PRINCIPAL " + principal.tcpEndpoint();
     }
 
+
+    // === auxiliar: versão global = max(versões dos servidores, versões vistas na pasta "data")
+    private int calcGlobalDbVersion() {
+        int maxFromServers = 0;
+        for (ServerInfo s : tInfo.servers().values()) {
+            if (s.getVersion() > maxFromServers) maxFromServers = s.getVersion();
+        }
+
+        int maxFromDisk = scanMaxVersionFromDataFolder();
+        int max = Math.max(maxFromServers, maxFromDisk);
+
+        // se nada encontrado, devolve -1 (sinaliza "primeira vez de todas")
+        return (max <= 0) ? -1 : max;
+    }
+
+    // procura ficheiros quiz-<NNN>.db e quiz-<NNN>.backup.db em ./data (ou diretoria configurada)
+    private int scanMaxVersionFromDataFolder() {
+        try {
+            java.nio.file.Path base = java.nio.file.Paths.get("data").toAbsolutePath();
+            if (!java.nio.file.Files.isDirectory(base)) return 0;
+
+            java.util.regex.Pattern p = java.util.regex.Pattern.compile("^quiz-(\\d+)\\.(?:backup\\.)?db$", java.util.regex.Pattern.CASE_INSENSITIVE);
+            int max = 0;
+            try (java.nio.file.DirectoryStream<java.nio.file.Path> ds = java.nio.file.Files.newDirectoryStream(base, "quiz-*")) {
+                for (var f : ds) {
+                    String name = f.getFileName().toString();
+                    var m = p.matcher(name);
+                    if (m.matches()) {
+                        int v = Integer.parseInt(m.group(1));
+                        if (v > max) max = v;
+                    }
+                }
+            }
+            return max;
+        } catch (Exception ignore) {
+            return 0;
+        }
+    }
     /**
      * Envia resposta UDP de volta ao remetente.
      *

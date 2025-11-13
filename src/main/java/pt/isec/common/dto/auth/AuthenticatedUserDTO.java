@@ -1,4 +1,10 @@
 package pt.isec.common.dto.auth;
 
-public record AuthenticatedUserDTO(Integer id, String name, String email,
-                                   String userType){}
+import java.io.Serializable;
+
+public record AuthenticatedUserDTO(
+        String id,
+        String name,
+        String email,
+        String userType
+) implements Serializable {}

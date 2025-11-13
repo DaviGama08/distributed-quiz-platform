@@ -1,57 +1,77 @@
 package pt.isec.common.model.user;
 
 import java.io.Serializable;
+import java.time.LocalDateTime;
 import java.util.Objects;
 
+/**
+ * Estudante.
+ * Identificado pelo studentNumber (único).
+ */
 public final class Student extends User implements Serializable {
     private static final long serialVersionUID = 1L;
-    private Integer studentNumber;
-    public Student(){}
-    public Student(Integer studentNumber, String name, String email, String passwordHash){
+
+    private long studentNumber; // Número de estudante único
+
+    public Student() {
+        super();
+    }
+
+    public Student(String name, String email, String passwordHash, long studentNumber) {
         super(name, email, passwordHash);
-        validate(studentNumber);
+        validateStudentNumber(studentNumber);
         this.studentNumber = studentNumber;
     }
 
-    //gets/sets
+    public Student(long id, String name, String email, String passwordHash,
+                   long studentNumber, LocalDateTime createdAt) {
+        super(id, name, email, passwordHash, createdAt);
+        validateStudentNumber(studentNumber);
+        this.studentNumber = studentNumber;
+    }
+
+    // getters/setters
+    public long getStudentNumber() { return studentNumber; }
+
     public void setStudentNumber(Integer studentNumber) {
-        if (studentNumber == null || studentNumber <= 0)
-            throw new IllegalArgumentException("studentNumber must be a positive integer");
+        validateStudentNumber(studentNumber);
         this.studentNumber = studentNumber;
     }
-    public Integer getStudentNumber() {return studentNumber;}
 
-    private static void validate(Integer studentNumber) {
-        if (studentNumber == null || studentNumber <= 0)
+    private static void validateStudentNumber(long studentNumber) {
+        if (studentNumber <= 0)
             throw new IllegalArgumentException("studentNumber must be a positive integer");
     }
 
-    //equals/hashcode
+    @Override
+    public String getUserType() {
+        return "student";
+    }
+
+    // equals/hashCode
     @Override
     public boolean equals(Object o){
-        if(o == this) return true;
-        if(o == null || o.getClass() != getClass()) return false;
-
-        Student s = (Student)o;
-
-        return Objects.equals(s.name, name) &&
-                Objects.equals(s.email, email) &&
-                Objects.equals(s.passwordHash, passwordHash) &&
-                Objects.equals(s.studentNumber, studentNumber);
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        if (!super.equals(o)) return false;
+        Student student = (Student) o;
+        return Objects.equals(studentNumber, student.studentNumber);
     }
 
     @Override
     public int hashCode(){
-        return Objects.hash(name, email, passwordHash, studentNumber);
+        return Objects.hash(super.hashCode(), studentNumber);
     }
 
-    //toString
     @Override
     public String toString() {
         return "Student{" +
-                "studentNumber=" + studentNumber +
+                "id=" + id +
                 ", name='" + name + '\'' +
                 ", email='" + email + '\'' +
+                ", studentNumber=" + studentNumber +
+                ", createdAt=" + createdAt +
                 '}';
     }
 }
+

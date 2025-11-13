@@ -1,68 +1,93 @@
+PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS config (
-    id               INTEGER PRIMARY KEY CHECK (id = 1),
-    db_version       INTEGER NOT NULL,
-    teacher_code_hash TEXT   NOT NULL
-);
+                                      id               INTEGER PRIMARY KEY CHECK (id = 1),
+    db_version       INTEGER NOT NULL DEFAULT 0,
+    teacher_code_hash TEXT NOT NULL,
+    created_at       TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+-- linha única inicial
+INSERT INTO config (id, db_version, teacher_code_hash)
+VALUES (1, 0, 'dummy-hash')
+    ON CONFLICT(id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS teacher (
-    id             INTEGER PRIMARY KEY,
-    name           TEXT    NOT NULL,
-    email          TEXT    NOT NULL UNIQUE,
-    password_hash  TEXT    NOT NULL,
-    created_at     TEXT    NOT NULL DEFAULT (datetime('now')),
-    updated_at     TEXT    NOT NULL DEFAULT (datetime('now'))
+                                       id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                                       name           TEXT NOT NULL,
+                                       email          TEXT NOT NULL UNIQUE,
+                                       password_hash  TEXT NOT NULL,
+                                       created_at     TEXT DEFAULT CURRENT_TIMESTAMP,
+                                       updated_at     TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS student (
-    student_number  INTEGER NOT NULL PRIMARY KEY,
-    name            TEXT    NOT NULL,
-    email           TEXT    NOT NULL UNIQUE,
-    password_hash   TEXT    NOT NULL,
-    created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
-    updated_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+                                       student_number INTEGER PRIMARY KEY,
+                                       name           TEXT NOT NULL,
+                                       email          TEXT NOT NULL UNIQUE,
+                                       password_hash  TEXT NOT NULL,
+                                       created_at     TEXT DEFAULT CURRENT_TIMESTAMP,
+                                       updated_at     TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS session (
+                                       id          TEXT PRIMARY KEY,  -- token (UUID)
+                                       user_id     TEXT NOT NULL,
+                                       role        TEXT NOT NULL CHECK (role IN ('TEACHER','STUDENT')),
+    name        TEXT NOT NULL,
+    email       TEXT NOT NULL,
+    created_at  TEXT DEFAULT CURRENT_TIMESTAMP,
+    expires_at  TEXT
+    );
 
 CREATE TABLE IF NOT EXISTS question (
-    id               INTEGER PRIMARY KEY,
-    teacher_id       INTEGER NOT NULL,
-    statement        TEXT    NOT NULL,
-    start_at         TEXT    NOT NULL,
-    end_at           TEXT    NOT NULL,
-    access_code      TEXT    NOT NULL UNIQUE,
-    correct_option_id INTEGER,
-    updated_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+                                        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                                        teacher_id     INTEGER NOT NULL REFERENCES teacher(id) ON DELETE CASCADE,
+    statement      TEXT NOT NULL,
+    access_code    TEXT NOT NULL UNIQUE,        -- código que o aluno usa para responder
+    correct_option CHAR(1) NOT NULL CHECK (correct_option BETWEEN 'A' AND 'Z'),
+    start_at       TEXT NOT NULL,               -- ISO-8601
+    end_at         TEXT NOT NULL,
+    created_at     TEXT DEFAULT CURRENT_TIMESTAMP,
+    CHECK (end_at > start_at)
+    );
 
-    FOREIGN KEY (teacher_id)        REFERENCES teacher(id)        ON DELETE CASCADE,
-    FOREIGN KEY (correct_option_id) REFERENCES question_option(id) ON DELETE SET NULL
-);
+CREATE TABLE IF NOT EXISTS option (
+                                      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                                      question_id  INTEGER NOT NULL REFERENCES question(id) ON DELETE CASCADE,
+    letter       CHAR(1) NOT NULL CHECK (letter BETWEEN 'A' AND 'Z'),
+    text         TEXT NOT NULL,
+    UNIQUE(question_id, letter)
+    );
+
+CREATE TABLE IF NOT EXISTS answer (
+                                      student_number INTEGER NOT NULL REFERENCES student(student_number) ON DELETE CASCADE,
+    question_id    INTEGER NOT NULL REFERENCES question(id) ON DELETE CASCADE,
+    chosen_option  CHAR(1) NOT NULL CHECK (chosen_option BETWEEN 'A' AND 'Z'),
+    created_at     TEXT DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (student_number, question_id)
+    );
 
 
-CREATE TABLE IF NOT EXISTS question_option (
-    id           INTEGER PRIMARY KEY,
-    question_id  INTEGER NOT NULL,
-    label        TEXT    NOT NULL,
-    text         TEXT    NOT NULL,
-    FOREIGN KEY (question_id) REFERENCES question(id) ON DELETE CASCADE,
-    UNIQUE (question_id, label)
-);
+CREATE TRIGGER IF NOT EXISTS trg_increase_version
+AFTER INSERT ON question
+BEGIN
+UPDATE config SET db_version = db_version + 1 WHERE id = 1;
+END;
 
+CREATE TRIGGER IF NOT EXISTS trg_increase_version_update
+AFTER UPDATE ON question
+BEGIN
+UPDATE config SET db_version = db_version + 1 WHERE id = 1;
+END;
 
-CREATE TABLE IF NOT EXISTS participation (
-    id                 INTEGER PRIMARY KEY,
-    student_id         INTEGER NOT NULL,
-    question_id        INTEGER NOT NULL,
-    selected_option_id INTEGER NOT NULL,
-    answer_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+CREATE TRIGGER IF NOT EXISTS trg_increase_version_delete
+AFTER DELETE ON question
+BEGIN
+UPDATE config SET db_version = db_version + 1 WHERE id = 1;
+END;
 
-    FOREIGN KEY (student_id)         REFERENCES student(id)         ON DELETE CASCADE,
-    FOREIGN KEY (question_id)        REFERENCES question(id)        ON DELETE CASCADE,
-    FOREIGN KEY (selected_option_id) REFERENCES question_option(id) ON DELETE CASCADE,
-    UNIQUE (student_id, question_id)
- );
-
-CREATE INDEX IF NOT EXISTS idx_question_teacher      ON question(teacher_id);
-CREATE INDEX IF NOT EXISTS idx_question_window       ON question(start_at, end_at);
-CREATE INDEX IF NOT EXISTS idx_participation_q       ON participation(question_id);
-CREATE INDEX IF NOT EXISTS idx_participation_student ON participation(student_id);
+CREATE INDEX IF NOT EXISTS idx_teacher_email    ON teacher(email);
+CREATE INDEX IF NOT EXISTS idx_student_email    ON student(email);
+CREATE INDEX IF NOT EXISTS idx_answer_student   ON answer(student_number);
+CREATE INDEX IF NOT EXISTS idx_question_teacher ON question(teacher_id);

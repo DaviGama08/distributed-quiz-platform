@@ -1,9 +1,10 @@
-package pt.isec.server.network.threads;
+// FILE: src/main/java/pt/isec/server/network/threads/db/DbCopyAcceptorRunnable.java
+package pt.isec.server.threads;
 
 import pt.isec.common.messages.Message;
 import pt.isec.common.messages.MessageType;
-import pt.isec.server.network.IServerNode;
-import pt.isec.server.network.NetworkConnection;
+import pt.isec.server.IServerNode;
+import pt.isec.server.NetworkConnection;
 
 import java.io.FileInputStream;
 import java.net.ServerSocket;
@@ -11,16 +12,14 @@ import java.net.Socket;
 import java.time.Duration;
 
 /**
- * TCP: aceita pedidos de cópia de BD.
- * Espera DB_COPY_REQUEST, responde ACK e envia o ficheiro .db em bytes brutos.
+ * TCP (lado servidor, PRIMÁRIO): aceita pedidos DB_REQUEST_COPY,
+ * responde ACK e envia o ficheiro .db em bytes brutos.
  */
 public class DbCopyAcceptorRunnable implements Runnable, AutoCloseable {
     private final IServerNode tInfo;
     private ServerSocket ss;
 
-    public DbCopyAcceptorRunnable(IServerNode tInfo) {
-        this.tInfo = tInfo;
-    }
+    public DbCopyAcceptorRunnable(IServerNode tInfo) { this.tInfo = tInfo; }
 
     @Override
     public void run() {
@@ -35,17 +34,21 @@ public class DbCopyAcceptorRunnable implements Runnable, AutoCloseable {
                     conn = new NetworkConnection(s);
                     conn.setReadTimeout(Duration.ofSeconds(5));
 
-                    Message<?> req = conn.receiveMessage();
-                    if (req == null || req.getType() != MessageType.DB_COPY_REQUEST) {
+                    var req = conn.receiveMessage();
+                    if (req == null || req.getType() != MessageType.DB_REQUEST_COPY) {
                         conn.sendMessage(new Message<>(MessageType.NACK, "bad request"));
+                        continue;
+                    }
+
+                    if (!tInfo.isPrimary()) {
+                        conn.sendMessage(new Message<>(MessageType.NACK, "not-primary", String.class));
                         continue;
                     }
 
                     conn.sendMessage(new Message<>(MessageType.ACK, "copy-start"));
 
-                    // Nota: quando houver BD real, aplicar write-lock durante a cópia
                     try (FileInputStream fis = new FileInputStream(tInfo.dbPath().toFile())) {
-                        conn.sendStream(fis);
+                        conn.sendStream(fis); // seu NetworkConnection já envia o stream
                     }
                 } catch (Exception e) {
                     System.err.println("[DBCOPY] erro sessão: " + e.getMessage());

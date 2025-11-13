@@ -1,65 +1,52 @@
 package pt.isec.common.model.user;
 
 import java.io.Serializable;
-import java.util.Objects;
+import java.time.LocalDateTime;
 
+/**
+ * Docente/Professor.
+ * Identificado por id gerado pela base de dados.
+ */
 public final class Teacher extends User implements Serializable {
     private static final long serialVersionUID = 1L;
 
-    private Integer id;
-
     public Teacher() {
+        super();
     }
 
-    public Teacher(Integer id, String name, String email, String passwordHash) {
+    public Teacher(String name, String email, String passwordHash) {
         super(name, email, passwordHash);
-        validate(id);
-        this.id = id;
     }
 
-    // gets/sets
-    public void setId(Integer id) {
-        if (id != null && id <= 0)
-            throw new IllegalArgumentException("id must be positive if provided");
-        this.id = id;
+    public Teacher(long id, String name, String email, String passwordHash, LocalDateTime createdAt) {
+        super(id, name, email, passwordHash, createdAt);
     }
 
-    public Integer getId() {
-        return id;
+    @Override
+    public String getUserType() {
+        return "teacher";
     }
 
-    private static void validate(Integer id) {
-        if (id != null && id <= 0)
-            throw new IllegalArgumentException("id must be positive if provided");
-    }
-
-    // equals/hashCode
     @Override
     public boolean equals(Object o) {
-        if (o == this) return true;
-        if (o == null || (o.getClass() != getClass())) return false;
-
-        Teacher t = (Teacher) o;
-
-        return Objects.equals(name, t.name) &&
-                Objects.equals(email, t.email) &&
-                Objects.equals(passwordHash, t.passwordHash) &&
-                Objects.equals(id, t.id);
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        return super.equals(o);
     }
 
-    //Gera um número inteiro que representa a combinação dos três atributos
     @Override
     public int hashCode() {
-        return Objects.hash(name, email, passwordHash, id);
+        return super.hashCode();
     }
 
-    //toString
     @Override
     public String toString() {
         return "Teacher{" +
                 "id=" + id +
                 ", name='" + name + '\'' +
                 ", email='" + email + '\'' +
+                ", createdAt=" + createdAt +
                 '}';
     }
 }
+

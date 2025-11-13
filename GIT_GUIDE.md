@@ -4,7 +4,7 @@
 
 ## Fluxo de Branches
 - **main** → código estável (release).
-- **dev** → integração de features.
+- **dev** → integração de features.~~~~
 - **feature/...** → cada funcionalidade é feita numa branch própria.
 
 ---

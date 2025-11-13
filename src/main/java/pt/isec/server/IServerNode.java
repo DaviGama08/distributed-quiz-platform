@@ -1,4 +1,4 @@
-package pt.isec.server.network;
+package pt.isec.server;
 
 import java.net.NetworkInterface;
 import java.nio.file.Path;

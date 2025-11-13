@@ -1,4 +1,4 @@
-package pt.isec.server.network;
+package pt.isec.server;
 
 import pt.isec.common.messages.Message;
 import java.io.*;
@@ -9,7 +9,7 @@ import java.time.Duration;
 /**
  * classe que gere a comunicação tcp (envio/receção de mensagens e streams)
  */
-public class NetworkConnection {
+public class NetworkConnection implements AutoCloseable {
     private static final int BUFFER_SIZE = 64 * 1024;
     private static final int MAX_INT_TIMEOUT = Integer.MAX_VALUE;
 

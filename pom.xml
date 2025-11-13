@@ -75,6 +75,9 @@
                 <version>3.11.0</version>
                 <configuration>
                     <release>23</release>
+                    <source>23</source>
+                    <target>23</target>
+                    <compilerArgs>--enable-preview</compilerArgs>
                 </configuration>
             </plugin>
 

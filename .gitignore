@@ -38,3 +38,8 @@ target/
 *.war
 *.ear
 hs_err_pid*
+
+### Database
+*.db
+*.db-wal
+*.db-shm

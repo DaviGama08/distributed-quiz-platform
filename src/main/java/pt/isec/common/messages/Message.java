@@ -1,5 +1,7 @@
 package pt.isec.common.messages;
 
+import pt.isec.common.dto.auth.LoginResponseDTO;
+
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
@@ -7,14 +9,21 @@ import java.util.Objects;
 public class Message<T extends Serializable> implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
-    private MessageType msgType;
-    private T data;
+    private MessageType msgType;      // Tipo da mensagem (REGISTER, LOGIN, etc.)
+    private T data;                   // Dados que viajam na mensagem
+    private Class<T> payloadType;     // Guarda o tipo real do objeto (ex: RegisterStudentDTO.class)
 
     public Message() {}
 
     public Message(MessageType msgType, T data) {
         this.msgType = msgType;
         this.data = data;
+    }
+
+    public Message(MessageType msgType, T data, Class<T> payloadType) {
+        this.msgType = msgType;
+        this.data = data;
+        this.payloadType = payloadType;
     }
 
     public MessageType getType() {
@@ -24,6 +33,26 @@ public class Message<T extends Serializable> implements Serializable {
     public void setMsgType(MessageType msgType) {
         this.msgType = msgType;
     }
+    /**
+     * O compilador apaga os tipos dos genéricos em Java, em Runtime, isso significa
+     * que quando formos tentar aceder ao tipo de objeto no serviço do servidor, não vamos saber
+     * o tipo da DTO.
+     *
+     * O que o metodo getDataAs faz:
+     *
+     * Recebe a classe esperada (ex: RegisterStudentDTO.class)
+     * e faz o cast automaticamente, validando se o tipo é compatível.
+     *
+     * Se o tipo for incorreto, lança ClassCastException — igual a um cast normal,
+     * mas de forma mais explícita e segura.
+     */
+    public <U> U getDataAs(Class<U> expected) {
+        return expected.cast(data);
+    }
+
+    public Class<T> getPayloadType(){ return payloadType;}
+
+    public void setPayloadType(Class<T> p){payloadType = p;}
 
     public T getData() {
         return data;

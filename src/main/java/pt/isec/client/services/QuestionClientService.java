@@ -33,7 +33,7 @@ public class QuestionClientService {
             LocalDateTime endAt) {
 
         CreateQuestionDTO dto = new CreateQuestionDTO(
-            statement, teacherId, options, correctOption, startAt, endAt
+                statement, teacherId, options, correctOption, startAt, endAt
         );
 
         Message<CreateQuestionDTO> message = new Message<>(MessageType.CREATE_QUESTION, dto);
@@ -43,7 +43,7 @@ public class QuestionClientService {
 
         try {
             Message<?> response = clientService.waitForResponse();
-            if(response.getType() == MessageType.ACK) {
+            if (response.getType() == MessageType.ACK) {
                 CreateQuestionResponseDTO result = response.getDataAs(CreateQuestionResponseDTO.class);
                 System.out.println("[QuestionClient] Question created with code: " + result.accessCode());
                 return result;
@@ -71,7 +71,7 @@ public class QuestionClientService {
             LocalDateTime endAt) {
 
         EditQuestionDTO dto = new EditQuestionDTO(
-            questionId, teacherId, statement, options, correctOption, startAt, endAt
+                questionId, teacherId, statement, options, correctOption, startAt, endAt
         );
 
         Message<EditQuestionDTO> message = new Message<>(MessageType.EDIT_QUESTION, dto);
@@ -81,7 +81,7 @@ public class QuestionClientService {
 
         try {
             Message<?> response = clientService.waitForResponse();
-            if(response.getType() == MessageType.ACK) {
+            if (response.getType() == MessageType.ACK) {
                 System.out.println("[QuestionClient] Question edited successfully");
                 return true;
             } else {
@@ -107,7 +107,7 @@ public class QuestionClientService {
 
         try {
             Message<?> response = clientService.waitForResponse();
-            if(response.getType() == MessageType.ACK) {
+            if (response.getType() == MessageType.ACK) {
                 System.out.println("[QuestionClient] Question deleted successfully");
                 return true;
             } else {
@@ -134,7 +134,7 @@ public class QuestionClientService {
 
         try {
             Message<?> response = clientService.waitForResponse();
-            if(response.getType() == MessageType.LIST_QUESTIONS_RESPONSE) {
+            if (response.getType() == MessageType.LIST_QUESTIONS_RESPONSE) {
                 @SuppressWarnings("unchecked")
                 List<Question> questions = (List<Question>) response.getData();
                 System.out.println("[QuestionClient] Received " + questions.size() + " questions");
@@ -162,7 +162,7 @@ public class QuestionClientService {
 
         try {
             Message<?> response = clientService.waitForResponse();
-            if(response.getType() == MessageType.QUESTION_DETAILS) {
+            if (response.getType() == MessageType.QUESTION_DETAILS) {
                 Question question = response.getDataAs(Question.class);
                 System.out.println("[QuestionClient] Question accessed: " + question.getStatement());
                 return question;
@@ -177,4 +177,3 @@ public class QuestionClientService {
         }
     }
 }
-

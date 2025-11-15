@@ -1,7 +1,6 @@
 package pt.isec.client.threads;
 
-import pt.isec.client.ClientService;
-import pt.isec.client.IClientService;
+import pt.isec.client.services.IClientService;
 import pt.isec.common.messages.Message;
 
 import java.io.IOException;

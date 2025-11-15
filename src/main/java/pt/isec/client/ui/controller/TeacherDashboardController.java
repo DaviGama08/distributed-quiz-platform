@@ -1,9 +1,8 @@
-package pt.isec.client.screen;
+package pt.isec.client.ui.controller;
 
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
@@ -11,228 +10,72 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import pt.isec.client.ClientApplication;
 import pt.isec.client.ClientManager;
+import pt.isec.client.services.ClientService;
+import pt.isec.client.ui.view.TeacherDashboardView;
 
 import java.io.File;
 
 /**
- * Dashboard principal para docentes
+ * Controller do dashboard do docente.
+ * Contém a lógica: notificações, diálogos, navegação, etc.
  */
-public class TeacherDashboard {
+public class TeacherDashboardController {
 
     private final Stage stage;
     private final ClientManager clientManager;
+    private final ClientApplication application;
     private final String userEmail;
-    private Scene scene;
 
-    // UI Components
-    private Label welcomeLabel;
-    private TextArea notificationArea;
-    private VBox mainContentArea;
+    private final TeacherDashboardView view;
 
-    public TeacherDashboard(Stage stage, ClientManager clientManager, String userEmail) {
+    public TeacherDashboardController(Stage stage, ClientManager clientManager,
+                                      ClientApplication application, String userEmail) {
         this.stage = stage;
         this.clientManager = clientManager;
+        this.application = application;
         this.userEmail = userEmail;
-        initializeUI();
+
+        this.view = new TeacherDashboardView(userEmail);
+        view.createView();
+        view.registerHandlers(this);
+
         setupPropertyChangeListeners();
     }
 
-    /**
-     * Configura listeners para notificações do servidor
-     */
+    // --------------------------------------------------------
+    // Mostrar dashboard
+    // --------------------------------------------------------
+
+    public void show() {
+        stage.setScene(view.getScene());
+    }
+
+    // --------------------------------------------------------
+    // Listeners de notificações do servidor
+    // --------------------------------------------------------
+
     private void setupPropertyChangeListeners() {
-        // Listener para notificações assíncronas
         clientManager.getService().addPropertyChangeListener(
-                pt.isec.client.ClientService.PROP_NOTIFICATION,
+                ClientService.PROP_NOTIFICATION,
                 evt -> {
                     String notification = (String) evt.getNewValue();
-                    if (notification != null) addNotification(notification);
+                    if (notification != null) {
+                        Platform.runLater(() -> {
+                            view.addNotification(notification);
+                            view.update();
+                        });
+                    }
                 }
         );
     }
 
-    private void initializeUI() {
-        BorderPane root = new BorderPane();
-        root.setStyle("-fx-background-color: #ecf0f1;");
+    // --------------------------------------------------------
+    // Handlers chamados pela View (registerHandlers)
+    // --------------------------------------------------------
 
-        // Top - Header
-        root.setTop(createHeader());
-
-        // Left - Menu lateral
-        root.setLeft(createSidebar());
-
-        // Center - Área principal
-        mainContentArea = new VBox(20);
-        mainContentArea.setPadding(new Insets(30));
-        showWelcomeView();
-
-        root.setCenter(mainContentArea);
-
-        scene = new Scene(root, 1100, 750);
-    }
-
-    /**
-     * Cria o cabeçalho
-     */
-    private VBox createHeader() {
-        VBox header = new VBox(10);
-        header.setPadding(new Insets(20));
-        header.setStyle("-fx-background-color: #8e44ad;");
-
-        welcomeLabel = new Label("Bem-vindo, Docente!");
-        welcomeLabel.setFont(Font.font("Arial", FontWeight.BOLD, 24));
-        welcomeLabel.setTextFill(Color.WHITE);
-
-        Label emailLabel = new Label(userEmail);
-        emailLabel.setFont(Font.font("Arial", 14));
-        emailLabel.setTextFill(Color.web("#ecf0f1"));
-
-        header.getChildren().addAll(welcomeLabel, emailLabel);
-        return header;
-    }
-
-    /**
-     * Cria o menu lateral
-     */
-    private VBox createSidebar() {
-        VBox sidebar = new VBox(10);
-        sidebar.setPadding(new Insets(20));
-        sidebar.setPrefWidth(220);
-        sidebar.setStyle("-fx-background-color: #2c3e50;");
-
-        Label menuLabel = new Label("MENU");
-        menuLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
-        menuLabel.setTextFill(Color.WHITE);
-
-        Button createQuestionBtn = createMenuButton("➕ Criar Pergunta", "#27ae60");
-        createQuestionBtn.setOnAction(e -> showCreateQuestionView());
-
-        Button listQuestionsBtn = createMenuButton("📋 Listar Perguntas", "#3498db");
-        listQuestionsBtn.setOnAction(e -> showListQuestionsView());
-
-        Button viewAnswersBtn = createMenuButton("📊 Ver Respostas", "#e67e22");
-        viewAnswersBtn.setOnAction(e -> showViewAnswersView());
-
-        Button exportBtn = createMenuButton("💾 Exportar CSV", "#16a085");
-        exportBtn.setOnAction(e -> showExportView());
-
-        Button deleteBtn = createMenuButton("🗑️ Eliminar Pergunta", "#c0392b");
-        deleteBtn.setOnAction(e -> showDeleteQuestionView());
-
-        Button logoutBtn = createMenuButton("🚪 Logout", "#e74c3c");
-        logoutBtn.setOnAction(e -> handleLogout());
-
-        // Separador
-        Region spacer = new Region();
-        VBox.setVgrow(spacer, Priority.ALWAYS);
-
-        sidebar.getChildren().addAll(
-                menuLabel,
-                new Separator(),
-                createQuestionBtn,
-                listQuestionsBtn,
-                viewAnswersBtn,
-                exportBtn,
-                deleteBtn,
-                spacer,
-                logoutBtn
-        );
-
-        return sidebar;
-    }
-
-    /**
-     * Cria botão do menu
-     */
-    private Button createMenuButton(String text, String color) {
-        Button btn = new Button(text);
-        btn.setPrefWidth(200);
-        btn.setPrefHeight(45);
-        btn.setAlignment(Pos.CENTER_LEFT);
-        btn.setStyle(
-                "-fx-background-color: " + color + ";" +
-                        "-fx-text-fill: white;" +
-                        "-fx-font-size: 14px;" +
-                        "-fx-font-weight: bold;" +
-                        "-fx-border-radius: 5;" +
-                        "-fx-background-radius: 5;"
-        );
-
-        // Efeito hover
-        btn.setOnMouseEntered(e -> btn.setOpacity(0.8));
-        btn.setOnMouseExited(e -> btn.setOpacity(1.0));
-
-        return btn;
-    }
-
-    /**
-     * Mostra a view de boas-vindas
-     */
-    private void showWelcomeView() {
-        mainContentArea.getChildren().clear();
-
-        Label titleLabel = new Label("🎓 Painel do Docente");
-        titleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 28));
-
-        // Área de notificações
-        Label notifLabel = new Label("🔔 Notificações");
-        notifLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
-
-        notificationArea = new TextArea();
-        notificationArea.setEditable(false);
-        notificationArea.setPrefHeight(150);
-        notificationArea.setPromptText("Sem notificações");
-        notificationArea.setWrapText(true);
-
-        // Cards de informação
-        HBox cards = new HBox(20);
-        cards.getChildren().addAll(
-                createInfoCard("Total de Perguntas", "0", "#3498db"),
-                createInfoCard("Perguntas Ativas", "0", "#27ae60"),
-                createInfoCard("Respostas Recebidas", "0", "#e67e22")
-        );
-
-        mainContentArea.getChildren().addAll(
-                titleLabel,
-                new Separator(),
-                notifLabel,
-                notificationArea,
-                new Label(),
-                cards
-        );
-    }
-
-    /**
-     * Cria card de informação
-     */
-    private VBox createInfoCard(String title, String value, String color) {
-        VBox card = new VBox(10);
-        card.setPadding(new Insets(20));
-        card.setAlignment(Pos.CENTER);
-        card.setPrefWidth(200);
-        card.setStyle(
-                "-fx-background-color: " + color + ";" +
-                        "-fx-border-radius: 10;" +
-                        "-fx-background-radius: 10;"
-        );
-
-        Label valueLabel = new Label(value);
-        valueLabel.setFont(Font.font("Arial", FontWeight.BOLD, 36));
-        valueLabel.setTextFill(Color.WHITE);
-
-        Label titleLabel = new Label(title);
-        titleLabel.setFont(Font.font("Arial", 14));
-        titleLabel.setTextFill(Color.WHITE);
-
-        card.getChildren().addAll(valueLabel, titleLabel);
-        return card;
-    }
-
-    /**
-     * Mostra a view de criar pergunta
-     */
-    private void showCreateQuestionView() {
+    public void onCreateQuestion() {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle("Criar Nova Pergunta");
         dialog.setHeaderText("Preencha os dados da pergunta");
@@ -333,10 +176,7 @@ public class TeacherDashboard {
         });
     }
 
-    /**
-     * Mostra a view de listar perguntas
-     */
-    private void showListQuestionsView() {
+    public void onListQuestions() {
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Listar Perguntas");
         dialog.setHeaderText("Suas perguntas criadas");
@@ -395,10 +235,7 @@ public class TeacherDashboard {
         dialog.showAndWait();
     }
 
-    /**
-     * Mostra a view de ver respostas
-     */
-    private void showViewAnswersView() {
+    public void onViewAnswers() {
         TextInputDialog dialog = new TextInputDialog();
         dialog.setTitle("Ver Respostas");
         dialog.setHeaderText("Ver respostas de uma pergunta");
@@ -411,9 +248,6 @@ public class TeacherDashboard {
         });
     }
 
-    /**
-     * Mostra detalhes das respostas
-     */
     private void showAnswersDetails(String code) {
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Respostas - " + code);
@@ -500,10 +334,7 @@ public class TeacherDashboard {
         dialog.showAndWait();
     }
 
-    /**
-     * Mostra a view de exportar
-     */
-    private void showExportView() {
+    public void onExport() {
         TextInputDialog dialog = new TextInputDialog();
         dialog.setTitle("Exportar Resultados");
         dialog.setHeaderText("Exportar resultados para CSV");
@@ -529,10 +360,7 @@ public class TeacherDashboard {
         });
     }
 
-    /**
-     * Mostra a view de eliminar pergunta
-     */
-    private void showDeleteQuestionView() {
+    public void onDeleteQuestion() {
         TextInputDialog dialog = new TextInputDialog();
         dialog.setTitle("Eliminar Pergunta");
         dialog.setHeaderText("⚠️ Atenção: Esta ação é irreversível!");
@@ -556,10 +384,7 @@ public class TeacherDashboard {
         });
     }
 
-    /**
-     * Trata o logout
-     */
-    private void handleLogout() {
+    public void onLogout() {
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle("Confirmar Logout");
         alert.setHeaderText("Deseja realmente sair?");
@@ -568,29 +393,17 @@ public class TeacherDashboard {
         alert.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
                 // TODO: Fazer logout no servidor
-                AuthenticationScreen authScreen = new AuthenticationScreen(stage, clientManager, null);
-                authScreen.show();
+                AuthenticationController authController =
+                        new AuthenticationController(stage, clientManager, application);
+                authController.show();
             }
         });
     }
 
-    /**
-     * Adiciona notificação
-     */
-    public void addNotification(String message) {
-        Platform.runLater(() -> {
-            if (notificationArea != null) {
-                String timestamp = java.time.LocalTime.now().format(
-                        java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss")
-                );
-                notificationArea.appendText("[" + timestamp + "] " + message + "\n");
-            }
-        });
-    }
+    // --------------------------------------------------------
+    // Helpers
+    // --------------------------------------------------------
 
-    /**
-     * Mostra alerta de sucesso
-     */
     private void showSuccessAlert(String title, String message) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
         alert.setTitle(title);
@@ -599,18 +412,11 @@ public class TeacherDashboard {
         alert.showAndWait();
     }
 
-    /**
-     * Mostra alerta de erro
-     */
     private void showErrorAlert(String title, String message) {
         Alert alert = new Alert(Alert.AlertType.ERROR);
         alert.setTitle(title);
         alert.setHeaderText(null);
         alert.setContentText(message);
         alert.showAndWait();
-    }
-
-    public void show() {
-        stage.setScene(scene);
     }
 }

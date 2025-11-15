@@ -1,12 +1,11 @@
 package pt.isec.client.services;
 
-import pt.isec.client.ClientService;
 import pt.isec.common.dto.question.*;
 import pt.isec.common.messages.Message;
 import pt.isec.common.messages.MessageType;
-import pt.isec.common.model.common.OptionLetter;
-import pt.isec.common.model.question.Option;
-import pt.isec.common.model.question.Question;
+import pt.isec.server.model.common.OptionLetter;
+import pt.isec.server.model.question.Option;
+import pt.isec.server.model.question.Question;
 
 import java.time.LocalDateTime;
 import java.util.List;

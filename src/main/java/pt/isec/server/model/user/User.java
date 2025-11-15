@@ -1,4 +1,4 @@
-package pt.isec.common.model.user;
+package pt.isec.server.model.user;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;

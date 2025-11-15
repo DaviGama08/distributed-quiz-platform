@@ -1,4 +1,4 @@
-package pt.isec.common.model.common;
+package pt.isec.server.model.common;
 
 import java.time.LocalDateTime;
 

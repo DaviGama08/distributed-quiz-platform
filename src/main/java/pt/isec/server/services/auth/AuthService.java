@@ -1,8 +1,8 @@
 package pt.isec.server.services.auth;
 
 import pt.isec.common.dto.auth.*;
-import pt.isec.common.model.user.Student;
-import pt.isec.common.model.user.Teacher;
+import pt.isec.server.model.user.Student;
+import pt.isec.server.model.user.Teacher;
 import pt.isec.server.db.dao.StudentDAO;
 import pt.isec.server.db.dao.TeacherDAO;
 import pt.isec.server.services.session.SessionServices;

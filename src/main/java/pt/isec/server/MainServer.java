@@ -1,5 +1,4 @@
 package pt.isec.server;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -40,7 +39,11 @@ public class MainServer {
         System.out.println("[DB] dir : " + dataDir);
         System.out.println("[DB] file: " + dbFile + " (exists=" + Files.exists(dbFile) + ")");
 
-        var node = new ServerNode(dirHost, dirPort, mcIfIp, clientPort, dbCopyPort, dbFile);
-        node.start();
+        //Sempre que uma classe for autocloseable temos que coloca-la dentro do try.
+        try( var node = new ServerNode(dirHost, dirPort, mcIfIp, clientPort, dbCopyPort, dbFile)){
+            node.start();
+        }catch (Exception e){
+            System.out.println(e.getMessage());
+        }
     }
 }

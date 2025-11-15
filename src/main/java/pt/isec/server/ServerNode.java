@@ -1,10 +1,8 @@
 package pt.isec.server;
-
 import pt.isec.server.threads.client.TcpClientAcceptorRunnable;
 import pt.isec.server.threads.DirectoryHeartbeatRunnable;
 import pt.isec.server.threads.MulticastRunnable;
 import pt.isec.server.threads.DbCopyAcceptorRunnable;
-
 import java.net.*;
 import java.nio.file.Path;
 import java.nio.file.Paths;

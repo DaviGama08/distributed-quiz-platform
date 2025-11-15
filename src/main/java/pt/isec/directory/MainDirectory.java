@@ -5,9 +5,9 @@ import pt.isec.directory.service.DirectoryService;
 public class MainDirectory {
     /*
       Uso:
-        java pt.isec.directory.MainDirectory
-        java pt.isec.directory.MainDirectory <udpPort>
-        java pt.isec.directory.MainDirectory <udpPort> <queueCapacity> <maxPacketSize> <ttlMillis>
+        MainDirectory
+        MainDirectory <udpPort>
+        MainDirectory <udpPort> <queueCapacity> <maxPacketSize> <ttlMillis>
 
       Defaults:
         udpPort=9999 | queue=1024 | maxPacket=65535 | ttl=17000
@@ -38,9 +38,9 @@ public class MainDirectory {
                 default -> {
                     System.out.println("""
                         Uso:
-                          java pt.isec.directory.MainDirectory
-                          java pt.isec.directory.MainDirectory <udpPort>
-                          java pt.isec.directory.MainDirectory <udpPort> <queueCapacity> <maxPacketSize> <ttlMillis>
+                          java MainDirectory
+                          java MainDirectory <udpPort>
+                          java MainDirectory <udpPort> <queueCapacity> <maxPacketSize> <ttlMillis>
                         """.trim());
                     System.out.println("(Argumentos inválidos: a iniciar com valores por defeito)");
                 }

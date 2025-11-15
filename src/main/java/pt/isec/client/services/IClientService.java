@@ -1,4 +1,4 @@
-package pt.isec.client;
+package pt.isec.client.services;
 
 import pt.isec.common.messages.Message;
 

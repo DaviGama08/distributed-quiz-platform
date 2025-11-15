@@ -1,7 +1,7 @@
 package pt.isec.common.dto.question;
 
-import pt.isec.common.model.common.OptionLetter;
-import pt.isec.common.model.question.Option;
+import pt.isec.server.model.common.OptionLetter;
+import pt.isec.server.model.question.Option;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;

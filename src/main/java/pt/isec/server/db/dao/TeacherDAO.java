@@ -1,6 +1,6 @@
 package pt.isec.server.db.dao;
 
-import pt.isec.common.model.user.Teacher;
+import pt.isec.server.model.user.Teacher;
 import pt.isec.server.db.Db;
 
 import java.sql.SQLException;

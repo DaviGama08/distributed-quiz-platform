@@ -3,6 +3,7 @@ package pt.isec.client;
 import pt.isec.client.services.AnswerClientService;
 import pt.isec.client.services.AuthClientService;
 import pt.isec.client.services.QuestionClientService;
+import pt.isec.client.services.ClientService;
 
 public class ClientManager {
     private final int port;

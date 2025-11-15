@@ -1,7 +1,6 @@
-package pt.isec.client.screen;
+package pt.isec.client.services;
 
 import pt.isec.client.ClientManager;
-import pt.isec.client.IClientService;
 import pt.isec.client.threads.ClientListenerRunnable;
 import pt.isec.client.threads.RequestSenderRunnable;
 import pt.isec.client.threads.ResponseHandlerRunnable;
@@ -50,7 +49,7 @@ public class ClientService implements IClientService {
     private ObjectInputStream  in;
 
     /* === FILAS PARA REQUESTS / RESPONSES === */
-    private final BlockingQueue<Message<? extends Serializable>> requestQueue = new LinkedBlockingQueue<>();
+    private final BlockingQueue<Message<? extends Serializable>> requestQueue  = new LinkedBlockingQueue<>();
     private final BlockingQueue<Message<? extends Serializable>> responseQueue = new LinkedBlockingQueue<>();
 
     private volatile boolean running = false;
@@ -121,8 +120,8 @@ public class ClientService implements IClientService {
         try {
             requestQueue.put(message);
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
             System.err.println("[ClientService] Failed to queue message: " + e.getMessage());
+            Thread.currentThread().interrupt();
         }
     }
 

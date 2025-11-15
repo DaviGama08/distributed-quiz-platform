@@ -1,4 +1,4 @@
-package pt.isec.common.model.config;
+package pt.isec.server.model.config;
 
 import java.io.Serializable;
 import java.util.Objects;

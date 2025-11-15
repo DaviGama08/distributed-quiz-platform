@@ -1,6 +1,5 @@
 package pt.isec.client.services;
 
-import pt.isec.client.ClientService;
 import pt.isec.common.dto.auth.*;
 import pt.isec.common.messages.Message;
 import pt.isec.common.messages.MessageType;

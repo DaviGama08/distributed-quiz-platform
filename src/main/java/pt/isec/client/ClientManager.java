@@ -23,25 +23,16 @@ public class ClientManager {
         this.answerService = new AnswerClientService(service);
     }
 
-    public boolean start(){
-        /*ThreadFactory factory = r ->{
-            Thread t = new Thread(r);
-            t.setName("ClientService");
-            t.setDaemon(true);
-            return t;
-        };
-        try(ExecutorService executor = Executors.newSingleThreadExecutor(factory)){
-           executor.submit(service::run);
-        }catch (Exception e){
-            System.out.println(e.getMessage());
-        }*/
+    /**
+     * Arranca discovery + conexão TCP + threads de forma síncrona.
+     * IMPORTANTE: chamar isto numa thread em background (nunca na JavaFX).
+     */
+    public void start(){
         service.run();
-        return service.isRunning();
     }
 
     public void stop(){ service.stop(); }
 
-    // Serviços
     public AuthClientService getAuthService() { return authService; }
     public QuestionClientService getQuestionService() { return questionService; }
     public AnswerClientService getAnswerService() { return answerService; }

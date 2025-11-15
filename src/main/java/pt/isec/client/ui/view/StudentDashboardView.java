@@ -42,7 +42,7 @@ public class StudentDashboardView {
      */
     public void createView() {
         BorderPane root = new BorderPane();
-        root.setStyle("-fx-background-color: #ecf0f1;");
+        root.getStyleClass().add("student-root");
 
         // Top - Header
         root.setTop(createHeader());
@@ -54,6 +54,14 @@ public class StudentDashboardView {
         root.setCenter(createMainArea());
 
         scene = new Scene(root, 1000, 700);
+
+        // carregar CSS
+        try {
+            var cssUrl = getClass().getResource("/styles/dashboard.css");
+            if (cssUrl != null) {
+                scene.getStylesheets().add(cssUrl.toExternalForm());
+            }
+        } catch (Exception ignored) {}
     }
 
     /**
@@ -78,16 +86,15 @@ public class StudentDashboardView {
 
     private VBox createHeader() {
         VBox header = new VBox(10);
-        header.setPadding(new Insets(20));
-        header.setStyle("-fx-background-color: #34495e;");
+        header.getStyleClass().add("header-student");
 
         welcomeLabel = new Label("Bem-vindo, Estudante!");
         welcomeLabel.setFont(Font.font("Arial", FontWeight.BOLD, 24));
         welcomeLabel.setTextFill(Color.WHITE);
+        welcomeLabel.getStyleClass().add("header-title");
 
         Label emailLabel = new Label(userEmail);
-        emailLabel.setFont(Font.font("Arial", 14));
-        emailLabel.setTextFill(Color.web("#bdc3c7"));
+        emailLabel.getStyleClass().add("header-email");
 
         header.getChildren().addAll(welcomeLabel, emailLabel);
         return header;
@@ -95,17 +102,14 @@ public class StudentDashboardView {
 
     private VBox createSidebar() {
         VBox sidebar = new VBox(10);
-        sidebar.setPadding(new Insets(20));
-        sidebar.setPrefWidth(200);
-        sidebar.setStyle("-fx-background-color: #2c3e50;");
+        sidebar.getStyleClass().addAll("sidebar", "sidebar-student");
 
         Label menuLabel = new Label("MENU");
-        menuLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
-        menuLabel.setTextFill(Color.WHITE);
+        menuLabel.getStyleClass().add("sidebar-title");
 
-        answerQuestionBtn = createMenuButton(" Responder Pergunta", "#3498db");
-        historyBtn = createMenuButton(" Histórico", "#9b59b6");
-        logoutBtn = createMenuButton(" Logout", "#e74c3c");
+        answerQuestionBtn = createMenuButton(" Responder Pergunta", "btn-blue");
+        historyBtn = createMenuButton(" Histórico", "btn-purple");
+        logoutBtn = createMenuButton(" Logout", "btn-red");
 
         // Separador
         Region spacer = new Region();
@@ -125,7 +129,7 @@ public class StudentDashboardView {
 
     private VBox createMainArea() {
         VBox mainArea = new VBox(20);
-        mainArea.setPadding(new Insets(30));
+        mainArea.getStyleClass().add("student-main");
 
         // Área de notificações
         Label notifLabel = new Label(" Notificações");
@@ -142,13 +146,7 @@ public class StudentDashboardView {
         instructionsLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
 
         VBox instructions = new VBox(10);
-        instructions.setPadding(new Insets(15));
-        instructions.setStyle(
-                "-fx-background-color: white;" +
-                        "-fx-border-color: #bdc3c7;" +
-                        "-fx-border-radius: 5;" +
-                        "-fx-background-radius: 5;"
-        );
+        instructions.getStyleClass().add("instructions-box");
 
         Label inst1 = new Label("1️⃣  Obtenha o código da pergunta com o seu docente");
         Label inst2 = new Label("2️⃣  Clique em 'Responder Pergunta' no menu lateral");
@@ -172,24 +170,9 @@ public class StudentDashboardView {
         return mainArea;
     }
 
-    private Button createMenuButton(String text, String color) {
+    private Button createMenuButton(String text, String colorClass) {
         Button btn = new Button(text);
-        btn.setPrefWidth(180);
-        btn.setPrefHeight(40);
-        btn.setAlignment(Pos.CENTER_LEFT);
-        btn.setStyle(
-                "-fx-background-color: " + color + ";" +
-                        "-fx-text-fill: white;" +
-                        "-fx-font-size: 14px;" +
-                        "-fx-font-weight: bold;" +
-                        "-fx-border-radius: 5;" +
-                        "-fx-background-radius: 5;"
-        );
-
-        // Efeito hover
-        btn.setOnMouseEntered(e -> btn.setStyle(btn.getStyle() + "-fx-opacity: 0.8;"));
-        btn.setOnMouseExited(e -> btn.setStyle(btn.getStyle() + "-fx-opacity: 1.0;"));
-
+        btn.getStyleClass().addAll("sidebar-button", colorClass);
         return btn;
     }
 

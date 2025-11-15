@@ -43,7 +43,7 @@ public class TeacherDashboardView {
 
     public void createView() {
         BorderPane root = new BorderPane();
-        root.setStyle("-fx-background-color: #ecf0f1;");
+        root.getStyleClass().add("teacher-root");
 
         // Top - Header
         root.setTop(createHeader());
@@ -53,12 +53,20 @@ public class TeacherDashboardView {
 
         // Center - Área principal
         mainContentArea = new VBox(20);
-        mainContentArea.setPadding(new Insets(30));
+        mainContentArea.getStyleClass().add("teacher-main");
         showWelcomeView();
 
         root.setCenter(mainContentArea);
 
         scene = new Scene(root, 1100, 750);
+
+        // carregar CSS
+        try {
+            var cssUrl = getClass().getResource("/styles/dashboard.css");
+            if (cssUrl != null) {
+                scene.getStylesheets().add(cssUrl.toExternalForm());
+            }
+        } catch (Exception ignored) {}
     }
 
     public void registerHandlers(TeacherDashboardController controller) {
@@ -80,16 +88,15 @@ public class TeacherDashboardView {
 
     private VBox createHeader() {
         VBox header = new VBox(10);
-        header.setPadding(new Insets(20));
-        header.setStyle("-fx-background-color: #8e44ad;");
+        header.getStyleClass().add("header-teacher");
 
         welcomeLabel = new Label("Bem-vindo, Docente!");
         welcomeLabel.setFont(Font.font("Arial", FontWeight.BOLD, 24));
         welcomeLabel.setTextFill(Color.WHITE);
+        welcomeLabel.getStyleClass().add("header-title");
 
         Label emailLabel = new Label(userEmail);
-        emailLabel.setFont(Font.font("Arial", 14));
-        emailLabel.setTextFill(Color.web("#ecf0f1"));
+        emailLabel.getStyleClass().add("header-email-teacher");
 
         header.getChildren().addAll(welcomeLabel, emailLabel);
         return header;
@@ -97,20 +104,17 @@ public class TeacherDashboardView {
 
     private VBox createSidebar() {
         VBox sidebar = new VBox(10);
-        sidebar.setPadding(new Insets(20));
-        sidebar.setPrefWidth(220);
-        sidebar.setStyle("-fx-background-color: #2c3e50;");
+        sidebar.getStyleClass().addAll("sidebar", "sidebar-teacher");
 
         Label menuLabel = new Label("MENU");
-        menuLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
-        menuLabel.setTextFill(Color.WHITE);
+        menuLabel.getStyleClass().add("sidebar-title");
 
-        createQuestionBtn = createMenuButton("➕ Criar Pergunta", "#27ae60");
-        listQuestionsBtn = createMenuButton("📋 Listar Perguntas", "#3498db");
-        viewAnswersBtn = createMenuButton("📊 Ver Respostas", "#e67e22");
-        exportBtn = createMenuButton("💾 Exportar CSV", "#16a085");
-        deleteBtn = createMenuButton("🗑️ Eliminar Pergunta", "#c0392b");
-        logoutBtn = createMenuButton("🚪 Logout", "#e74c3c");
+        createQuestionBtn = createMenuButton("➕ Criar Pergunta", "btn-green");
+        listQuestionsBtn = createMenuButton("📋 Listar Perguntas", "btn-blue");
+        viewAnswersBtn = createMenuButton("📊 Ver Respostas", "btn-orange");
+        exportBtn = createMenuButton("💾 Exportar CSV", "btn-teal");
+        deleteBtn = createMenuButton("🗑️ Eliminar Pergunta", "btn-red-dark");
+        logoutBtn = createMenuButton("🚪 Logout", "btn-red");
 
         // Separador
         Region spacer = new Region();
@@ -131,24 +135,9 @@ public class TeacherDashboardView {
         return sidebar;
     }
 
-    private Button createMenuButton(String text, String color) {
+    private Button createMenuButton(String text, String colorClass) {
         Button btn = new Button(text);
-        btn.setPrefWidth(200);
-        btn.setPrefHeight(45);
-        btn.setAlignment(Pos.CENTER_LEFT);
-        btn.setStyle(
-                "-fx-background-color: " + color + ";" +
-                        "-fx-text-fill: white;" +
-                        "-fx-font-size: 14px;" +
-                        "-fx-font-weight: bold;" +
-                        "-fx-border-radius: 5;" +
-                        "-fx-background-radius: 5;"
-        );
-
-        // Efeito hover
-        btn.setOnMouseEntered(e -> btn.setOpacity(0.8));
-        btn.setOnMouseExited(e -> btn.setOpacity(1.0));
-
+        btn.getStyleClass().addAll("sidebar-button", "sidebar-button-teacher", colorClass);
         return btn;
     }
 
@@ -173,10 +162,11 @@ public class TeacherDashboardView {
 
         // Cards de informação
         HBox cards = new HBox(20);
+        cards.getStyleClass().add("info-cards-box");
         cards.getChildren().addAll(
-                createInfoCard("Total de Perguntas", "0", "#3498db"),
-                createInfoCard("Perguntas Ativas", "0", "#27ae60"),
-                createInfoCard("Respostas Recebidas", "0", "#e67e22")
+                createInfoCard("Total de Perguntas", "0", "card-blue"),
+                createInfoCard("Perguntas Ativas", "0", "card-green"),
+                createInfoCard("Respostas Recebidas", "0", "card-orange")
         );
 
         mainContentArea.getChildren().addAll(
@@ -189,24 +179,15 @@ public class TeacherDashboardView {
         );
     }
 
-    private VBox createInfoCard(String title, String value, String color) {
+    private VBox createInfoCard(String title, String value, String colorClass) {
         VBox card = new VBox(10);
-        card.setPadding(new Insets(20));
-        card.setAlignment(Pos.CENTER);
-        card.setPrefWidth(200);
-        card.setStyle(
-                "-fx-background-color: " + color + ";" +
-                        "-fx-border-radius: 10;" +
-                        "-fx-background-radius: 10;"
-        );
+        card.getStyleClass().addAll("info-card", colorClass);
 
         Label valueLabel = new Label(value);
-        valueLabel.setFont(Font.font("Arial", FontWeight.BOLD, 36));
-        valueLabel.setTextFill(Color.WHITE);
+        valueLabel.getStyleClass().add("info-card-value");
 
         Label titleLabel = new Label(title);
-        titleLabel.setFont(Font.font("Arial", 14));
-        titleLabel.setTextFill(Color.WHITE);
+        titleLabel.getStyleClass().add("info-card-title");
 
         card.getChildren().addAll(valueLabel, titleLabel);
         return card;

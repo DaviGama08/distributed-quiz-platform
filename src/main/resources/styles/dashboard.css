@@ -1,0 +1,183 @@
+/* =========================
+   DASHBOARD – estilos comuns
+   ========================= */
+
+.student-root,
+.teacher-root {
+    -fx-background-color: #ecf0f1;
+}
+
+/* ----- Headers ----- */
+
+.header-student {
+    -fx-background-color: #34495e;
+    -fx-padding: 20;
+}
+
+.header-teacher {
+    -fx-background-color: #8e44ad;
+    -fx-padding: 20;
+}
+
+.header-title {
+    -fx-text-fill: #ffffff;
+    -fx-font-family: "Arial";
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+}
+
+.header-email {
+    -fx-text-fill: #bdc3c7;   /* estudante */
+    -fx-font-family: "Arial";
+    -fx-font-size: 14px;
+}
+
+.header-email-teacher {
+    -fx-text-fill: #ecf0f1;   /* docente */
+    -fx-font-family: "Arial";
+    -fx-font-size: 14px;
+}
+
+/* ----- Sidebar comum ----- */
+
+.sidebar {
+    -fx-background-color: #2c3e50;
+    -fx-padding: 20;
+}
+
+.sidebar-student {
+    -fx-pref-width: 200;
+}
+
+.sidebar-teacher {
+    -fx-pref-width: 220;
+}
+
+.sidebar-title {
+    -fx-text-fill: #ffffff;
+    -fx-font-family: "Arial";
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+}
+
+/* Botões do menu lateral */
+
+.sidebar-button {
+    -fx-pref-height: 40;
+    -fx-pref-width: 180;
+    -fx-alignment: center-left;
+    -fx-text-fill: #ffffff;
+    -fx-font-family: "Arial";
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-border-radius: 5;
+    -fx-background-radius: 5;
+    -fx-cursor: hand;
+}
+
+/* Largura ligeiramente maior no painel do docente */
+.sidebar-button-teacher {
+    -fx-pref-width: 200;
+}
+
+/* Cores específicas */
+
+.btn-blue {
+    -fx-background-color: #3498db;
+}
+
+.btn-purple {
+    -fx-background-color: #9b59b6;
+}
+
+.btn-red {
+    -fx-background-color: #e74c3c;
+}
+
+.btn-green {
+    -fx-background-color: #27ae60;
+}
+
+.btn-orange {
+    -fx-background-color: #e67e22;
+}
+
+.btn-teal {
+    -fx-background-color: #16a085;
+}
+
+.btn-red-dark {
+    -fx-background-color: #c0392b;
+}
+
+/* Hover genérico para botões da sidebar */
+.sidebar-button:hover {
+    -fx-opacity: 0.8;
+}
+
+.sidebar-button:pressed {
+    -fx-opacity: 0.7;
+}
+
+/* ----- Área principal do estudante ----- */
+
+.student-main {
+    -fx-padding: 30;
+    -fx-spacing: 20;
+}
+
+/* Caixa de instruções (lado do estudante) */
+
+.instructions-box {
+    -fx-background-color: white;
+    -fx-border-color: #bdc3c7;
+    -fx-border-radius: 5;
+    -fx-background-radius: 5;
+    -fx-padding: 15;
+}
+
+/* ----- Área principal do docente ----- */
+
+.teacher-main {
+    -fx-padding: 30;
+    -fx-spacing: 20;
+}
+
+/* Cards de informação do docente */
+
+.info-cards-box {
+    -fx-spacing: 20;
+}
+
+.info-card {
+    -fx-padding: 20;
+    -fx-alignment: center;
+    -fx-pref-width: 200;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+}
+
+.card-blue {
+    -fx-background-color: #3498db;
+}
+
+.card-green {
+    -fx-background-color: #27ae60;
+}
+
+.card-orange {
+    -fx-background-color: #e67e22;
+}
+
+.info-card-value {
+    -fx-text-fill: #ffffff;
+    -fx-font-family: "Arial";
+    -fx-font-size: 36px;
+    -fx-font-weight: bold;
+}
+
+.info-card-title {
+    -fx-text-fill: #ffffff;
+    -fx-font-family: "Arial";
+    -fx-font-size: 14px;
+}

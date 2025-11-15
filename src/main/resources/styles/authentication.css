@@ -1,10 +1,12 @@
-/* Estilos globais */
+/* =========================
+   Estilos globais
+   ========================= */
 .root {
     -fx-font-family: "Arial";
     -fx-font-size: 14px;
 }
 
-/* Botões */
+/* Botões genéricos */
 .button {
     -fx-cursor: hand;
     -fx-padding: 10px 20px;
@@ -21,14 +23,18 @@
 }
 
 /* Text Fields */
-.text-field, .password-field, .text-area {
+.text-field,
+.password-field,
+.text-area {
     -fx-border-color: #bdc3c7;
     -fx-border-radius: 5px;
     -fx-background-radius: 5px;
     -fx-padding: 8px;
 }
 
-.text-field:focused, .password-field:focused, .text-area:focused {
+.text-field:focused,
+.password-field:focused,
+.text-area:focused {
     -fx-border-color: #3498db;
     -fx-border-width: 2px;
 }
@@ -38,7 +44,7 @@
     -fx-text-fill: #2c3e50;
 }
 
-/* TabPane */
+/* TabPane (se usado noutros ecrãs) */
 .tab-pane {
     -fx-background-color: white;
     -fx-border-radius: 5px;
@@ -56,7 +62,7 @@
     -fx-border-width: 0 0 3px 0;
 }
 
-/* TableView */
+/* TableView (outros ecrãs) */
 .table-view {
     -fx-background-color: white;
     -fx-border-radius: 5px;
@@ -104,4 +110,75 @@
     -fx-text-fill: white;
     -fx-font-size: 16px;
     -fx-font-weight: bold;
+}
+
+/* =========================
+   Authentication View
+   ========================= */
+
+/* Root do ecrã de autenticação */
+.auth-root {
+    -fx-background-color: #f5f5f5;
+}
+
+/* Painel da esquerda (fundo vermelho da faculdade) */
+.left-pane {
+    -fx-background-color: #A01316;
+}
+
+/* Conteúdo interno da esquerda */
+.left-inner {
+    -fx-alignment: center;
+    -fx-spacing: 28;
+    -fx-padding: 40 20 40 20;
+}
+
+/* Título "Bem-vindo de volta!" */
+.left-title {
+    -fx-text-fill: #FFFFFF;
+    -fx-font-size: 30px;
+    -fx-font-weight: normal;
+    -fx-alignment: center;
+}
+
+/* Texto abaixo do título */
+.left-subtitle {
+    -fx-text-fill: #FFFFFF;
+    -fx-font-size: 15px;
+}
+
+/* Botão branco "CRIAR CONTA" / "ENTRAR" da esquerda */
+.toggle-mode-button {
+    -fx-background-color: #FFFFFF;
+    -fx-text-fill: #A01316;
+    -fx-font-weight: bold;
+    -fx-background-radius: 24;
+    -fx-padding: 12 28 12 28;
+}
+
+/* Painel direito (login/registo) */
+.right-pane {
+    -fx-background-color: #f5f5f5;
+}
+
+/* Título à direita ("Entrar no Sistema" / "Criar Conta") */
+.right-title {
+    -fx-text-fill: #333333;
+    -fx-font-size: 26px;
+    -fx-font-weight: bold;
+}
+
+/* Subtítulo à direita */
+.right-subtitle {
+    -fx-text-fill: #7f8c8d;
+    -fx-font-size: 13px;
+}
+
+/* Botões principais em pill (ENTRAR / CRIAR CONTA do formulário) */
+.primary-pill-button {
+    -fx-background-color: #A01316;
+    -fx-text-fill: #FFFFFF;
+    -fx-font-weight: bold;
+    -fx-background-radius: 20;
+    -fx-padding: 10 25 10 25;
 }

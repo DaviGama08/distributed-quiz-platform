@@ -9,322 +9,265 @@ import pt.isec.client.services.ClientService;
 import pt.isec.client.ui.view.AuthenticationView;
 import pt.isec.common.dto.auth.LoginResponseDTO;
 
-import java.beans.PropertyChangeListener;
-
-/**
- * Controller da autenticação.
- * Contém TODA a lógica da view: validações, chamadas aos serviços,
- * listeners, navegação para dashboards, etc.
- */
 public class AuthenticationController {
+
+    private enum Mode { LOGIN, REGISTER }
+
+    private static final Color BLUE = Color.web("#3498db");  // “processo”
+    private static final Color RED  = Color.web("#A01316");  // erro
 
     private final Stage stage;
     private final ClientManager clientManager;
     private final ClientApplication application;
 
     private final AuthenticationView view;
+    private Mode mode = Mode.LOGIN;
 
-    public AuthenticationController(Stage stage, ClientManager clientManager, ClientApplication application) {
+    // indica se há um login/registo em curso
+    private volatile boolean authBusy = false;
+
+    public AuthenticationController(Stage stage,
+                                    ClientManager clientManager,
+                                    ClientApplication application) {
         this.stage = stage;
         this.clientManager = clientManager;
         this.application = application;
 
         this.view = new AuthenticationView();
-        view.createView();
-        view.registerHandlers(this);
+        this.view.createView();
+        this.view.registerHandlers(this);
 
+        view.showLoginMode();
         setupPropertyChangeListeners();
-        startInitialConnectionStatusUpdate();
     }
 
     // --------------------------------------------------------
-    // Externamente: mostrar esta view
-    // --------------------------------------------------------
-
-    public void show() {
-        stage.setScene(view.getScene());
-    }
-
-    // --------------------------------------------------------
-    // PropertyChangeListeners do ClientService
+    // Listeners de estado do serviço
     // --------------------------------------------------------
 
     private void setupPropertyChangeListeners() {
         ClientService service = clientManager.getService();
 
-        // 1) Login concluído → abrir dashboard
-        PropertyChangeListener authListener = evt -> {
-            boolean authenticated = (boolean) evt.getNewValue();
-            if (authenticated) {
-                Platform.runLater(() -> {
-                    String userType = service.getUserType();
-                    String email = service.getUserEmail();
-                    openDashboard(userType, email);
-                });
-            }
-        };
-
-        service.addPropertyChangeListener(ClientService.PROP_AUTHENTICATED, authListener);
-
-        // 2) Estado de ligação → atualizar label
-        PropertyChangeListener connListener = evt ->
-                Platform.runLater(() -> updateConnectionStatus(String.valueOf(evt.getNewValue())));
-
-        service.addPropertyChangeListener(ClientService.PROP_CONNECTION_STATUS, connListener);
+        // Quando autenticar com sucesso, abre dashboard
+        service.addPropertyChangeListener(
+                ClientService.PROP_AUTHENTICATED,
+                evt -> {
+                    boolean authenticated = (boolean) evt.getNewValue();
+                    if (authenticated) {
+                        Platform.runLater(() -> {
+                            String userType = service.getUserType();
+                            String email = service.getUserEmail();
+                            openDashboard(userType, email);
+                        });
+                    }
+                }
+        );
     }
 
-    private void startInitialConnectionStatusUpdate() {
-        new Thread(this::connectToServer, "ConnectToServerThread").start();
-    }
-
-    /**
-     * Apenas atualiza o texto de “estado” inicial (lógica fica aqui).
-     */
-    private void connectToServer() {
-        Platform.runLater(() -> {
-            view.setConnectionStatus("Pronto para autenticação", Color.web("#27ae60"));
-            view.update();
-        });
-    }
-
-    /**
-     * Converte o estado de ligação em texto e cor para a view.
-     */
-    private void updateConnectionStatus(String status) {
-        String message;
-        Color color = switch (status) {
-            case "CONNECTING" -> {
-                message = "A conectar ao servidor...";
-                yield Color.web("#3498db");
-            }
-            case "CONNECTED" -> {
-                message = "Conectado ao servidor";
-                yield Color.web("#27ae60");
-            }
-            case "AUTHENTICATING" -> {
-                message = "A autenticar...";
-                yield Color.web("#3498db");
-            }
-            case "AUTHENTICATED" -> {
-                message = "✓ Autenticação bem-sucedida!";
-                yield Color.web("#27ae60");
-            }
-            default -> {
-                message = "Desconectado do servidor";
-                yield Color.web("#e74c3c");
-            }
-        };
-
-        view.setConnectionStatus(message, color);
-        view.update();
+    // bloqueia / desbloqueia interação
+    private void setAuthBusy(boolean busy) {
+        authBusy = busy;
+        Platform.runLater(() -> view.setAuthBusy(busy));
     }
 
     // --------------------------------------------------------
-    // Handlers chamados pela view (registerHandlers)
+    // Helper para garantir ligação
     // --------------------------------------------------------
 
-    /**
-     * Handler de login – chamado pela view.
-     */
+    private boolean ensureConnected(String context) {
+        ClientService service = clientManager.getService();
+
+        if (!service.isRunning()) {
+            clientManager.start();
+        }
+
+        // Espera até ~3s (20 * 150ms) pela flag isRunning()
+        int attempts = 0;
+        while (attempts < 20 && !service.isRunning()) {
+            try {
+                Thread.sleep(150);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+            attempts++;
+        }
+
+        if (!service.isRunning()) {
+            Platform.runLater(() -> {
+                String msg = "Não foi possível contactar o servidor.\n" +
+                        "Verifique se a diretoria e o servidor estão em execução.";
+                if ("login".equalsIgnoreCase(context)) {
+                    showLoginError(msg);
+                } else {
+                    showRegisterError(msg);
+                }
+            });
+            return false;
+        }
+
+        return true;
+    }
+
+    // --------------------------------------------------------
+    // Handlers vindos da View
+    // --------------------------------------------------------
+
+    public void onToggleMode() {
+        if (authBusy)
+            return; // não deixar trocar de ecrã no meio de login/registo
+
+        if (mode == Mode.LOGIN) {
+            mode = Mode.REGISTER;
+            view.showRegisterMode();
+        } else {
+            mode = Mode.LOGIN;
+            view.showLoginMode();
+        }
+    }
+
     public void onLogin() {
+        if (mode != Mode.LOGIN)
+            return;
+
+        if (authBusy)
+            return;
+
         String email = view.getLoginEmail();
         String password = view.getLoginPassword();
 
-        // Validações
         if (email.isEmpty() || password.isEmpty()) {
             showLoginError("Por favor, preencha todos os campos.");
             return;
         }
-
         if (!email.contains("@")) {
             showLoginError("Email inválido.");
             return;
         }
 
-        // Mostrar progress
-        view.setLoginStatus("A conectar ao servidor...",
-                Color.web("#3498db"),
-                true,
-                false);
+        setAuthBusy(true);
+        view.setLoginStatus("A conectar ao servidor...", BLUE, true, false);
 
-        // Autenticar em background thread
         new Thread(() -> {
             try {
-                // Garante que o serviço está a correr (discovery + TCP + threads)
-                if (!clientManager.getService().isRunning()) {
-                    if(!clientManager.start()){
-                        Platform.runLater(()->
-                                view.setLoginStatus("Impossibilidade de contactar o servidor\n" +
-                                        "Verifique se a diretoria e o servidor estão a correr!",
-                                        Color.web("#e74c3c"),
-                                        false,
-                                        true));
-
-                        view.update();
-                    }
+                if (!ensureConnected("login")) {
                     return;
                 }
 
                 Platform.runLater(() ->
-                        view.setLoginStatus("A autenticar...",
-                                Color.web("#3498db"),
-                                true,
-                                false));
+                        view.setLoginStatus("A autenticar...", BLUE, true, false)
+                );
 
-                // Usar AuthClientService para autenticar
                 LoginResponseDTO response =
                         clientManager.getAuthService().login(email, password);
 
                 if (response != null) {
-                    // sucesso – ClientService deverá ter feito setAuthenticated/userType/userEmail
-                    Platform.runLater(() -> {
-                        view.setLoginStatus("Aguarde...",
-                                Color.web("#3498db"),
-                                false,
-                                false);
-                        view.update();
-                    });
+                    Platform.runLater(() ->
+                            view.setLoginStatus("Aguarde...", BLUE, false, false)
+                    );
                 } else {
-                    Platform.runLater(() -> {
-                        showLoginError("Credenciais inválidas");
-                        view.setLoginStatus("Credenciais inválidas",
-                                Color.web("#e74c3c"),
-                                false,
-                                true);
-                        view.update();
-                    });
+                    Platform.runLater(() ->
+                            showLoginError("Credenciais inválidas")
+                    );
                 }
 
             } catch (Exception e) {
-                Platform.runLater(() -> {
-                    showLoginError("Erro na autenticação: " + e.getMessage());
-                    view.setLoginStatus("Erro na autenticação: " + e.getMessage(),
-                            Color.web("#e74c3c"),
-                            false,
-                            true);
-                    view.update();
-                });
+                Platform.runLater(() ->
+                        showLoginError("Erro na autenticação: " + e.getMessage())
+                );
+            } finally {
+                setAuthBusy(false);
             }
         }, "LoginThread").start();
     }
 
-    /**
-     * Handler de registo de estudante – chamado pela view.
-     */
-    public void onRegisterStudent() {
-        String number = view.getStudentNumber();
-        String name = view.getStudentName();
-        String email = view.getStudentEmail();
-        String password = view.getStudentPassword();
+    public void onRegister() {
+        if (mode != Mode.REGISTER)
+            return;
 
-        // Validações
-        if (number.isEmpty() || name.isEmpty() || email.isEmpty() || password.isEmpty()) {
-            showStudentError("Por favor, preencha todos os campos.");
+        if (authBusy)
+            return;
+
+        String type = view.getSelectedRegisterType(); // STUDENT / TEACHER
+        String name = view.getRegisterName();
+        String email = view.getRegisterEmail();
+        String password = view.getRegisterPassword();
+        String extra = view.getRegisterExtra();
+
+        if (name.isEmpty() || email.isEmpty() || password.isEmpty() || extra.isEmpty()) {
+            showRegisterError("Por favor, preencha todos os campos.");
             return;
         }
-
         if (!email.contains("@")) {
-            showStudentError("Email inválido.");
+            showRegisterError("Email inválido.");
             return;
         }
-
         if (password.length() < 6) {
-            showStudentError("Password deve ter no mínimo 6 caracteres.");
+            showRegisterError("Password deve ter no mínimo 6 caracteres.");
             return;
         }
 
-        try {
-            Integer.parseInt(number);
-        } catch (NumberFormatException e) {
-            showStudentError("Número de estudante inválido.");
-            return;
-        }
+        setAuthBusy(true);
+        view.setRegisterStatus("A registar...", BLUE, false);
 
-        view.setStudentStatus("A registar...",
-                Color.web("#3498db"),
-                false);
-
-        // Registar em background (simulado)
         new Thread(() -> {
             try {
-                // TODO: Implementar registo real no servidor
-                Thread.sleep(1000);
+                if (!ensureConnected("register")) {
+                    return;
+                }
 
-                Platform.runLater(() -> {
-                    showStudentSuccess("Registo bem-sucedido! Por favor, faça login.");
-                    view.setStudentStatus("✓ Registo bem-sucedido! Por favor, faça login.",
-                            Color.web("#27ae60"),
-                            true);
-                    view.switchToLoginTabAndPrefillEmail(email);
-                    view.update();
-                });
+                boolean ok;
+
+                if ("STUDENT".equalsIgnoreCase(type)) {
+                    int number;
+                    try {
+                        number = Integer.parseInt(extra);
+                    } catch (NumberFormatException e) {
+                        Platform.runLater(() ->
+                                showRegisterError("Número de estudante inválido.")
+                        );
+                        return;
+                    }
+                    ok = clientManager.getAuthService()
+                            .registerStudent(name, email, password, number);
+                } else {
+                    ok = clientManager.getAuthService()
+                            .registerTeacher(name, email, password, extra);
+                }
+
+                if (ok) {
+                    Platform.runLater(() -> {
+                        view.setRegisterStatus(
+                                "Registo bem-sucedido! Já pode fazer login.",
+                                BLUE,
+                                true
+                        );
+                        view.prefillLoginEmail(email);
+                        mode = Mode.LOGIN;
+                        view.showLoginMode();
+                    });
+                } else {
+                    Platform.runLater(() ->
+                            showRegisterError("Erro no registo. Tente novamente.")
+                    );
+                }
 
             } catch (Exception e) {
-                Platform.runLater(() -> {
-                    showStudentError("Erro no registo: " + e.getMessage());
-                    view.setStudentStatus("Erro no registo: " + e.getMessage(),
-                            Color.web("#e74c3c"),
-                            true);
-                    view.update();
-                });
+                Platform.runLater(() ->
+                        showRegisterError("Erro no registo: " + e.getMessage())
+                );
+            } finally {
+                setAuthBusy(false);
             }
-        }, "RegisterStudentThread").start();
+        }, "RegisterThread").start();
     }
 
-    /**
-     * Handler de registo de docente – chamado pela view.
-     */
-    public void onRegisterTeacher() {
-        String code = view.getTeacherCode();
-        String name = view.getTeacherName();
-        String email = view.getTeacherEmail();
-        String password = view.getTeacherPassword();
-
-        // Validações
-        if (code.isEmpty() || name.isEmpty() || email.isEmpty() || password.isEmpty()) {
-            showTeacherError("Por favor, preencha todos os campos.");
-            return;
+    public void onRegisterTypeChanged(String type) {
+        if ("STUDENT".equalsIgnoreCase(type)) {
+            view.setRegisterExtraLabel("Número de Estudante");
+        } else {
+            view.setRegisterExtraLabel("Código de Docente");
         }
-
-        if (!email.contains("@")) {
-            showTeacherError("Email inválido.");
-            return;
-        }
-
-        if (password.length() < 6) {
-            showTeacherError("Password deve ter no mínimo 6 caracteres.");
-            return;
-        }
-
-        view.setTeacherStatus("A registar...",
-                Color.web("#3498db"),
-                false);
-
-        // Registar em background (simulado)
-        new Thread(() -> {
-            try {
-                // TODO: Implementar registo real no servidor
-                Thread.sleep(1000);
-
-                Platform.runLater(() -> {
-                    showTeacherSuccess("Registo bem-sucedido! Por favor, faça login.");
-                    view.setTeacherStatus("✓ Registo bem-sucedido! Por favor, faça login.",
-                            Color.web("#27ae60"),
-                            true);
-                    view.switchToLoginTabAndPrefillEmail(email);
-                    view.update();
-                });
-
-            } catch (Exception e) {
-                Platform.runLater(() -> {
-                    showTeacherError("Erro no registo: " + e.getMessage());
-                    view.setTeacherStatus("Erro no registo: " + e.getMessage(),
-                            Color.web("#e74c3c"),
-                            true);
-                    view.update();
-                });
-            }
-        }, "RegisterTeacherThread").start();
     }
 
     // --------------------------------------------------------
@@ -333,37 +276,33 @@ public class AuthenticationController {
 
     private void openDashboard(String userType, String email) {
         if ("TEACHER".equalsIgnoreCase(userType)) {
-            TeacherDashboardController dashboard =
+            TeacherDashboardController controller =
                     new TeacherDashboardController(stage, clientManager, application, email);
-            dashboard.show();
+            controller.show();
         } else {
-            StudentDashboardController dashboard =
+            StudentDashboardController controller =
                     new StudentDashboardController(stage, clientManager, application, email);
-            dashboard.show();
+            controller.show();
         }
     }
 
     // --------------------------------------------------------
-    // Helpers de mensagens (lógica aqui, view só mostra)
+    // Helpers de feedback
     // --------------------------------------------------------
 
     private void showLoginError(String message) {
-        view.setLoginStatus("❌ " + message, Color.web("#e74c3c"), false, true);
+        view.setLoginStatus("❌ " + message, RED, false, true);
     }
 
-    private void showStudentError(String message) {
-        view.setStudentStatus("❌ " + message, Color.web("#e74c3c"), true);
+    private void showRegisterError(String message) {
+        view.setRegisterStatus("❌ " + message, RED, true);
     }
 
-    private void showStudentSuccess(String message) {
-        view.setStudentStatus("✓ " + message, Color.web("#27ae60"), true);
-    }
+    // --------------------------------------------------------
+    // Mostrar view
+    // --------------------------------------------------------
 
-    private void showTeacherError(String message) {
-        view.setTeacherStatus("❌ " + message, Color.web("#e74c3c"), true);
-    }
-
-    private void showTeacherSuccess(String message) {
-        view.setTeacherStatus("✓ " + message, Color.web("#27ae60"), true);
+    public void show() {
+        stage.setScene(view.getScene());
     }
 }

@@ -4,24 +4,28 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
-import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
-import javafx.scene.text.Font;
-import javafx.scene.text.FontWeight;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.layout.*;
 import javafx.scene.text.TextAlignment;
 import pt.isec.client.ui.controller.AuthenticationController;
 
-/**
- * View de autenticação (Login/Registo).
- * Responsável APENAS pela construção da UI e registo de handlers.
- */
+import java.util.Objects;
+
 public class AuthenticationView {
 
     private Scene scene;
 
-    // Componentes comuns
-    private TabPane tabPane;
-    private Label connectionStatusLabel;
+    // botão para alternar login/registro (lado esquerdo)
+    private Button toggleModeButton;
+
+    // títulos/subtítulos do lado direito
+    private Label rightTitleLabel;
+    private Label rightSubtitleLabel;
+
+    // contentores de formulário
+    private VBox loginFormBox;
+    private VBox registerFormBox;
 
     // Login
     private TextField loginEmailField;
@@ -30,290 +34,285 @@ public class AuthenticationView {
     private ProgressIndicator loginProgress;
     private Label loginStatusLabel;
 
-    // Registo Estudante
-    private TextField studentNumberField;
-    private TextField studentNameField;
-    private TextField studentEmailField;
-    private PasswordField studentPasswordField;
-    private Button registerStudentButton;
-    private Label studentStatusLabel;
+    // Registo
+    private RadioButton rbStudent;
+    private RadioButton rbTeacher;
+    private Label registerExtraLabel;
+    private TextField registerNameField;
+    private TextField registerEmailField;
+    private PasswordField registerPasswordField;
+    private TextField registerExtraField;
+    private Button registerButton;
+    private Label registerStatusLabel;
 
-    // Registo Docente
-    private TextField teacherCodeField;
-    private TextField teacherNameField;
-    private TextField teacherEmailField;
-    private PasswordField teacherPasswordField;
-    private Button registerTeacherButton;
-    private Label teacherStatusLabel;
-
-    public AuthenticationView() {
-    }
+    public AuthenticationView() { }
 
     // --------------------------------------------------------
-    // Métodos principais: createView / registerHandlers / update
+    // Criação da View
     // --------------------------------------------------------
 
-    /**
-     * Cria toda a interface gráfica (botões, labels, layouts, etc.)
-     */
     public void createView() {
-        // Root layout
-        VBox root = new VBox(20);
-        root.setPadding(new Insets(30));
-        root.setAlignment(Pos.TOP_CENTER);
-        root.setStyle("-fx-background-color: #f5f5f5;");
+        BorderPane root = new BorderPane();
+        root.getStyleClass().add("auth-root");
 
-        // Header
-        Label titleLabel = new Label("Sistema de Gestão de Perguntas");
-        titleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 28));
-        titleLabel.setTextFill(Color.web("#2c3e50"));
+        HBox mainContent = new HBox();
+        mainContent.setSpacing(0);
 
-        Label subtitleLabel = new Label("Bem-vindo! Por favor, autentique-se");
-        subtitleLabel.setFont(Font.font("Arial", 14));
-        subtitleLabel.setTextFill(Color.web("#7f8c8d"));
+        VBox leftPane = createLeftPane();
+        VBox rightPane = createRightPane();
 
-        VBox header = new VBox(5, titleLabel, subtitleLabel);
-        header.setAlignment(Pos.CENTER);
+        HBox.setHgrow(leftPane, Priority.ALWAYS);
+        HBox.setHgrow(rightPane, Priority.ALWAYS);
 
-        // TabPane com Login e Registo
-        tabPane = new TabPane();
-        tabPane.setMaxWidth(500);
-        tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
-
-        // Tab de Login
-        Tab loginTab = new Tab("Login");
-        loginTab.setContent(createLoginPane());
-
-        // Tab de Registo Estudante
-        Tab registerStudentTab = new Tab("Registar Estudante");
-        registerStudentTab.setContent(createRegisterStudentPane());
-
-        // Tab de Registo Docente
-        Tab registerTeacherTab = new Tab("Registar Docente");
-        registerTeacherTab.setContent(createRegisterTeacherPane());
-
-        tabPane.getTabs().addAll(loginTab, registerStudentTab, registerTeacherTab);
-
-        // Status de conexão
-        connectionStatusLabel = new Label("A conectar ao servidor...");
-        connectionStatusLabel.setFont(Font.font("Arial", 12));
-        connectionStatusLabel.setTextFill(Color.web("#95a5a6"));
-
-        root.getChildren().addAll(header, tabPane, connectionStatusLabel);
+        mainContent.getChildren().addAll(leftPane, rightPane);
+        root.setCenter(mainContent);
 
         scene = new Scene(root, 900, 600);
 
-        // Carregar CSS se disponível
         try {
             var cssUrl = getClass().getResource("/styles/authentication.css");
             if (cssUrl != null) {
                 scene.getStylesheets().add(cssUrl.toExternalForm());
             }
-        } catch (Exception e) {
-            // CSS opcional - continuar sem ele
-        }
+        } catch (Exception ignored) { }
     }
 
-    /**
-     * Regista os handlers dos componentes, delegando a lógica no controller.
-     */
     public void registerHandlers(AuthenticationController controller) {
-        // LOGIN
+        toggleModeButton.setOnAction(e -> controller.onToggleMode());
+
         loginPasswordField.setOnAction(e -> controller.onLogin());
         loginButton.setOnAction(e -> controller.onLogin());
 
-        // REGISTO ESTUDANTE
-        registerStudentButton.setOnAction(e -> controller.onRegisterStudent());
-
-        // REGISTO DOCENTE
-        registerTeacherButton.setOnAction(e -> controller.onRegisterTeacher());
+        registerButton.setOnAction(e -> controller.onRegister());
+        rbStudent.setOnAction(e -> controller.onRegisterTypeChanged("STUDENT"));
+        rbTeacher.setOnAction(e -> controller.onRegisterTypeChanged("TEACHER"));
     }
 
-    /**
-     * Método genérico para actualizar a view quando o controller assim o decidir.
-     */
     public void update() {
-        // Nada específico por agora.
+        // por enquanto nada específico
     }
 
     // --------------------------------------------------------
-    // Criação dos painéis (apenas UI, sem lógica)
+    // LEFT PANE
     // --------------------------------------------------------
 
-    private VBox createLoginPane() {
-        VBox pane = new VBox(15);
-        pane.setPadding(new Insets(30));
-        pane.setAlignment(Pos.TOP_CENTER);
+    private VBox createLeftPane() {
+        VBox pane = new VBox();
+        pane.getStyleClass().add("left-pane");
+        pane.setPrefWidth(380);
 
-        Label title = new Label("Entrar no Sistema");
-        title.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+        ImageView logoView;
+        try {
+            Image logo = new Image(Objects.requireNonNull(
+                    getClass().getResourceAsStream("/imgs/logo.png"),
+                    "logo.png não encontrado em resources"
+            ));
+            logoView = new ImageView(logo);
+            logoView.setPreserveRatio(true);
+            logoView.setFitHeight(200);
+            logoView.setFitWidth(200);
+        } catch (Exception e) {
+            logoView = new ImageView();
+        }
 
-        // Email
-        Label emailLabel = new Label("Email:");
-        emailLabel.setFont(Font.font("Arial", FontWeight.SEMI_BOLD, 13));
+        Separator divider = new Separator();
+        divider.setPrefWidth(260);
+        divider.setOpacity(0.7);
+
+        Label welcomeTitle = new Label("Bem-vindo de volta!");
+        welcomeTitle.getStyleClass().add("left-title");
+        welcomeTitle.setWrapText(true);
+        welcomeTitle.setTextAlignment(TextAlignment.CENTER);
+        welcomeTitle.setMaxWidth(280);
+
+        Label welcomeText = new Label(
+                "Para continuar ligado ao sistema,\n" +
+                        "autentique-se ou crie uma nova conta."
+        );
+        welcomeText.getStyleClass().add("left-subtitle");
+        welcomeText.setWrapText(true);
+        welcomeText.setTextAlignment(TextAlignment.CENTER);
+        welcomeText.setMaxWidth(300);
+
+        toggleModeButton = new Button("CRIAR CONTA");
+        toggleModeButton.getStyleClass().add("toggle-mode-button");
+        toggleModeButton.setPrefWidth(220);
+
+        VBox inner = new VBox(28, logoView, divider, welcomeTitle, welcomeText, toggleModeButton);
+        inner.setAlignment(Pos.CENTER);
+        inner.getStyleClass().add("left-inner");
+        VBox.setVgrow(inner, Priority.ALWAYS);
+
+        pane.getChildren().add(inner);
+        return pane;
+    }
+
+    // --------------------------------------------------------
+    // RIGHT PANE
+    // --------------------------------------------------------
+
+    private VBox createRightPane() {
+        VBox pane = new VBox();
+        pane.getStyleClass().add("right-pane");
+        pane.setPadding(new Insets(40));
+        pane.setAlignment(Pos.CENTER);
+        pane.setPrefWidth(560);
+
+        rightTitleLabel = new Label("Entrar no Sistema");
+        rightTitleLabel.getStyleClass().add("right-title");
+
+        rightSubtitleLabel = new Label("Use o seu email e password para entrar.");
+        rightSubtitleLabel.getStyleClass().add("right-subtitle");
+
+        VBox header = new VBox(5, rightTitleLabel, rightSubtitleLabel);
+        header.setAlignment(Pos.CENTER);
+
+        StackPane formsContainer = new StackPane();
+        formsContainer.setPadding(new Insets(20, 0, 0, 0));
+
+        loginFormBox = createLoginForm();
+        registerFormBox = createRegisterForm();
+        formsContainer.getChildren().addAll(registerFormBox, loginFormBox);
+
+        VBox centerBox = new VBox(30, header, formsContainer);
+        centerBox.setAlignment(Pos.CENTER);
+
+        VBox.setVgrow(centerBox, Priority.ALWAYS);
+        pane.getChildren().add(centerBox);
+
+        showLoginMode();
+        return pane;
+    }
+
+    private VBox createLoginForm() {
+        VBox form = new VBox(12);
+        form.setAlignment(Pos.CENTER);
+        form.setMaxWidth(340);
+        form.setPadding(new Insets(10));
+
         loginEmailField = new TextField();
-        loginEmailField.setPromptText("exemplo@isec.pt");
-        loginEmailField.setPrefWidth(300);
+        loginEmailField.setPromptText("Email (ex: xxx@isec.pt)");
+        loginEmailField.setPrefWidth(340);
 
-        // Password
-        Label passwordLabel = new Label("Password:");
-        passwordLabel.setFont(Font.font("Arial", FontWeight.SEMI_BOLD, 13));
         loginPasswordField = new PasswordField();
         loginPasswordField.setPromptText("Password");
-        loginPasswordField.setPrefWidth(300);
+        loginPasswordField.setPrefWidth(340);
 
-        // Botão de login
-        loginButton = new Button("Entrar");
-        loginButton.setPrefWidth(150);
-        loginButton.setStyle("-fx-background-color: #3498db; -fx-text-fill: white; -fx-font-weight: bold;");
+        loginButton = new Button("ENTRAR");
+        loginButton.getStyleClass().add("primary-pill-button");
+        loginButton.setPrefWidth(220);
 
-        // Progress indicator
         loginProgress = new ProgressIndicator();
         loginProgress.setMaxSize(30, 30);
         loginProgress.setVisible(false);
 
-        // Status label
         loginStatusLabel = new Label();
         loginStatusLabel.setWrapText(true);
-        loginStatusLabel.setAlignment(Pos.CENTER);
         loginStatusLabel.setTextAlignment(TextAlignment.CENTER);
-        pane.getChildren().addAll(
-                title,
-                new VBox(5, emailLabel, loginEmailField),
-                new VBox(5, passwordLabel, loginPasswordField),
+        loginStatusLabel.setAlignment(Pos.CENTER);
+        loginStatusLabel.setMaxWidth(340);
+
+        form.getChildren().addAll(
+                loginEmailField,
+                loginPasswordField,
                 loginButton,
                 loginProgress,
                 loginStatusLabel
         );
 
-        return pane;
+        return form;
     }
 
-    private VBox createRegisterStudentPane() {
-        VBox pane = new VBox(15);
-        pane.setPadding(new Insets(30));
-        pane.setAlignment(Pos.TOP_CENTER);
+    private VBox createRegisterForm() {
+        VBox form = new VBox(12);
+        form.setAlignment(Pos.CENTER);
+        form.setMaxWidth(340);
+        form.setPadding(new Insets(10));
 
-        Label title = new Label("Registar Novo Estudante");
-        title.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+        ToggleGroup typeGroup = new ToggleGroup();
+        rbStudent = new RadioButton("Estudante");
+        rbTeacher = new RadioButton("Docente");
+        rbStudent.setToggleGroup(typeGroup);
+        rbTeacher.setToggleGroup(typeGroup);
+        rbStudent.setSelected(true);
 
-        // Número de estudante
-        Label numberLabel = new Label("Número de Estudante:");
-        numberLabel.setFont(Font.font("Arial", FontWeight.SEMI_BOLD, 13));
-        studentNumberField = new TextField();
-        studentNumberField.setPromptText("Ex: 123456");
-        studentNumberField.setPrefWidth(300);
+        HBox typeBox = new HBox(15, rbStudent, rbTeacher);
+        typeBox.setAlignment(Pos.CENTER);
 
-        // Nome
-        Label nameLabel = new Label("Nome:");
-        nameLabel.setFont(Font.font("Arial", FontWeight.SEMI_BOLD, 13));
-        studentNameField = new TextField();
-        studentNameField.setPromptText("Nome completo");
-        studentNameField.setPrefWidth(300);
+        registerNameField = new TextField();
+        registerNameField.setPromptText("Nome completo");
 
-        // Email
-        Label emailLabel = new Label("Email:");
-        emailLabel.setFont(Font.font("Arial", FontWeight.SEMI_BOLD, 13));
-        studentEmailField = new TextField();
-        studentEmailField.setPromptText("exemplo@isec.pt");
-        studentEmailField.setPrefWidth(300);
+        registerEmailField = new TextField();
+        registerEmailField.setPromptText("Email (ex: xxx@isec.pt)");
 
-        // Password
-        Label passwordLabel = new Label("Password:");
-        passwordLabel.setFont(Font.font("Arial", FontWeight.SEMI_BOLD, 13));
-        studentPasswordField = new PasswordField();
-        studentPasswordField.setPromptText("Mínimo 6 caracteres");
-        studentPasswordField.setPrefWidth(300);
+        registerPasswordField = new PasswordField();
+        registerPasswordField.setPromptText("Password (mínimo 6 caracteres)");
 
-        // Botão de registo
-        registerStudentButton = new Button("Registar");
-        registerStudentButton.setPrefWidth(150);
-        registerStudentButton.setStyle("-fx-background-color: #2ecc71; -fx-text-fill: white; -fx-font-weight: bold;");
+        registerExtraLabel = new Label("Número de Estudante");
 
-        // Status label
-        studentStatusLabel = new Label();
-        studentStatusLabel.setWrapText(true);
+        registerExtraField = new TextField();
+        registerExtraField.setPromptText("Ex: 123456");
 
-        pane.getChildren().addAll(
-                title,
-                new VBox(5, numberLabel, studentNumberField),
-                new VBox(5, nameLabel, studentNameField),
-                new VBox(5, emailLabel, studentEmailField),
-                new VBox(5, passwordLabel, studentPasswordField),
-                registerStudentButton,
-                studentStatusLabel
+        registerButton = new Button("CRIAR CONTA");
+        registerButton.getStyleClass().add("primary-pill-button");
+        registerButton.setPrefWidth(220);
+
+        registerStatusLabel = new Label();
+        registerStatusLabel.setWrapText(true);
+        registerStatusLabel.setTextAlignment(TextAlignment.CENTER);
+        registerStatusLabel.setMaxWidth(340);
+
+        form.getChildren().addAll(
+                typeBox,
+                registerNameField,
+                registerEmailField,
+                registerPasswordField,
+                registerExtraLabel,
+                registerExtraField,
+                registerButton,
+                registerStatusLabel
         );
 
-        return pane;
-    }
-
-    private VBox createRegisterTeacherPane() {
-        VBox pane = new VBox(15);
-        pane.setPadding(new Insets(30));
-        pane.setAlignment(Pos.TOP_CENTER);
-
-        Label title = new Label("Registar Novo Docente");
-        title.setFont(Font.font("Arial", FontWeight.BOLD, 18));
-
-        // Código de docente
-        Label codeLabel = new Label("Código de Registo de Docentes:");
-        codeLabel.setFont(Font.font("Arial", FontWeight.SEMI_BOLD, 13));
-        teacherCodeField = new PasswordField();
-        teacherCodeField.setPromptText("Código fornecido pela instituição");
-        teacherCodeField.setPrefWidth(300);
-
-        // Nome
-        Label nameLabel = new Label("Nome:");
-        nameLabel.setFont(Font.font("Arial", FontWeight.SEMI_BOLD, 13));
-        teacherNameField = new TextField();
-        teacherNameField.setPromptText("Nome completo");
-        teacherNameField.setPrefWidth(300);
-
-        // Email
-        Label emailLabel = new Label("Email:");
-        emailLabel.setFont(Font.font("Arial", FontWeight.SEMI_BOLD, 13));
-        teacherEmailField = new TextField();
-        teacherEmailField.setPromptText("exemplo@isec.pt");
-        teacherEmailField.setPrefWidth(300);
-
-        // Password
-        Label passwordLabel = new Label("Password:");
-        passwordLabel.setFont(Font.font("Arial", FontWeight.SEMI_BOLD, 13));
-        teacherPasswordField = new PasswordField();
-        teacherPasswordField.setPromptText("Mínimo 6 caracteres");
-        teacherPasswordField.setPrefWidth(300);
-
-        // Botão de registo
-        registerTeacherButton = new Button("Registar");
-        registerTeacherButton.setPrefWidth(150);
-        registerTeacherButton.setStyle("-fx-background-color: #9b59b6; -fx-text-fill: white; -fx-font-weight: bold;");
-
-        // Status label
-        teacherStatusLabel = new Label();
-        teacherStatusLabel.setWrapText(true);
-
-        pane.getChildren().addAll(
-                title,
-                new VBox(5, codeLabel, teacherCodeField),
-                new VBox(5, nameLabel, teacherNameField),
-                new VBox(5, emailLabel, teacherEmailField),
-                new VBox(5, passwordLabel, teacherPasswordField),
-                registerTeacherButton,
-                teacherStatusLabel
-        );
-
-        return pane;
+        return form;
     }
 
     // --------------------------------------------------------
-    // API para o Controller (getters + setters de estado)
+    // Modos
+    // --------------------------------------------------------
+
+    public void showLoginMode() {
+        rightTitleLabel.setText("Entrar no Sistema");
+        rightSubtitleLabel.setText("Use o seu email e password para entrar.");
+        loginFormBox.setVisible(true);
+        loginFormBox.setManaged(true);
+
+        registerFormBox.setVisible(false);
+        registerFormBox.setManaged(false);
+
+        toggleModeButton.setText("CRIAR CONTA");
+    }
+
+    public void showRegisterMode() {
+        rightTitleLabel.setText("Criar Conta");
+        rightSubtitleLabel.setText("Use o seu email institucional para se registar.");
+        loginFormBox.setVisible(false);
+        loginFormBox.setManaged(false);
+
+        registerFormBox.setVisible(true);
+        registerFormBox.setManaged(true);
+
+        toggleModeButton.setText("ENTRAR");
+    }
+
+    // --------------------------------------------------------
+    // API para o Controller
     // --------------------------------------------------------
 
     public Scene getScene() {
         return scene;
     }
 
-    // Inputs de Login
+    // Login
     public String getLoginEmail() {
         return loginEmailField.getText().trim();
     }
@@ -322,72 +321,82 @@ public class AuthenticationView {
         return loginPasswordField.getText();
     }
 
-    // Inputs Estudante
-    public String getStudentNumber() {
-        return studentNumberField.getText().trim();
-    }
-
-    public String getStudentName() {
-        return studentNameField.getText().trim();
-    }
-
-    public String getStudentEmail() {
-        return studentEmailField.getText().trim();
-    }
-
-    public String getStudentPassword() {
-        return studentPasswordField.getText();
-    }
-
-    // Inputs Docente
-    public String getTeacherCode() {
-        return teacherCodeField.getText().trim();
-    }
-
-    public String getTeacherName() {
-        return teacherNameField.getText().trim();
-    }
-
-    public String getTeacherEmail() {
-        return teacherEmailField.getText().trim();
-    }
-
-    public String getTeacherPassword() {
-        return teacherPasswordField.getText();
-    }
-
-    // Estado Login
-    public void setLoginStatus(String message, Color color,
+    public void setLoginStatus(String message, javafx.scene.paint.Color color,
                                boolean showProgress, boolean loginButtonEnabled) {
-        loginStatusLabel.setText(message);
+        loginStatusLabel.setText(message == null ? "" : message);
         loginStatusLabel.setTextFill(color);
         loginProgress.setVisible(showProgress);
         loginButton.setDisable(!loginButtonEnabled);
     }
 
-    // Estado Estudante
-    public void setStudentStatus(String message, Color color, boolean registerEnabled) {
-        studentStatusLabel.setText(message);
-        studentStatusLabel.setTextFill(color);
-        registerStudentButton.setDisable(!registerEnabled);
+    // Registo
+    public String getRegisterName() {
+        return registerNameField.getText().trim();
     }
 
-    // Estado Docente
-    public void setTeacherStatus(String message, Color color, boolean registerEnabled) {
-        teacherStatusLabel.setText(message);
-        teacherStatusLabel.setTextFill(color);
-        registerTeacherButton.setDisable(!registerEnabled);
+    public String getRegisterEmail() {
+        return registerEmailField.getText().trim();
     }
 
-    // Estado de ligação
-    public void setConnectionStatus(String message, Color color) {
-        connectionStatusLabel.setText(message);
-        connectionStatusLabel.setTextFill(color);
+    public String getRegisterPassword() {
+        return registerPasswordField.getText();
     }
 
-    // Tab de login + preencher email
-    public void switchToLoginTabAndPrefillEmail(String email) {
-        tabPane.getSelectionModel().select(0);
+    public String getRegisterExtra() {
+        return registerExtraField.getText().trim();
+    }
+
+    public String getSelectedRegisterType() {
+        return rbStudent.isSelected() ? "STUDENT" : "TEACHER";
+    }
+
+    public void setRegisterExtraLabel(String text) {
+        registerExtraLabel.setText(text);
+        if ("Número de Estudante".equalsIgnoreCase(text)) {
+            registerExtraField.setPromptText("Ex: 123456");
+        } else {
+            registerExtraField.setPromptText("Código fornecido pela instituição");
+        }
+    }
+
+    public void setRegisterStatus(String message, javafx.scene.paint.Color color, boolean buttonEnabled) {
+        registerStatusLabel.setText(message == null ? "" : message);
+        registerStatusLabel.setTextFill(color);
+        registerButton.setDisable(!buttonEnabled);
+    }
+
+    public void prefillLoginEmail(String email) {
         loginEmailField.setText(email);
+    }
+
+    /**
+     * Bloqueia / desbloqueia interação enquanto login/registo está a decorrer.
+     * Repara que NÃO mexemos nos botões de ação aqui (loginButton/registerButton),
+     * isso continua a ser responsabilidade de setLoginStatus / setRegisterStatus.
+     */
+    public void setAuthBusy(boolean busy) {
+        // botão de alternar
+        if (toggleModeButton != null)
+            toggleModeButton.setDisable(busy);
+
+        // campos de login
+        if (loginEmailField != null)
+            loginEmailField.setDisable(busy);
+        if (loginPasswordField != null)
+            loginPasswordField.setDisable(busy);
+
+        // campos de registo
+        if (rbStudent != null)
+            rbStudent.setDisable(busy);
+        if (rbTeacher != null)
+            rbTeacher.setDisable(busy);
+        if (registerNameField != null)
+            registerNameField.setDisable(busy);
+        if (registerEmailField != null)
+            registerEmailField.setDisable(busy);
+        if (registerPasswordField != null)
+            registerPasswordField.setDisable(busy);
+        if (registerExtraField != null)
+            registerExtraField.setDisable(busy);
     }
 }

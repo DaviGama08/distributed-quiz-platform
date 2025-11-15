@@ -26,9 +26,7 @@ public class ResponseHandlerRunnable implements Runnable{
                 // Blocking take - espera até haver resposta na fila
                 Message<? extends Serializable> response = service.getResponseQueue().take();
 
-                if(response != null) {
-                    processResponse(response);
-                }
+                processResponse(response);
             } catch (InterruptedException e) {
                 System.out.println("[ResponseHandler] Interrupted");
                 Thread.currentThread().interrupt();

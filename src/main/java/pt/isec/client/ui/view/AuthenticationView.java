@@ -8,6 +8,7 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.scene.text.TextAlignment;
 import pt.isec.client.ui.controller.AuthenticationController;
 
 /**
@@ -174,7 +175,8 @@ public class AuthenticationView {
         // Status label
         loginStatusLabel = new Label();
         loginStatusLabel.setWrapText(true);
-
+        loginStatusLabel.setAlignment(Pos.CENTER);
+        loginStatusLabel.setTextAlignment(TextAlignment.CENTER);
         pane.getChildren().addAll(
                 title,
                 new VBox(5, emailLabel, loginEmailField),

@@ -23,9 +23,20 @@ public class ClientManager {
         this.answerService = new AnswerClientService(service);
     }
 
-    public void start(){
-        // Arranca discovery+conexão em background (NÃO chamar service.start() diretamente)
-        new Thread(service::run, "ClientBootstrap").start();
+    public boolean start(){
+        /*ThreadFactory factory = r ->{
+            Thread t = new Thread(r);
+            t.setName("ClientService");
+            t.setDaemon(true);
+            return t;
+        };
+        try(ExecutorService executor = Executors.newSingleThreadExecutor(factory)){
+           executor.submit(service::run);
+        }catch (Exception e){
+            System.out.println(e.getMessage());
+        }*/
+        service.run();
+        return service.isRunning();
     }
 
     public void stop(){ service.stop(); }

@@ -92,31 +92,28 @@ public class AuthenticationController {
      */
     private void updateConnectionStatus(String status) {
         String message;
-        Color color;
-
-        switch (status) {
-            case "CONNECTING":
+        Color color = switch (status) {
+            case "CONNECTING" -> {
                 message = "A conectar ao servidor...";
-                color = Color.web("#3498db");
-                break;
-            case "CONNECTED":
+                yield Color.web("#3498db");
+            }
+            case "CONNECTED" -> {
                 message = "Conectado ao servidor";
-                color = Color.web("#27ae60");
-                break;
-            case "AUTHENTICATING":
+                yield Color.web("#27ae60");
+            }
+            case "AUTHENTICATING" -> {
                 message = "A autenticar...";
-                color = Color.web("#3498db");
-                break;
-            case "AUTHENTICATED":
+                yield Color.web("#3498db");
+            }
+            case "AUTHENTICATED" -> {
                 message = "✓ Autenticação bem-sucedida!";
-                color = Color.web("#27ae60");
-                break;
-            case "DISCONNECTED":
-            default:
+                yield Color.web("#27ae60");
+            }
+            default -> {
                 message = "Desconectado do servidor";
-                color = Color.web("#e74c3c");
-                break;
-        }
+                yield Color.web("#e74c3c");
+            }
+        };
 
         view.setConnectionStatus(message, color);
         view.update();
@@ -155,7 +152,17 @@ public class AuthenticationController {
             try {
                 // Garante que o serviço está a correr (discovery + TCP + threads)
                 if (!clientManager.getService().isRunning()) {
-                    clientManager.start();
+                    if(!clientManager.start()){
+                        Platform.runLater(()->
+                                view.setLoginStatus("Impossibilidade de contactar o servidor\n" +
+                                        "Verifique se a diretoria e o servidor estão a correr!",
+                                        Color.web("#e74c3c"),
+                                        false,
+                                        true));
+
+                        view.update();
+                    }
+                    return;
                 }
 
                 Platform.runLater(() ->

@@ -3,7 +3,7 @@ package pt.isec.server.threads;
 import pt.isec.common.messages.Message;
 import pt.isec.common.messages.MessageType;
 import pt.isec.server.NetworkConnection;
-import pt.isec.server.IServerNode;
+import pt.isec.server.IQuizServer;
 
 import java.io.FileOutputStream;
 import java.net.Socket;
@@ -17,11 +17,11 @@ import java.nio.file.StandardCopyOption;
  *   (2) exatamente 'tamanho' bytes pelo MESMO ObjectInputStream
  */
 public class DbCopyRequesterRunnable implements Runnable {
-    private final IServerNode tInfo;
+    private final IQuizServer tInfo;
     private final String primaryIp;
     private final int primaryDbCopyPort;
 
-    public DbCopyRequesterRunnable(IServerNode tInfo, String primaryIp, int primaryDbCopyPort) {
+    public DbCopyRequesterRunnable(IQuizServer tInfo, String primaryIp, int primaryDbCopyPort) {
         this.tInfo = tInfo;
         this.primaryIp = primaryIp;
         this.primaryDbCopyPort = primaryDbCopyPort;

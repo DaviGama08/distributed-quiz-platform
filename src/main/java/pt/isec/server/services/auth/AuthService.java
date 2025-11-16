@@ -5,7 +5,9 @@
     import pt.isec.server.model.user.Teacher;
     import pt.isec.server.db.dao.StudentDAO;
     import pt.isec.server.db.dao.TeacherDAO;
-    import pt.isec.server.services.session.SessionServices;
+    import pt.isec.server.services.auth.helpers.PasswordHasher;
+    import pt.isec.server.services.auth.helpers.Validators;
+    import pt.isec.server.services.session.SessionService;
     import pt.isec.server.services.config.ConfigServices;
 
     public class AuthService implements IAuthService {
@@ -56,11 +58,11 @@
             teacher.setId(newId);
 
             // criar sessão
-            var session = new SessionServices<Teacher>().create(teacher);
+            var session = new SessionService<Teacher>().create(teacher);
 
             // resposta
             return new LoginResponseDTO(
-                    session.getId(),
+                    session.id(),
                     String.valueOf(teacher.getId()),
                     "TEACHER",
                     teacher.getName(),
@@ -97,10 +99,10 @@
             long newId = studentDAO.add(student);
             student.setId(newId);
 
-            var session = new SessionServices<Student>().create(student);
+            var session = new SessionService<Student>().create(student);
 
             return new LoginResponseDTO(
-                    session.getId(),
+                    session.id(),
                     String.valueOf(number),
                     "STUDENT",
                     student.getName(),
@@ -127,9 +129,9 @@
                 if(!PasswordHasher.verifyPassword(pw, teacher.getPasswordHash()))
                     throw new IllegalArgumentException("Credenciais inválidas");
 
-                var session = new SessionServices<Teacher>().create(teacher);
+                var session = new SessionService<Teacher>().create(teacher);
                 return new LoginResponseDTO(
-                        session.getId(),
+                        session.id(),
                         String.valueOf(teacher.getId()),
                         "TEACHER",
                         teacher.getName(),
@@ -143,9 +145,9 @@
                 if(!PasswordHasher.verifyPassword(pw, student.getPasswordHash()))
                     throw new IllegalArgumentException("Credenciais inválidas");
 
-                var session = new SessionServices<Student>().create(student);
+                var session = new SessionService<Student>().create(student);
                 return new LoginResponseDTO(
-                        session.getId(),
+                        session.id(),
                         String.valueOf(student.getStudentNumber()),
                         "STUDENT",
                         student.getName(),

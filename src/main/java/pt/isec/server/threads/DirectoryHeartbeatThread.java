@@ -1,8 +1,7 @@
 package pt.isec.server.threads;
 
-import pt.isec.server.IServerNode;
-import pt.isec.server.ServerNode;
-import pt.isec.server.db.Db;
+import pt.isec.server.IQuizServer;
+import pt.isec.server.QuizServer;
 import pt.isec.server.services.config.ConfigServices;
 
 import java.io.IOException;
@@ -11,17 +10,17 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Objects;
 
-public class DirectoryHeartbeatRunnable implements Runnable, AutoCloseable {
+public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
     private static final int SOCKET_TIMEOUT_MS = 3000;
     private static final int HEARTBEAT_INTERVAL_MS = 5000;
     private static final int RETRY_COUNT = 3;
     private static final int SLEEP_INTERVAL_MS = 50;
     private static final int BUFFER_SIZE = 512;
 
-    private final IServerNode tInfo;
+    private final IQuizServer tInfo;
     private DatagramSocket socket;
 
-    public DirectoryHeartbeatRunnable(IServerNode tInfo) { this.tInfo = tInfo; }
+    public DirectoryHeartbeatThread(IQuizServer tInfo) { this.tInfo = tInfo; }
 
     @Override
     public void run() {
@@ -64,7 +63,7 @@ public class DirectoryHeartbeatRunnable implements Runnable, AutoCloseable {
             if (iAmPrimary) {
                 try {
                     // garantir que estamos a usar o ServerNode concreto
-                    if (tInfo instanceof ServerNode node) {
+                    if (tInfo instanceof QuizServer node) {
 
                         // 1) inicializa BD + DAOs + AuthService (se ainda não estiver feito)
                         node.initDatabaseLayerIfNeeded();

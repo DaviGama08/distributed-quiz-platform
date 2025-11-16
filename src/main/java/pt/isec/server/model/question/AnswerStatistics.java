@@ -1,6 +1,4 @@
-package pt.isec.server.model.answer;
-
-import pt.isec.server.model.common.OptionLetter;
+package pt.isec.server.model.question;
 
 import java.io.Serializable;
 import java.util.*;

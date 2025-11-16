@@ -145,7 +145,7 @@ Terminal 1:
 
 Terminal 2:
   cd H:\GitHub\PD_TP_2526
-  java -cp target/classes pt.isec.server.MainServer 5555 localhost
+  java -cp target/classes pt.isec.server.LauncherServer 5555 localhost
 
 Terminal 3:
   cd H:\GitHub\PD_TP_2526

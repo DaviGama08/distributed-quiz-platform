@@ -1,6 +1,6 @@
 package pt.isec.server.services.config;
 
-import pt.isec.server.services.auth.PasswordHasher;
+import pt.isec.server.services.auth.helpers.PasswordHasher;
 
 public class ConfigServices implements IConfigServices {
 

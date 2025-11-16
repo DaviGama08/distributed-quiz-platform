@@ -1,6 +1,6 @@
 package pt.isec.common.dto.question;
 
-import pt.isec.server.model.common.OptionLetter;
+import pt.isec.server.model.question.OptionLetter;
 import pt.isec.server.model.question.Option;
 
 import java.io.Serializable;

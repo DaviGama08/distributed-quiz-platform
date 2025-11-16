@@ -3,7 +3,7 @@ package pt.isec.client.services;
 import pt.isec.common.dto.question.*;
 import pt.isec.common.messages.Message;
 import pt.isec.common.messages.MessageType;
-import pt.isec.server.model.common.OptionLetter;
+import pt.isec.server.model.question.OptionLetter;
 import pt.isec.server.model.question.Option;
 import pt.isec.server.model.question.Question;
 

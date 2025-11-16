@@ -77,7 +77,7 @@ java -cp target/classes pt.isec.directory.MainDirectory 5555
 #### 2. Iniciar o Servidor
 ```cmd
 cd H:\GitHub\PD_TP_2526
-java -cp target/classes pt.isec.server.MainServer 5555 localhost
+java -cp target/classes pt.isec.server.LauncherServer 5555 localhost
 ```
 
 #### 3. Iniciar o Cliente (com UI)

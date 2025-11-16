@@ -1,4 +1,4 @@
-package pt.isec.server.services.auth;
+package pt.isec.server.services.auth.helpers;
 
 public final class Validators {
     private Validators() {}

@@ -1,23 +1,24 @@
 package pt.isec.server.threads;
 
-import pt.isec.server.IServerNode;
+import pt.isec.server.IQuizServer;
+import pt.isec.server.QuizServer;
 
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.Instant;
 
-public class MulticastRunnable implements Runnable, AutoCloseable {
+public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
     private static final int HEARTBEAT_INTERVAL_MS = 5000;
     private static final int LOOP_SLEEP_MS = 50;
     private static final int MULTICAST_TTL = 1;
     private static final int RX_TIMEOUT_MS = 500;
     private static final int BUFFER_SIZE = 4096;
 
-    private final IServerNode tInfo;
+    private final IQuizServer tInfo;
     private MulticastSocket ms;
 
-    public MulticastRunnable(IServerNode tInfo) { this.tInfo = tInfo; }
+    public ClusterHeartbeatThread(IQuizServer tInfo) { this.tInfo = tInfo; }
 
     @Override
     public void run() {
@@ -78,7 +79,7 @@ public class MulticastRunnable implements Runnable, AutoCloseable {
 
                                 if (rxDbPort > 0) {
                                     // NOVO: usa o “fusível” do ServerNode para evitar múltiplas cópias
-                                    if (tInfo instanceof pt.isec.server.ServerNode sn) {
+                                    if (tInfo instanceof QuizServer sn) {
                                         if (!sn.tryLockCopy()) {
                                             continue; // já há uma cópia em curso
                                         }

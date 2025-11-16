@@ -2,7 +2,7 @@ package pt.isec.server.threads;
 
 import pt.isec.common.messages.Message;
 import pt.isec.common.messages.MessageType;
-import pt.isec.server.IServerNode;
+import pt.isec.server.IQuizServer;
 import pt.isec.server.NetworkConnection;
 
 import java.io.FileInputStream;
@@ -17,10 +17,10 @@ import java.time.Duration;
  *   (2) bytes do .db pelo MESMO ObjectOutputStream
  */
 public class DbCopyAcceptorRunnable implements Runnable, AutoCloseable {
-    private final IServerNode tInfo;
+    private final IQuizServer tInfo;
     private ServerSocket ss;
 
-    public DbCopyAcceptorRunnable(IServerNode tInfo) { this.tInfo = tInfo; }
+    public DbCopyAcceptorRunnable(IQuizServer tInfo) { this.tInfo = tInfo; }
 
     @Override
     public void run() {

@@ -4,8 +4,8 @@ import pt.isec.common.dto.answer.SubmitAnswerDTO;
 import pt.isec.common.dto.answer.ViewAnswersDTO;
 import pt.isec.common.messages.Message;
 import pt.isec.common.messages.MessageType;
-import pt.isec.server.model.answer.Answer;
-import pt.isec.server.model.common.OptionLetter;
+import pt.isec.server.model.question.Answer;
+import pt.isec.server.model.question.OptionLetter;
 
 import java.util.List;
 

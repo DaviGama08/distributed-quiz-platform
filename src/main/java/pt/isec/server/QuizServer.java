@@ -3,9 +3,9 @@ import pt.isec.server.db.Db;
 import pt.isec.server.db.dao.StudentDAO;
 import pt.isec.server.db.dao.TeacherDAO;
 import pt.isec.server.services.auth.AuthService;
-import pt.isec.server.threads.client.TcpClientAcceptorRunnable;
-import pt.isec.server.threads.DirectoryHeartbeatRunnable;
-import pt.isec.server.threads.MulticastRunnable;
+import pt.isec.server.threads.ClusterHeartbeatThread;
+import pt.isec.server.threads.ClientListenerThread;
+import pt.isec.server.threads.DirectoryHeartbeatThread;
 import pt.isec.server.threads.DbCopyAcceptorRunnable;
 import java.net.*;
 import java.nio.file.Path;
@@ -15,7 +15,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class ServerNode implements IServerNode, Runnable, AutoCloseable {
+public class QuizServer implements IQuizServer, Runnable, AutoCloseable {
     private volatile boolean dbInitialised = false;
     private Db db;
     private TeacherDAO teacherDAO;
@@ -46,7 +46,7 @@ public class ServerNode implements IServerNode, Runnable, AutoCloseable {
 
     private Thread tMulticastReceiver, tDirectoryHB, tTcpClient, tDbCopyAcceptor;
 
-    public ServerNode(String dirHost, int dirPort, String mcIfIp,
+    public QuizServer(String dirHost, int dirPort, String mcIfIp,
                       int clientPort, int dbCopyPort, Path initialDbPath) throws Exception {
         this.id = UUID.randomUUID().toString();
         this.ip = InetAddress.getLocalHost().getHostAddress();
@@ -144,10 +144,7 @@ public class ServerNode implements IServerNode, Runnable, AutoCloseable {
             }
         }
     }
-    public Db getDb() {
-        initDatabaseLayerIfNeeded();
-        return db;
-    }
+    // IQUIZSERVER INTERFACE
     @Override public String id() { return id; }
     @Override public String ip() { return ip; }
     @Override public int clientPort() { return clientPort; }
@@ -161,11 +158,14 @@ public class ServerNode implements IServerNode, Runnable, AutoCloseable {
     @Override public NetworkInterface mcIf() { return mcIf; }
     @Override public boolean isRunning() { return running; }
 
-    @Override
-    public AuthService getAuthService() {
-        initDatabaseLayerIfNeeded();
-        return authService;
-    }
+    @Override public AuthService getAuthService() {initDatabaseLayerIfNeeded(); return authService;}
+    @Override public long dbVersion() { return dbVersion.get(); }
+    @Override public Path dbPath() { return dbPath; }
+    @Override public Db getDb() {initDatabaseLayerIfNeeded(); return db;}
+
+
+    @Override public boolean tryLockCopy()  { return copying.compareAndSet(false, true); }
+    @Override public void    unlockCopy()   { copying.set(false); }
 
     @Override public boolean isPrimary() { return isPrimary; }
     @Override public void setPrimary(String ip, int port) {
@@ -179,21 +179,13 @@ public class ServerNode implements IServerNode, Runnable, AutoCloseable {
         }
     }
 
-    @Override public long dbVersion() { return dbVersion.get(); }
     @Override public void setDbVersion(long v) {
         if (v < 0) v = 0;
         long old = dbVersion.getAndSet(v);
         if (old != v) refreshDbPath();
     }
 
-    @Override public Path dbPath() { return dbPath; }
-
-    // “fusível” para MulticastRunnable
-    public boolean tryLockCopy()  { return copying.compareAndSet(false, true); }
-    public void    unlockCopy()   { copying.set(false); }
-
-    @Override public void run() { start(); }
-
+    // CLOSEABLE INTERFACE
     @Override
     public void close() throws Exception {
         running = false;
@@ -202,11 +194,13 @@ public class ServerNode implements IServerNode, Runnable, AutoCloseable {
         if (tTcpClient != null)          tTcpClient.interrupt();
         if (tDbCopyAcceptor != null)     tDbCopyAcceptor.interrupt();
     }
+    // RUNNABLE INTERFACE
+    @Override public void run() { start(); }
 
-    public void start() {
-        tDirectoryHB       = new Thread(new DirectoryHeartbeatRunnable(this), "directory-hb");
-        tMulticastReceiver = new Thread(new MulticastRunnable(this), "multicast-receiver");
-        tTcpClient         = new Thread(new TcpClientAcceptorRunnable(this), "tcp-client");
+    private void start() {
+        tDirectoryHB       = new Thread(new DirectoryHeartbeatThread(this), "directory-hb");
+        tMulticastReceiver = new Thread(new ClusterHeartbeatThread(this), "multicast-receiver");
+        tTcpClient         = new Thread(new ClientListenerThread(this), "tcp-client");
         tDbCopyAcceptor    = new Thread(new DbCopyAcceptorRunnable(this), "dbcopy-acceptor");
 
         tMulticastReceiver.start();
@@ -214,4 +208,5 @@ public class ServerNode implements IServerNode, Runnable, AutoCloseable {
         tTcpClient.start();
         tDbCopyAcceptor.start();
     }
+
 }

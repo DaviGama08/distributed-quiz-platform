@@ -1,4 +1,4 @@
-package pt.isec.server.threads.client;
+package pt.isec.server.threads;
 
 import pt.isec.common.dto.auth.LoginRequestDTO;
 import pt.isec.common.dto.auth.LoginResponseDTO;
@@ -6,21 +6,20 @@ import pt.isec.common.dto.auth.RegisterStudentDTO;
 import pt.isec.common.dto.auth.RegisterTeacherDTO;
 import pt.isec.common.messages.MessageType;
 import pt.isec.common.messages.Message;
-import pt.isec.server.IServerNode;
+import pt.isec.server.IQuizServer;
 import pt.isec.server.NetworkConnection;
-import pt.isec.server.ServerNode;
-import pt.isec.server.services.auth.AuthService;
+
 import java.io.IOException;
 import java.time.Duration;
 
-public class ClientHandlerRunnable implements Runnable{
+public class ClientHandlerThread implements Runnable{
     private static final int FIRST_MESSAGE_TIMEOUT_SEC = 30;
     private static final Duration NO_TIMEOUT = Duration.ZERO;
 
-    private final IServerNode tInfo;
+    private final IQuizServer tInfo;
     private NetworkConnection connection;
 
-    public ClientHandlerRunnable(IServerNode tInfo, NetworkConnection connection) {
+    public ClientHandlerThread(IQuizServer tInfo, NetworkConnection connection) {
         this.tInfo = tInfo; this.connection = connection;
     }
 

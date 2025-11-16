@@ -4,10 +4,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
-public class MainServer {
+public class LauncherServer {
     public static void main(String[] args) throws Exception {
         if (args.length != 6) {
-            System.out.println("usage: MainServer <dirHost> <dirPort> <dataDir|PROJECT|HOME> <mcIfIp|AUTO> <clientPort> <dbCopyPort>");
+            System.out.println("usage: LauncherServer <dirHost> <dirPort> <dataDir|PROJECT|HOME> <mcIfIp|AUTO> <clientPort> <dbCopyPort>");
             return;
         }
         Class.forName("org.sqlite.JDBC");
@@ -41,9 +41,9 @@ public class MainServer {
         System.out.println("[DB] file: " + dbFile + " (exists=" + Files.exists(dbFile) + ")");
 
         // NÃO usar try-with-resources aqui, para o servidor não fechar logo
-        ServerNode node = new ServerNode(dirHost, dirPort, mcIfIp, clientPort, dbCopyPort, dbFile);
-        node.start();
+        QuizServer quizServer = new QuizServer(dirHost, dirPort, mcIfIp, clientPort, dbCopyPort, dbFile);
+        quizServer.run();
 
-        System.out.println("[MainServer] Servidor iniciado. Ctrl+C para terminar.");
+        System.out.println("[LauncherServer] Servidor iniciado. Ctrl+C para terminar.");
     }
 }

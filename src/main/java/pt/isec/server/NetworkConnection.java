@@ -1,5 +1,4 @@
 package pt.isec.server;
-
 import pt.isec.common.messages.Message;
 
 import java.io.*;

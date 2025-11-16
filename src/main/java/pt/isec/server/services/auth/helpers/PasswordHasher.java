@@ -1,4 +1,4 @@
-package pt.isec.server.services.auth;
+package pt.isec.server.services.auth.helpers;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.SecretKeyFactory;
 import java.security.SecureRandom;

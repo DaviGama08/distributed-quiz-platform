@@ -6,7 +6,7 @@ import pt.isec.server.services.auth.AuthService;
 import java.net.NetworkInterface;
 import java.nio.file.Path;
 
-public interface IServerNode {
+public interface IQuizServer {
     String id();
     String ip();
     int clientPort();
@@ -31,7 +31,9 @@ public interface IServerNode {
 
     void initDatabaseLayerIfNeeded();
     Db getDb();
-    AuthService getAuthService();
+    boolean tryLockCopy();
+    void unlockCopy();
 
+    AuthService getAuthService();
     record Principal(String ip, int port){}
 }

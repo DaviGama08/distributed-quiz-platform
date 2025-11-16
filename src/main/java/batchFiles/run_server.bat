@@ -9,7 +9,7 @@ javac -d ..\bin\server.pt.isec ^
   ..\pt\isec\server\services\session\*.java ^
   ..\pt\isec\common\messages\*.java ^
   ..\pt\isec\common\dto\auth\*.java ^
-  ..\pt\isec\common\model\user\*.java
+  ..\pt\isec\server\model\user\*.java
 pause
 
 java --enable-native-access=ALL-UNNAMED ^

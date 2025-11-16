@@ -209,7 +209,7 @@ public class ClientService implements IClientService {
     }
 
     private boolean connectToServer() {
-        try{
+        try {
             tcpSocket = new Socket();
             tcpSocket.connect(new InetSocketAddress(serverTcpHost, serverTcpPort), CONNECTION_TIMEOUT_MS);
 
@@ -217,13 +217,46 @@ public class ClientService implements IClientService {
             out.flush();
             in  = new ObjectInputStream(tcpSocket.getInputStream());
 
-            return true;
-        } catch (IOException e){
+            // === HANDSHAKE INICIAL ===
+            try {
+                Object obj = in.readObject();
+                if (!(obj instanceof Message<?>)) {
+                    System.err.println("[ClientService] Unexpected handshake object: " + obj);
+                    closeConnection();
+                    return false;
+                }
+
+                Message<?> handshake = (Message<?>) obj;
+
+                switch (handshake.getType()) {
+                    case ACK -> {
+                        System.out.println("[ClientService] Connected to primary server.");
+                        return true;
+                    }
+                    case NACK -> {
+                        System.err.println("[ClientService] Server refused connection: " + handshake.getData());
+                        closeConnection();
+                        return false;
+                    }
+                    default -> {
+                        System.err.println("[ClientService] Unexpected handshake message: " + handshake.getType());
+                        closeConnection();
+                        return false;
+                    }
+                }
+            } catch (ClassNotFoundException e) {
+                System.err.println("[ClientService] Handshake failed: " + e.getMessage());
+                closeConnection();
+                return false;
+            }
+
+        } catch (IOException e) {
             System.err.println("[ClientService] Error connecting TCP: " + e.getMessage());
             closeConnection();
             return false;
         }
     }
+
 
     private void closeConnection(){
         try { if (in != null) in.close(); }  catch (Exception ignored) {}
@@ -237,11 +270,9 @@ public class ClientService implements IClientService {
     private void startThreads(){
         tListener = new Thread(new ClientListenerRunnable(this),  "ClientListener");
         tSender   = new Thread(new RequestSenderRunnable(this),   "RequestSender");
-        tResponse = new Thread(new ResponseHandlerRunnable(this), "ResponseHandler");
 
         tListener.start();
         tSender.start();
-        tResponse.start();
     }
 
     public void handleConnectionLost(){

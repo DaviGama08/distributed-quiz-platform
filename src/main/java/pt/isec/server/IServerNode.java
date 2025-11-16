@@ -1,5 +1,8 @@
 package pt.isec.server;
 
+import pt.isec.server.db.Db;
+import pt.isec.server.services.auth.AuthService;
+
 import java.net.NetworkInterface;
 import java.nio.file.Path;
 
@@ -25,6 +28,10 @@ public interface IServerNode {
     void setDbVersion(long v);
 
     Path dbPath();
+
+    void initDatabaseLayerIfNeeded();
+    Db getDb();
+    AuthService getAuthService();
 
     record Principal(String ip, int port){}
 }

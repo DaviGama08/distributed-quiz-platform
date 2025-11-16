@@ -1,6 +1,7 @@
 package pt.isec.server.threads;
 
 import pt.isec.server.IServerNode;
+import pt.isec.server.ServerNode;
 import pt.isec.server.db.Db;
 import pt.isec.server.services.config.ConfigServices;
 
@@ -62,19 +63,25 @@ public class DirectoryHeartbeatRunnable implements Runnable, AutoCloseable {
 
             if (iAmPrimary) {
                 try {
-                    pt.isec.server.db.DbFiles.createIfMissing(tInfo.dbPath(), "/db/schema.sql");
-                    System.out.println("[DB] base de dados criada: " + tInfo.dbPath());
-                } catch (Exception e) {
-                    System.err.println("[DB] erro a criar base de dados: " + e.getMessage());
-                }
+                    // garantir que estamos a usar o ServerNode concreto
+                    if (tInfo instanceof ServerNode node) {
 
-                Db db = new Db("jdbc:sqlite:" + tInfo.dbPath().toAbsolutePath());
-                var cfg = new ConfigServices();
-                db.executeUpdate(
-                        "INSERT INTO config (id, db_version, teacher_code_hash) VALUES (1, 0, ?) " +
-                                "ON CONFLICT(id) DO UPDATE SET teacher_code_hash=excluded.teacher_code_hash",
-                        cfg.getTeachersRegisterHash()
-                );
+                        // 1) inicializa BD + DAOs + AuthService (se ainda não estiver feito)
+                        node.initDatabaseLayerIfNeeded();
+
+                        // 2) inicializa a tabela config com o código de registo dos docentes
+                        var cfg = new ConfigServices();
+                        node.getDb().executeUpdate(
+                                "INSERT INTO config (id, db_version, teacher_code_hash) VALUES (1, 0, ?) " +
+                                        "ON CONFLICT(id) DO UPDATE SET teacher_code_hash=excluded.teacher_code_hash",
+                                cfg.getTeachersRegisterHash()
+                        );
+                    } else {
+                        System.err.println("[DB] tInfo não é ServerNode — não consigo inicializar BD/Auth.");
+                    }
+                } catch (Exception e) {
+                    System.err.println("[DB] erro a inicializar base de dados: " + e.getMessage());
+                }
             } else {
                 if (!Files.exists(tInfo.dbPath())) {
                     System.out.println("[DB] backup sem base de dados local; vai aguardar heartbeat multicast para copiar.");

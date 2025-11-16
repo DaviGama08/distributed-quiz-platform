@@ -28,9 +28,31 @@ public class AuthClientService {
 
         try {
             Message<?> response = clientService.waitForResponse();
-            if(response.getType() == MessageType.ACK) {
-                System.out.println("[AuthClient] Student registered successfully");
+
+            if (response.getType() == MessageType.LOGIN_OK) {
+                LoginResponseDTO loginData = response.getDataAs(LoginResponseDTO.class);
+                if (loginData == null) {
+                    System.err.println("[AuthClient] Registration failed: empty payload");
+                    return false;
+                }
+
+                this.currentUser = new AuthenticatedUserDTO(
+                        loginData.userId(),
+                        loginData.name(),
+                        loginData.email(),
+                        loginData.userType()
+                );
+
+                // ATUALIZAR ESTADO VISÍVEL PARA A UI
+                clientService.setUserType(loginData.userType());
+                clientService.setUserEmail(loginData.email());
+                clientService.setAuthenticated(true);
+
+                System.out.println("[AuthClient] Student registered and logged in");
                 return true;
+            } else if (response.getType() == MessageType.ERROR) {
+                System.err.println("[AuthClient] Registration error: " + response.getData());
+                return false;
             } else {
                 System.err.println("[AuthClient] Registration failed: " + response.getType());
                 return false;
@@ -45,18 +67,40 @@ public class AuthClientService {
     /**
      * Registra um novo professor
      */
-    public boolean registerTeacher(String name, String email, String password, String teacherCode) {
-        RegisterTeacherDTO dto = new RegisterTeacherDTO(name, email, password, teacherCode);
-        Message<RegisterTeacherDTO> message = new Message<>(MessageType.REGISTER_TEACHER, dto);
+    public boolean registerTeacher(String name, String email, String password, String teacherRegisterCode) {
+        RegisterTeacherDTO dto = new RegisterTeacherDTO(name, email, password, teacherRegisterCode);
+        Message<RegisterTeacherDTO> message = new Message<RegisterTeacherDTO>(MessageType.REGISTER_TEACHER, dto);
 
         System.out.println("[AuthClient] Registering teacher: " + email);
         clientService.sendMessage(message);
 
         try {
             Message<?> response = clientService.waitForResponse();
-            if(response.getType() == MessageType.ACK) {
-                System.out.println("[AuthClient] Teacher registered successfully");
+
+            if (response.getType() == MessageType.LOGIN_OK) {
+                LoginResponseDTO loginData = response.getDataAs(LoginResponseDTO.class);
+                if (loginData == null) {
+                    System.err.println("[AuthClient] Registration failed: empty payload");
+                    return false;
+                }
+
+                this.currentUser = new AuthenticatedUserDTO(
+                        loginData.userId(),
+                        loginData.name(),
+                        loginData.email(),
+                        loginData.userType()
+                );
+
+                // ATUALIZAR ESTADO VISÍVEL PARA A UI
+                clientService.setUserType(loginData.userType());
+                clientService.setUserEmail(loginData.email());
+                clientService.setAuthenticated(true);
+
+                System.out.println("[AuthClient] Teacher registered and logged in");
                 return true;
+            } else if (response.getType() == MessageType.ERROR) {
+                System.err.println("[AuthClient] Registration error: " + response.getData());
+                return false;
             } else {
                 System.err.println("[AuthClient] Registration failed: " + response.getType());
                 return false;
@@ -83,15 +127,26 @@ public class AuthClientService {
             if(response.getType() == MessageType.LOGIN_OK) {
                 LoginResponseDTO loginData = response.getDataAs(LoginResponseDTO.class);
 
-                // Salvar usuário autenticado
+                if (loginData == null) {
+                    System.err.println("[AuthClient] Login failed: empty payload");
+                    return null;
+                }
+
+                // guardar utilizador atual
                 this.currentUser = new AuthenticatedUserDTO(
-                    loginData.userId(),
-                    loginData.name(),
-                    loginData.email(),
-                    loginData.userType()
+                        loginData.userId(),
+                        loginData.name(),
+                        loginData.email(),
+                        loginData.userType()
                 );
 
-                System.out.println("[AuthClient] Login successful: " + loginData.name() + " (" + loginData.userType() + ")");
+                // MUITO IMPORTANTE: notificar ClientService / UI
+                clientService.setUserType(loginData.userType());
+                clientService.setUserEmail(loginData.email());
+                clientService.setAuthenticated(true);
+
+                System.out.println("[AuthClient] Login successful: " +
+                        loginData.name() + " (" + loginData.userType() + ")");
                 return loginData;
             } else {
                 System.err.println("[AuthClient] Login failed: " + response.getType());
@@ -103,6 +158,7 @@ public class AuthClientService {
             return null;
         }
     }
+
 
     /**
      * Faz logout do usuário atual

@@ -1,4 +1,8 @@
 package pt.isec.server;
+import pt.isec.server.db.Db;
+import pt.isec.server.db.dao.StudentDAO;
+import pt.isec.server.db.dao.TeacherDAO;
+import pt.isec.server.services.auth.AuthService;
 import pt.isec.server.threads.client.TcpClientAcceptorRunnable;
 import pt.isec.server.threads.DirectoryHeartbeatRunnable;
 import pt.isec.server.threads.MulticastRunnable;
@@ -12,6 +16,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class ServerNode implements IServerNode, Runnable, AutoCloseable {
+    private volatile boolean dbInitialised = false;
+    private Db db;
+    private TeacherDAO teacherDAO;
+    private StudentDAO studentDAO;
+    private AuthService authService;
 
     private final String id;
     private final String ip;
@@ -33,7 +42,6 @@ public class ServerNode implements IServerNode, Runnable, AutoCloseable {
     private volatile Principal master;
     private final AtomicLong dbVersion = new AtomicLong(0);
 
-    // NOVO: “fusível” para impedir cópias concorrentes
     private final AtomicBoolean copying = new AtomicBoolean(false);
 
     private Thread tMulticastReceiver, tDirectoryHB, tTcpClient, tDbCopyAcceptor;
@@ -46,6 +54,8 @@ public class ServerNode implements IServerNode, Runnable, AutoCloseable {
         this.dbCopyPort = dbCopyPort;
         this.dirHost = dirHost;
         this.dirPort = dirPort;
+
+        this.authService = new AuthService(teacherDAO, studentDAO);
 
         this.dataDir = (initialDbPath.getParent() != null) ? initialDbPath.getParent().toAbsolutePath()
                 : Paths.get(".").toAbsolutePath();
@@ -98,6 +108,46 @@ public class ServerNode implements IServerNode, Runnable, AutoCloseable {
         System.out.println("[DB] agora a usar: " + this.dbPath + " (role=" + (isPrimary? "PRIMARY":"BACKUP") + ", v=" + dbVersion.get() + ")");
     }
 
+    @Override
+    public void initDatabaseLayerIfNeeded() {
+        // só o primeiro thread faz a inicialização
+        if (dbInitialised)
+            return;
+
+        synchronized (this) {
+            if (dbInitialised)
+                return;
+
+            try {
+                // garante que o ficheiro .db existe e tem o schema
+                pt.isec.server.db.DbFiles.createIfMissing(
+                        this.dbPath,
+                        "/db/schema.sql"
+                );
+
+                // cria helper Db apontando para o ficheiro atual
+                this.db = new pt.isec.server.db.Db("jdbc:sqlite:" + this.dbPath.toAbsolutePath());
+
+                // cria DAOs
+                this.teacherDAO = new pt.isec.server.db.dao.TeacherDAO(db);
+                this.studentDAO = new pt.isec.server.db.dao.StudentDAO(db);
+
+                // AuthService com DAOs válidos
+                this.authService = new pt.isec.server.services.auth.AuthService(teacherDAO, studentDAO);
+
+                System.out.println("[DB] camada de dados inicializada em " + dbPath);
+                dbInitialised = true;
+            } catch (Exception e) {
+                System.err.println("[DB] erro a inicializar camada de dados: " + e.getMessage());
+                e.printStackTrace();
+                throw new RuntimeException("Falha a inicializar DB/DAOs/AuthService", e);
+            }
+        }
+    }
+    public Db getDb() {
+        initDatabaseLayerIfNeeded();
+        return db;
+    }
     @Override public String id() { return id; }
     @Override public String ip() { return ip; }
     @Override public int clientPort() { return clientPort; }
@@ -110,6 +160,12 @@ public class ServerNode implements IServerNode, Runnable, AutoCloseable {
     @Override public int mcPort() { return mcPort; }
     @Override public NetworkInterface mcIf() { return mcIf; }
     @Override public boolean isRunning() { return running; }
+
+    @Override
+    public AuthService getAuthService() {
+        initDatabaseLayerIfNeeded();
+        return authService;
+    }
 
     @Override public boolean isPrimary() { return isPrimary; }
     @Override public void setPrimary(String ip, int port) {

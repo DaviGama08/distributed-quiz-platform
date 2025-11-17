@@ -8,12 +8,12 @@ import java.io.Serializable;
 
 /**
  * Thread que processa as respostas do servidor da fila de respostas
- * e executa a lógica apropriada para cada tipo de mensagem
+ * e executa a lógica apropriada para cada tipo de mensagem.
  */
-public class ResponseHandlerRunnable implements Runnable{
+public class ResponseHandlerThread implements Runnable{
     private final IClientService service;
 
-    public ResponseHandlerRunnable(IClientService service) {
+    public ResponseHandlerThread(IClientService service) {
         this.service = service;
     }
 
@@ -23,9 +23,7 @@ public class ResponseHandlerRunnable implements Runnable{
 
         while(service.isRunning()) {
             try {
-                // Blocking take - espera até haver resposta na fila
                 Message<? extends Serializable> response = service.getResponseQueue().take();
-
                 processResponse(response);
             } catch (InterruptedException e) {
                 System.out.println("[ResponseHandler] Interrupted");
@@ -45,12 +43,10 @@ public class ResponseHandlerRunnable implements Runnable{
         switch(type) {
             case LOGIN_OK:
                 System.out.println("[ResponseHandler] Login successful!");
-                // TODO: Notificar UI/Manager
                 break;
 
             case LOGIN_FAIL:
                 System.err.println("[ResponseHandler] Login failed!");
-                // TODO: Notificar UI/Manager
                 break;
 
             case ACK:
@@ -71,17 +67,14 @@ public class ResponseHandlerRunnable implements Runnable{
 
             case LIST_QUESTIONS_RESPONSE:
                 System.out.println("[ResponseHandler] Questions list received");
-                // TODO: Processar lista de questões
                 break;
 
             case VIEW_ANSWERS_RESPONSE:
                 System.out.println("[ResponseHandler] Answers received");
-                // TODO: Processar respostas
                 break;
 
             case QUESTION_DETAILS:
                 System.out.println("[ResponseHandler] Question details received");
-                // TODO: Mostrar detalhes da questão
                 break;
 
             case SUBMIT_OK:
@@ -94,7 +87,6 @@ public class ResponseHandlerRunnable implements Runnable{
 
             case LIST_ANSWERED_RESPONSE:
                 System.out.println("[ResponseHandler] Answered questions history received");
-                // TODO: Processar histórico
                 break;
 
             default:

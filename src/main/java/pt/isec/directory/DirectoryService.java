@@ -1,11 +1,10 @@
-package pt.isec.directory.service;
+package pt.isec.directory;
 
 import pt.isec.common.messages.UdpMessage;
-import pt.isec.directory.ServerInfo;
-import pt.isec.directory.threads.MetricsRunnable;
-import pt.isec.directory.threads.ReaperRunnable;
-import pt.isec.directory.threads.UdpListenerRunnable;
-import pt.isec.directory.threads.WorkerRunnable;
+import pt.isec.directory.threads.MetricsThread;
+import pt.isec.directory.threads.ReaperThread;
+import pt.isec.directory.threads.UdpListenerThread;
+import pt.isec.directory.threads.WorkerThread;
 
 import java.net.DatagramSocket;
 import java.net.SocketException;
@@ -73,18 +72,18 @@ public class DirectoryService implements IDirectoryService {
         }
         this.queue = new ArrayBlockingQueue<>(queueCapacity);
 
-        tListener = new Thread(new UdpListenerRunnable(this), "dir-udp_listener");
+        tListener = new Thread(new UdpListenerThread(this), "dir-udp_listener");
         tListener.start();
 
         for (int i = 0; i < tWorkers.length; i++) {
-            tWorkers[i] = new Thread(new WorkerRunnable(this), "dir-worker_" + i);
+            tWorkers[i] = new Thread(new WorkerThread(this), "dir-worker_" + i);
             tWorkers[i].start();
         }
 
-        tReaper  = new Thread(new ReaperRunnable(this, reaperEveryMs), "dir-reaper");
+        tReaper  = new Thread(new ReaperThread(this, reaperEveryMs), "dir-reaper");
         tReaper.start();
 
-        tMetrics = new Thread(new MetricsRunnable(this, metricsEveryMs), "dir-metrics");
+        tMetrics = new Thread(new MetricsThread(this, metricsEveryMs), "dir-metrics");
         tMetrics.start();
     }
 

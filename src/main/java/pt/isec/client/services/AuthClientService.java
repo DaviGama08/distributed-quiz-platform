@@ -1,220 +1,99 @@
 package pt.isec.client.services;
 
-import pt.isec.common.dto.auth.*;
+import pt.isec.common.dto.auth.LoginRequestDTO;
+import pt.isec.common.dto.auth.LoginResponseDTO;
+import pt.isec.common.dto.auth.RegisterStudentDTO;
+import pt.isec.common.dto.auth.RegisterTeacherDTO;
 import pt.isec.common.messages.Message;
 import pt.isec.common.messages.MessageType;
 
+import java.io.Serializable;
+
 /**
- * Serviço de autenticação do cliente
- * Fornece métodos de alto nível para registro e login
+ * Serviço responsável pelas operações de autenticação (login e registo).
  */
 public class AuthClientService {
-    private final ClientService clientService;
-    private AuthenticatedUserDTO currentUser;
 
-    public AuthClientService(ClientService clientService) {
-        this.clientService = clientService;
+    private static final long REQ_TIMEOUT_MS = 8000; // 8 segundos
+
+    private final ClientService service;
+
+    public AuthClientService(ClientService service) {
+        this.service = service;
     }
 
-    /**
-     * Registra um novo estudante
-     */
-    public boolean registerStudent(String name, String email, String password, Integer studentNumber) {
-        RegisterStudentDTO dto = new RegisterStudentDTO(name, email, password, studentNumber);
-        Message<RegisterStudentDTO> message = new Message<>(MessageType.REGISTER_STUDENT, dto);
-
-        System.out.println("[AuthClient] Registering student: " + email);
-        clientService.sendMessage(message);
-
-        try {
-            Message<?> response = clientService.waitForResponse();
-
-            if (response.getType() == MessageType.LOGIN_OK) {
-                LoginResponseDTO loginData = response.getDataAs(LoginResponseDTO.class);
-                if (loginData == null) {
-                    System.err.println("[AuthClient] Registration failed: empty payload");
-                    return false;
-                }
-
-                this.currentUser = new AuthenticatedUserDTO(
-                        loginData.userId(),
-                        loginData.name(),
-                        loginData.email(),
-                        loginData.userType()
-                );
-
-                // ATUALIZAR ESTADO VISÍVEL PARA A UI
-                clientService.setUserType(loginData.userType());
-                clientService.setUserEmail(loginData.email());
-                clientService.setAuthenticated(true);
-
-                System.out.println("[AuthClient] Student registered and logged in");
-                return true;
-            } else if (response.getType() == MessageType.ERROR) {
-                System.err.println("[AuthClient] Registration error: " + response.getData());
-                return false;
-            } else {
-                System.err.println("[AuthClient] Registration failed: " + response.getType());
-                return false;
-            }
-        } catch (InterruptedException e) {
-            System.err.println("[AuthClient] Registration interrupted: " + e.getMessage());
-            Thread.currentThread().interrupt();
-            return false;
-        }
-    }
-
-    /**
-     * Registra um novo professor
-     */
-    public boolean registerTeacher(String name, String email, String password, String teacherRegisterCode) {
-        RegisterTeacherDTO dto = new RegisterTeacherDTO(name, email, password, teacherRegisterCode);
-        Message<RegisterTeacherDTO> message = new Message<RegisterTeacherDTO>(MessageType.REGISTER_TEACHER, dto);
-
-        System.out.println("[AuthClient] Registering teacher: " + email);
-        clientService.sendMessage(message);
-
-        try {
-            Message<?> response = clientService.waitForResponse();
-
-            if (response.getType() == MessageType.LOGIN_OK) {
-                LoginResponseDTO loginData = response.getDataAs(LoginResponseDTO.class);
-                if (loginData == null) {
-                    System.err.println("[AuthClient] Registration failed: empty payload");
-                    return false;
-                }
-
-                this.currentUser = new AuthenticatedUserDTO(
-                        loginData.userId(),
-                        loginData.name(),
-                        loginData.email(),
-                        loginData.userType()
-                );
-
-                // ATUALIZAR ESTADO VISÍVEL PARA A UI
-                clientService.setUserType(loginData.userType());
-                clientService.setUserEmail(loginData.email());
-                clientService.setAuthenticated(true);
-
-                System.out.println("[AuthClient] Teacher registered and logged in");
-                return true;
-            } else if (response.getType() == MessageType.ERROR) {
-                System.err.println("[AuthClient] Registration error: " + response.getData());
-                return false;
-            } else {
-                System.err.println("[AuthClient] Registration failed: " + response.getType());
-                return false;
-            }
-        } catch (InterruptedException e) {
-            System.err.println("[AuthClient] Registration interrupted: " + e.getMessage());
-            Thread.currentThread().interrupt();
-            return false;
-        }
-    }
-
-    /**
-     * Faz login de um usuário
-     */
-    public LoginResponseDTO login(String email, String password) {
+    /** Envia pedido de login e aguarda resposta com timeout */
+    public LoginResponseDTO login(String email, String password) throws Exception {
         LoginRequestDTO dto = new LoginRequestDTO(email, password);
-        Message<LoginRequestDTO> message = new Message<>(MessageType.LOGIN, dto);
+        Message<LoginRequestDTO> msg =
+                new Message<>(MessageType.LOGIN, dto, LoginRequestDTO.class);
 
-        System.out.println("[AuthClient] Logging in: " + email);
-        clientService.sendMessage(message);
+        service.sendMessage(msg);
 
-        try {
-            Message<?> response = clientService.waitForResponse();
-            if(response.getType() == MessageType.LOGIN_OK) {
-                LoginResponseDTO loginData = response.getDataAs(LoginResponseDTO.class);
+        Message<? extends Serializable> resp =
+                service.waitForResponse(REQ_TIMEOUT_MS);
 
-                if (loginData == null) {
-                    System.err.println("[AuthClient] Login failed: empty payload");
-                    return null;
-                }
+        if (resp == null) {
+            throw new RuntimeException("Timeout ao aguardar resposta do servidor.");
+        }
 
-                // guardar utilizador atual
-                this.currentUser = new AuthenticatedUserDTO(
-                        loginData.userId(),
-                        loginData.name(),
-                        loginData.email(),
-                        loginData.userType()
-                );
+        return switch (resp.getType()) {
+            case LOGIN_OK -> resp.getDataAs(LoginResponseDTO.class);
+            case LOGIN_FAIL -> null; // credenciais inválidas
+            case ERROR -> throw new RuntimeException(String.valueOf(resp.getData()));
+            default -> throw new RuntimeException("Resposta inesperada: " + resp.getType());
+        };
+    }
 
-                // MUITO IMPORTANTE: notificar ClientService / UI
-                clientService.setUserType(loginData.userType());
-                clientService.setUserEmail(loginData.email());
-                clientService.setAuthenticated(true);
+    /** Regista um docente */
+    public boolean registerTeacher(String name, String email,
+                                   String password, String teacherCode) throws Exception {
 
-                System.out.println("[AuthClient] Login successful: " +
-                        loginData.name() + " (" + loginData.userType() + ")");
-                return loginData;
-            } else {
-                System.err.println("[AuthClient] Login failed: " + response.getType());
-                return null;
+        RegisterTeacherDTO dto = new RegisterTeacherDTO(name, email, password, teacherCode);
+        Message<RegisterTeacherDTO> msg =
+                new Message<>(MessageType.REGISTER_TEACHER, dto, RegisterTeacherDTO.class);
+
+        service.sendMessage(msg);
+
+        Message<? extends Serializable> resp =
+                service.waitForResponse(REQ_TIMEOUT_MS);
+
+        if (resp == null) {
+            throw new RuntimeException("Timeout ao aguardar resposta do servidor.");
+        }
+
+        return switch (resp.getType()) {
+            case LOGIN_OK, ACK -> true;              // registo OK
+            case ERROR, NACK -> {
+                throw new RuntimeException(String.valueOf(resp.getData()));
             }
-        } catch (InterruptedException e) {
-            System.err.println("[AuthClient] Login interrupted: " + e.getMessage());
-            Thread.currentThread().interrupt();
-            return null;
-        }
+            default -> false;
+        };
     }
 
+    /** Regista um estudante */
+    public boolean registerStudent(String name, String email,
+                                   String password, int studentNumber) throws Exception {
 
-    /**
-     * Faz logout do usuário atual
-     */
-    public boolean logout() {
-        if(currentUser == null) {
-            System.err.println("[AuthClient] No user logged in");
-            return false;
-        }
+        RegisterStudentDTO dto = new RegisterStudentDTO(name, email, password, studentNumber);
+        Message<RegisterStudentDTO> msg =
+                new Message<>(MessageType.REGISTER_STUDENT, dto, RegisterStudentDTO.class);
 
-        Message<String> message = new Message<>(MessageType.LOGOUT, currentUser.id());
-        clientService.sendMessage(message);
+        service.sendMessage(msg);
 
-        currentUser = null;
-        System.out.println("[AuthClient] Logged out successfully");
-        return true;
-    }
+        Message<? extends Serializable> resp =
+                service.waitForResponse(REQ_TIMEOUT_MS);
 
-    /**
-     * Altera a senha do usuário atual
-     */
-    public boolean changePassword(String oldPassword, String newPassword) {
-        if(currentUser == null) {
-            System.err.println("[AuthClient] No user logged in");
-            return false;
+        if (resp == null) {
+            throw new RuntimeException("Timeout ao aguardar resposta do servidor.");
         }
 
-        try {
-            Integer sessionId = Integer.parseInt(currentUser.id());
-            ChangePasswordDTO dto = new ChangePasswordDTO(sessionId, oldPassword, newPassword);
-            Message<ChangePasswordDTO> message = new Message<>(MessageType.REGISTER_STUDENT, dto); // TODO: Add CHANGE_PASSWORD type
-
-            clientService.sendMessage(message);
-
-            Message<?> response = clientService.waitForResponse();
-            return response.getType() == MessageType.ACK;
-        } catch (NumberFormatException | InterruptedException e) {
-            System.err.println("[AuthClient] Failed to change password: " + e.getMessage());
-            return false;
-        }
-    }
-
-    public AuthenticatedUserDTO getCurrentUser() {
-        return currentUser;
-    }
-
-    public boolean isLoggedIn() {
-        return currentUser != null;
-    }
-
-    public boolean isTeacher() {
-        return currentUser != null && "teacher".equalsIgnoreCase(currentUser.userType());
-    }
-
-    public boolean isStudent() {
-        return currentUser != null && "student".equalsIgnoreCase(currentUser.userType());
+        return switch (resp.getType()) {
+            case LOGIN_OK, ACK -> true;
+            case ERROR, NACK -> {
+                throw new RuntimeException(String.valueOf(resp.getData()));
+            }
+            default -> false;
+        };
     }
 }
-

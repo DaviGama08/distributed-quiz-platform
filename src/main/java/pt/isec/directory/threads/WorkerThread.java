@@ -1,7 +1,7 @@
 package pt.isec.directory.threads;
 
 import pt.isec.common.messages.UdpMessage;
-import pt.isec.directory.service.IDirectoryService;
+import pt.isec.directory.IDirectoryService;
 import pt.isec.directory.ServerInfo;
 
 import java.io.IOException;
@@ -10,10 +10,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-public class WorkerRunnable implements Runnable{
+public class WorkerThread implements Runnable{
     private final IDirectoryService tInfo;
 
-    public WorkerRunnable(IDirectoryService tInfo){this.tInfo = tInfo;}
+    public WorkerThread(IDirectoryService tInfo){this.tInfo = tInfo;}
 
     @Override
     public void run() {
@@ -174,7 +174,7 @@ public class WorkerRunnable implements Runnable{
      *           400 BAD_REQUEST ID/TCP/TCP_PORT
      *           404 NO_PRINCIPAL
      */
-    // WorkerRunnable.java
+    // WorkerThread.java
     private String handleRegister(Map<String, String> kv) {
         String id  = kv.get("ID");
         String tcp = kv.get("TCP");

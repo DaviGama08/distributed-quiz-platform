@@ -1,7 +1,7 @@
 package pt.isec.directory.threads;
 
 import pt.isec.common.messages.UdpMessage;
-import pt.isec.directory.service.IDirectoryService;
+import pt.isec.directory.IDirectoryService;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -9,10 +9,10 @@ import java.net.DatagramSocket;
 
 /**
  * Diretoria robusta com 4 threads (todas via Runnable):
- *  (1) UdpListenerRunnable     — recebe datagramas UDP e empilha na fila
- *  (2) WorkerRunnable          — processa datagramas, atualiza estado e responde
- *  (3) ReaperRunnable          — TTL de 17s, remove servidores inativos
- *  (4) MetricsRunnable         — imprime estado e métricas periodicamente
+ *  (1) UdpListenerThread     — recebe datagramas UDP e empilha na fila
+ *  (2) WorkerThread          — processa datagramas, atualiza estado e responde
+ *  (3) ReaperThread          — TTL de 17s, remove servidores inativos
+ *  (4) MetricsThread         — imprime estado e métricas periodicamente
  *
  * Protocolo (texto, K=V separados por pipe '|'):
  *
@@ -32,10 +32,10 @@ import java.net.DatagramSocket;
  *  - "409 CONFLICT <motivo>"
  *  - "500 ERROR <motivo>"
  */
-public class UdpListenerRunnable implements Runnable {
+public class UdpListenerThread implements Runnable {
     private final IDirectoryService tInfo;
 
-    public UdpListenerRunnable(IDirectoryService tInfo) {
+    public UdpListenerThread(IDirectoryService tInfo) {
         this.tInfo = tInfo;
     }
 
@@ -65,6 +65,6 @@ public class UdpListenerRunnable implements Runnable {
                 break;
             }
         }
-        System.out.println("UdpListenerRunnable terminou.");
+        System.out.println("UdpListenerThread terminou.");
     }
 }

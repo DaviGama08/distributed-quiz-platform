@@ -7,34 +7,35 @@ import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
-import javafx.scene.text.TextAlignment;
 import pt.isec.client.ui.controller.AuthenticationController;
 
 import java.util.Objects;
 
+/**
+ * View de autenticação. A aparência é definida em authentication.css.
+ */
 public class AuthenticationView {
-
     private Scene scene;
 
-    // botão para alternar login/registro (lado esquerdo)
+    // alternância login/registo
     private Button toggleModeButton;
 
-    // títulos/subtítulos do lado direito
+    // títulos do painel direito
     private Label rightTitleLabel;
     private Label rightSubtitleLabel;
 
-    // contentores de formulário
+    // formulários
     private VBox loginFormBox;
     private VBox registerFormBox;
 
-    // Login
+    // componentes do login
     private TextField loginEmailField;
     private PasswordField loginPasswordField;
     private Button loginButton;
     private ProgressIndicator loginProgress;
     private Label loginStatusLabel;
 
-    // Registo
+    // componentes do registo
     private RadioButton rbStudent;
     private RadioButton rbTeacher;
     private Label registerExtraLabel;
@@ -45,170 +46,130 @@ public class AuthenticationView {
     private Button registerButton;
     private Label registerStatusLabel;
 
-    public AuthenticationView() { }
-
-    // --------------------------------------------------------
-    // Criação da View
-    // --------------------------------------------------------
+    // overlay semi‑transparente para bloquear a interface
+    private Pane busyOverlay;
 
     public void createView() {
         BorderPane root = new BorderPane();
         root.getStyleClass().add("auth-root");
 
-        HBox mainContent = new HBox();
-        mainContent.setSpacing(0);
+        // Painel esquerdo (logo + mensagem)
+        VBox leftPane = new VBox();
+        leftPane.getStyleClass().add("left-pane");
+        leftPane.setPrefWidth(380);
 
-        VBox leftPane = createLeftPane();
-        VBox rightPane = createRightPane();
+        VBox leftInner = new VBox(20);
+        leftInner.getStyleClass().add("left-inner");
 
-        HBox.setHgrow(leftPane, Priority.ALWAYS);
-        HBox.setHgrow(rightPane, Priority.ALWAYS);
-
-        mainContent.getChildren().addAll(leftPane, rightPane);
-        root.setCenter(mainContent);
-
-        scene = new Scene(root, 900, 600);
-
-        try {
-            var cssUrl = getClass().getResource("/styles/authentication.css");
-            if (cssUrl != null) {
-                scene.getStylesheets().add(cssUrl.toExternalForm());
-            }
-        } catch (Exception ignored) { }
-    }
-
-    public void registerHandlers(AuthenticationController controller) {
-        toggleModeButton.setOnAction(e -> controller.onToggleMode());
-
-        loginPasswordField.setOnAction(e -> controller.onLogin());
-        loginButton.setOnAction(e -> controller.onLogin());
-
-        registerButton.setOnAction(e -> controller.onRegister());
-        rbStudent.setOnAction(e -> controller.onRegisterTypeChanged("STUDENT"));
-        rbTeacher.setOnAction(e -> controller.onRegisterTypeChanged("TEACHER"));
-    }
-
-    public void update() {
-        // por enquanto nada específico
-    }
-
-    // --------------------------------------------------------
-    // LEFT PANE
-    // --------------------------------------------------------
-
-    private VBox createLeftPane() {
-        VBox pane = new VBox();
-        pane.getStyleClass().add("left-pane");
-        pane.setPrefWidth(380);
-
+        // Logo da instituição
         ImageView logoView;
         try {
             Image logo = new Image(Objects.requireNonNull(
-                    getClass().getResourceAsStream("/imgs/logo.png"),
-                    "logo.png não encontrado em resources"
+                    getClass().getResourceAsStream("/imgs/logo.png")
             ));
             logoView = new ImageView(logo);
             logoView.setPreserveRatio(true);
-            logoView.setFitHeight(200);
-            logoView.setFitWidth(200);
+            logoView.setFitHeight(120);
         } catch (Exception e) {
             logoView = new ImageView();
         }
 
-        Separator divider = new Separator();
-        divider.setPrefWidth(260);
-        divider.setOpacity(0.7);
-
-        Label welcomeTitle = new Label("Bem-vindo de volta!");
+        // Título e subtítulo centrados
+        Label welcomeTitle = new Label("Bem‑vindo!");
         welcomeTitle.getStyleClass().add("left-title");
-        welcomeTitle.setWrapText(true);
-        welcomeTitle.setTextAlignment(TextAlignment.CENTER);
-        welcomeTitle.setMaxWidth(280);
 
-        Label welcomeText = new Label(
-                "Para continuar ligado ao sistema,\n" +
-                        "autentique-se ou crie uma nova conta."
-        );
+        Label welcomeText = new Label("Autentique‑se ou crie uma conta para continuar.");
         welcomeText.getStyleClass().add("left-subtitle");
-        welcomeText.setWrapText(true);
-        welcomeText.setTextAlignment(TextAlignment.CENTER);
-        welcomeText.setMaxWidth(300);
 
         toggleModeButton = new Button("CRIAR CONTA");
         toggleModeButton.getStyleClass().add("toggle-mode-button");
-        toggleModeButton.setPrefWidth(220);
 
-        VBox inner = new VBox(28, logoView, divider, welcomeTitle, welcomeText, toggleModeButton);
-        inner.setAlignment(Pos.CENTER);
-        inner.getStyleClass().add("left-inner");
-        VBox.setVgrow(inner, Priority.ALWAYS);
+        leftInner.getChildren().addAll(logoView, welcomeTitle, welcomeText, toggleModeButton);
+        leftPane.getChildren().add(leftInner);
 
-        pane.getChildren().add(inner);
-        return pane;
-    }
+        // Painel direito (formularios)
+        VBox rightPane = new VBox();
+        rightPane.getStyleClass().add("right-pane");
+        rightPane.setAlignment(Pos.CENTER);
+        rightPane.setPadding(new Insets(40));
 
-    // --------------------------------------------------------
-    // RIGHT PANE
-    // --------------------------------------------------------
-
-    private VBox createRightPane() {
-        VBox pane = new VBox();
-        pane.getStyleClass().add("right-pane");
-        pane.setPadding(new Insets(40));
-        pane.setAlignment(Pos.CENTER);
-        pane.setPrefWidth(560);
-
-        rightTitleLabel = new Label("Entrar no Sistema");
+        rightTitleLabel = new Label("Entrar");
         rightTitleLabel.getStyleClass().add("right-title");
 
-        rightSubtitleLabel = new Label("Use o seu email e password para entrar.");
+        rightSubtitleLabel = new Label("Use o seu email e password.");
         rightSubtitleLabel.getStyleClass().add("right-subtitle");
+        rightSubtitleLabel.setWrapText(true); // permite quebra de linha
 
         VBox header = new VBox(5, rightTitleLabel, rightSubtitleLabel);
         header.setAlignment(Pos.CENTER);
 
         StackPane formsContainer = new StackPane();
-        formsContainer.setPadding(new Insets(20, 0, 0, 0));
+        formsContainer.setPadding(new Insets(30, 0, 0, 0));
 
         loginFormBox = createLoginForm();
         registerFormBox = createRegisterForm();
+
         formsContainer.getChildren().addAll(registerFormBox, loginFormBox);
 
         VBox centerBox = new VBox(30, header, formsContainer);
         centerBox.setAlignment(Pos.CENTER);
+        rightPane.getChildren().add(centerBox);
 
-        VBox.setVgrow(centerBox, Priority.ALWAYS);
-        pane.getChildren().add(centerBox);
+        root.setLeft(leftPane);
+        root.setCenter(rightPane);
+
+        // Overlay transparente sem spinner
+        StackPane stack = new StackPane();
+        stack.getChildren().add(root);
+
+        Pane overlay = new Pane();
+        overlay.getStyleClass().add("busy-overlay");
+        overlay.setVisible(false);
+        overlay.setMouseTransparent(false);
+        this.busyOverlay = overlay;
+
+        stack.getChildren().add(overlay);
+
+        scene = new Scene(stack, 900, 600);
+        // Carrega CSS
+        try {
+            var cssUrl = getClass().getResource("/styles/authentication.css");
+            if (cssUrl != null) {
+                scene.getStylesheets().add(cssUrl.toExternalForm());
+            }
+        } catch (Exception ignored) {
+        }
 
         showLoginMode();
-        return pane;
     }
 
+    /** Cria o formulário de login */
     private VBox createLoginForm() {
         VBox form = new VBox(12);
+        form.getStyleClass().add("auth-form");
         form.setAlignment(Pos.CENTER);
         form.setMaxWidth(340);
-        form.setPadding(new Insets(10));
 
         loginEmailField = new TextField();
-        loginEmailField.setPromptText("Email (ex: xxx@isec.pt)");
-        loginEmailField.setPrefWidth(340);
+        loginEmailField.setPromptText("Email");
+        loginEmailField.getStyleClass().add("form-field");
 
         loginPasswordField = new PasswordField();
         loginPasswordField.setPromptText("Password");
-        loginPasswordField.setPrefWidth(340);
+        loginPasswordField.getStyleClass().add("form-field");
 
         loginButton = new Button("ENTRAR");
         loginButton.getStyleClass().add("primary-pill-button");
         loginButton.setPrefWidth(220);
+        loginButton.setDefaultButton(true);  // Enter acciona login
 
         loginProgress = new ProgressIndicator();
         loginProgress.setMaxSize(30, 30);
         loginProgress.setVisible(false);
 
         loginStatusLabel = new Label();
+        loginStatusLabel.getStyleClass().add("status-label");
         loginStatusLabel.setWrapText(true);
-        loginStatusLabel.setTextAlignment(TextAlignment.CENTER);
         loginStatusLabel.setAlignment(Pos.CENTER);
         loginStatusLabel.setMaxWidth(340);
 
@@ -219,15 +180,15 @@ public class AuthenticationView {
                 loginProgress,
                 loginStatusLabel
         );
-
         return form;
     }
 
+    /** Cria o formulário de registo */
     private VBox createRegisterForm() {
         VBox form = new VBox(12);
+        form.getStyleClass().add("auth-form");
         form.setAlignment(Pos.CENTER);
         form.setMaxWidth(340);
-        form.setPadding(new Insets(10));
 
         ToggleGroup typeGroup = new ToggleGroup();
         rbStudent = new RadioButton("Estudante");
@@ -235,31 +196,38 @@ public class AuthenticationView {
         rbStudent.setToggleGroup(typeGroup);
         rbTeacher.setToggleGroup(typeGroup);
         rbStudent.setSelected(true);
+        rbStudent.getStyleClass().add("radio-dark");
+        rbTeacher.getStyleClass().add("radio-dark");
 
         HBox typeBox = new HBox(15, rbStudent, rbTeacher);
         typeBox.setAlignment(Pos.CENTER);
 
         registerNameField = new TextField();
         registerNameField.setPromptText("Nome completo");
+        registerNameField.getStyleClass().add("form-field");
 
         registerEmailField = new TextField();
-        registerEmailField.setPromptText("Email (ex: xxx@isec.pt)");
+        registerEmailField.setPromptText("Email");
+        registerEmailField.getStyleClass().add("form-field");
 
         registerPasswordField = new PasswordField();
-        registerPasswordField.setPromptText("Password (mínimo 6 caracteres)");
+        registerPasswordField.setPromptText("Password (mínimo 6)");
+        registerPasswordField.getStyleClass().add("form-field");
 
         registerExtraLabel = new Label("Número de Estudante");
-
+        registerExtraLabel.getStyleClass().add("label-dark");
         registerExtraField = new TextField();
         registerExtraField.setPromptText("Ex: 123456");
+        registerExtraField.getStyleClass().add("form-field");
 
         registerButton = new Button("CRIAR CONTA");
         registerButton.getStyleClass().add("primary-pill-button");
         registerButton.setPrefWidth(220);
+        registerButton.setDefaultButton(false); // passa a default no modo de registo
 
         registerStatusLabel = new Label();
+        registerStatusLabel.getStyleClass().add("status-label");
         registerStatusLabel.setWrapText(true);
-        registerStatusLabel.setTextAlignment(TextAlignment.CENTER);
         registerStatusLabel.setMaxWidth(340);
 
         form.getChildren().addAll(
@@ -272,17 +240,14 @@ public class AuthenticationView {
                 registerButton,
                 registerStatusLabel
         );
-
         return form;
     }
 
-    // --------------------------------------------------------
-    // Modos
-    // --------------------------------------------------------
-
+    /* Alterna para o modo login */
     public void showLoginMode() {
-        rightTitleLabel.setText("Entrar no Sistema");
-        rightSubtitleLabel.setText("Use o seu email e password para entrar.");
+        rightTitleLabel.setText("Entrar");
+        rightSubtitleLabel.setText("Use o seu email e password.");
+        rightSubtitleLabel.setWrapText(true);
         loginFormBox.setVisible(true);
         loginFormBox.setManaged(true);
 
@@ -290,11 +255,15 @@ public class AuthenticationView {
         registerFormBox.setManaged(false);
 
         toggleModeButton.setText("CRIAR CONTA");
+        loginButton.setDefaultButton(true);
+        registerButton.setDefaultButton(false);
     }
 
+    /* Alterna para o modo registo */
     public void showRegisterMode() {
         rightTitleLabel.setText("Criar Conta");
-        rightSubtitleLabel.setText("Use o seu email institucional para se registar.");
+        rightSubtitleLabel.setText("Use o seu email institucional.");
+        rightSubtitleLabel.setWrapText(true);
         loginFormBox.setVisible(false);
         loginFormBox.setManaged(false);
 
@@ -302,54 +271,21 @@ public class AuthenticationView {
         registerFormBox.setManaged(true);
 
         toggleModeButton.setText("ENTRAR");
+        loginButton.setDefaultButton(false);
+        registerButton.setDefaultButton(true);
     }
 
-    // --------------------------------------------------------
-    // API para o Controller
-    // --------------------------------------------------------
-
-    public Scene getScene() {
-        return scene;
-    }
-
-    // Login
-    public String getLoginEmail() {
-        return loginEmailField.getText().trim();
-    }
-
-    public String getLoginPassword() {
-        return loginPasswordField.getText();
-    }
-
-    public void setLoginStatus(String message, javafx.scene.paint.Color color,
-                               boolean showProgress, boolean loginButtonEnabled) {
-        loginStatusLabel.setText(message == null ? "" : message);
-        loginStatusLabel.setTextFill(color);
-        loginProgress.setVisible(showProgress);
-        loginButton.setDisable(!loginButtonEnabled);
-    }
-
-    // Registo
-    public String getRegisterName() {
-        return registerNameField.getText().trim();
-    }
-
-    public String getRegisterEmail() {
-        return registerEmailField.getText().trim();
-    }
-
-    public String getRegisterPassword() {
-        return registerPasswordField.getText();
-    }
-
-    public String getRegisterExtra() {
-        return registerExtraField.getText().trim();
-    }
-
+    /* API exposta ao controller */
+    public Scene getScene() { return scene; }
+    public String getLoginEmail() { return loginEmailField.getText().trim(); }
+    public String getLoginPassword() { return loginPasswordField.getText(); }
+    public String getRegisterName() { return registerNameField.getText().trim(); }
+    public String getRegisterEmail() { return registerEmailField.getText().trim(); }
+    public String getRegisterPassword() { return registerPasswordField.getText(); }
+    public String getRegisterExtra() { return registerExtraField.getText().trim(); }
     public String getSelectedRegisterType() {
         return rbStudent.isSelected() ? "STUDENT" : "TEACHER";
     }
-
     public void setRegisterExtraLabel(String text) {
         registerExtraLabel.setText(text);
         if ("Número de Estudante".equalsIgnoreCase(text)) {
@@ -359,44 +295,74 @@ public class AuthenticationView {
         }
     }
 
-    public void setRegisterStatus(String message, javafx.scene.paint.Color color, boolean buttonEnabled) {
-        registerStatusLabel.setText(message == null ? "" : message);
-        registerStatusLabel.setTextFill(color);
-        registerButton.setDisable(!buttonEnabled);
-    }
-
     public void prefillLoginEmail(String email) {
         loginEmailField.setText(email);
     }
 
-    /**
-     * Bloqueia / desbloqueia interação enquanto login/registo está a decorrer.
-     * Repara que NÃO mexemos nos botões de ação aqui (loginButton/registerButton),
-     * isso continua a ser responsabilidade de setLoginStatus / setRegisterStatus.
-     */
+    /** Actualiza a mensagem de estado do login, mostra ou oculta o progresso e ajusta o botão */
+    public void setLoginStatus(String message, javafx.scene.paint.Color color,
+                               boolean showProgress, boolean loginButtonEnabled) {
+        loginStatusLabel.setText(message == null ? "" : message);
+        loginStatusLabel.setTextFill(color != null ? color : javafx.scene.paint.Color.WHITE);
+        loginProgress.setVisible(showProgress);
+        loginButton.setDisable(!loginButtonEnabled);
+        loginButton.setDefaultButton(loginButtonEnabled);
+    }
+
+    /** Actualiza a mensagem de estado do registo e o botão de registo */
+    public void setRegisterStatus(String message, javafx.scene.paint.Color color, boolean buttonEnabled) {
+        registerStatusLabel.setText(message == null ? "" : message);
+        registerStatusLabel.setTextFill(color != null ? color : javafx.scene.paint.Color.WHITE);
+        registerButton.setDisable(!buttonEnabled);
+        registerButton.setDefaultButton(buttonEnabled);
+    }
+
+    /** Activa ou desactiva todos os campos e mostra/oculta o overlay */
     public void setAuthBusy(boolean busy) {
-        // botão de alternar
-        if (toggleModeButton != null)
-            toggleModeButton.setDisable(busy);
+        toggleModeButton.setDisable(busy);
+        loginEmailField.setDisable(busy);
+        loginPasswordField.setDisable(busy);
+        rbStudent.setDisable(busy);
+        rbTeacher.setDisable(busy);
+        registerNameField.setDisable(busy);
+        registerEmailField.setDisable(busy);
+        registerPasswordField.setDisable(busy);
+        registerExtraField.setDisable(busy);
+        showBusy(busy);
+    }
 
-        // campos de login
-        if (loginEmailField != null)
-            loginEmailField.setDisable(busy);
-        if (loginPasswordField != null)
-            loginPasswordField.setDisable(busy);
+    public void showBusy(boolean busy) {
+        if (busyOverlay != null) busyOverlay.setVisible(busy);
+    }
 
-        // campos de registo
-        if (rbStudent != null)
-            rbStudent.setDisable(busy);
-        if (rbTeacher != null)
-            rbTeacher.setDisable(busy);
-        if (registerNameField != null)
-            registerNameField.setDisable(busy);
-        if (registerEmailField != null)
-            registerEmailField.setDisable(busy);
-        if (registerPasswordField != null)
-            registerPasswordField.setDisable(busy);
-        if (registerExtraField != null)
-            registerExtraField.setDisable(busy);
+    public void clearLoginFields() {
+        loginEmailField.clear();
+        loginPasswordField.clear();
+        setLoginStatus("", javafx.scene.paint.Color.WHITE, false, true);
+    }
+
+    public void clearRegisterFields() {
+        registerNameField.clear();
+        registerEmailField.clear();
+        registerPasswordField.clear();
+        registerExtraField.clear();
+        rbStudent.setSelected(true);
+        rbTeacher.setSelected(false);
+        setRegisterExtraLabel("Número de Estudante");
+        setRegisterStatus("", javafx.scene.paint.Color.WHITE, true);
+    }
+
+    public void registerHandlers(AuthenticationController controller) {
+        toggleModeButton.setOnAction(e -> controller.onToggleMode());
+        loginPasswordField.setOnAction(e -> controller.onLogin());
+        loginButton.setOnAction(e -> controller.onLogin());
+
+        registerButton.setOnAction(e -> controller.onRegister());
+        rbStudent.setOnAction(e -> controller.onRegisterTypeChanged("STUDENT"));
+        rbTeacher.setOnAction(e -> controller.onRegisterTypeChanged("TEACHER"));
+    }
+
+    public void update() {
+        // não requerido no momento
     }
 }

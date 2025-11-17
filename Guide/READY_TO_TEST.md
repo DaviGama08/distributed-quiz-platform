@@ -115,7 +115,7 @@ mvn clean compile -DskipTests
 **Terminal 1:**
 ```cmd
 cd H:\GitHub\PD_TP_2526
-java -cp target/classes pt.isec.directory.MainDirectory 5555
+java -cp target/classes pt.isec.directory.LauncherDirectory 5555
 ```
 
 **Terminal 2:**

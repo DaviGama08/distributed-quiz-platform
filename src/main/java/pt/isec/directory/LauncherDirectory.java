@@ -1,18 +1,6 @@
 package pt.isec.directory;
 
-import pt.isec.directory.service.DirectoryService;
-
-public class MainDirectory {
-    /*
-      Uso:
-        MainDirectory
-        MainDirectory <udpPort>
-        MainDirectory <udpPort> <queueCapacity> <maxPacketSize> <ttlMillis>
-
-      Defaults:
-        udpPort=9999 | queue=1024 | maxPacket=65535 | ttl=17000
-    */
-
+public class LauncherDirectory {
     // Defaults
     private static final int  DEF_UDP_PORT     = 9999;
     private static final int  DEF_QUEUE        = 1024;

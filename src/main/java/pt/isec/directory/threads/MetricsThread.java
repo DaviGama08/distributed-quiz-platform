@@ -1,13 +1,13 @@
 package pt.isec.directory.threads;
 
 
-import pt.isec.directory.service.IDirectoryService;
+import pt.isec.directory.IDirectoryService;
 
-public class MetricsRunnable implements Runnable{
+public class MetricsThread implements Runnable{
     private final IDirectoryService tInfo;
     private final long periodMs;
 
-    public MetricsRunnable(IDirectoryService tInfo, long periodMs) {
+    public MetricsThread(IDirectoryService tInfo, long periodMs) {
         this.tInfo = tInfo;
         this.periodMs = periodMs;
     }

@@ -1,10 +1,9 @@
 package pt.isec.server.threads;
-
 import pt.isec.server.IQuizServer;
 import pt.isec.server.NetworkConnection;
-
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -27,17 +26,29 @@ public class ClientListenerThread implements Runnable, AutoCloseable {
         try {
             // cria o socket tcp que aceita conexões de clientes
             serverSocket = new ServerSocket(tInfo.clientPort());
+            serverSocket.setSoTimeout(1000); // 1 segundo
             System.out.println("[ACCEPT] a escutar clientes em " + tInfo.clientPort());
 
             // loop principal — aceita clientes enquanto o servidor estiver a correr
             while (tInfo.isRunning()) {
-                Socket newSocket = serverSocket.accept();
-                pool.execute(new ClientHandlerThread(tInfo, new NetworkConnection(newSocket)));
+                try {
+                    Socket newSocket = serverSocket.accept();
+                    pool.execute(new ClientHandlerThread(tInfo, new NetworkConnection(newSocket)));
+
+                } catch (SocketTimeoutException e) {
+                    // timeout normal: volta ao while e verifica tInfo.isRunning()
+                    // não é erro, só quer dizer "ninguém ligou neste 1s"
+                }
             }
 
         } catch (Exception e) {
-            if (tInfo.isRunning())
+            if (tInfo.isRunning()) {
                 System.err.println("[ACCEPT] erro: " + e.getMessage());
+            }
+        } finally {
+            try {
+                close();
+            } catch (Exception ignore) {}
         }
     }
 

@@ -1,5 +1,4 @@
 package pt.isec.server.threads;
-
 import pt.isec.common.dto.auth.LoginRequestDTO;
 import pt.isec.common.dto.auth.LoginResponseDTO;
 import pt.isec.common.dto.auth.RegisterStudentDTO;
@@ -8,7 +7,6 @@ import pt.isec.common.messages.MessageType;
 import pt.isec.common.messages.Message;
 import pt.isec.server.IQuizServer;
 import pt.isec.server.NetworkConnection;
-
 import java.io.IOException;
 import java.time.Duration;
 
@@ -57,9 +55,7 @@ public class ClientHandlerThread implements Runnable{
             // garante que o socket é fechado corretamente
             try {
                 if (connection != null) connection.close();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
+            } catch (Exception ignore) {}
         }
     }
 

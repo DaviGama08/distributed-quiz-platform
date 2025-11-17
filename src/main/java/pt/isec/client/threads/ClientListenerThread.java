@@ -9,12 +9,12 @@ import java.io.Serializable;
 
 /**
  * Thread que escuta continuamente mensagens vindas do servidor via TCP
- * e coloca-as na fila de respostas para serem processadas
+ * e coloca-as na fila de respostas para serem processadas.
  */
-public class ClientListenerRunnable implements Runnable{
+public class ClientListenerThread implements Runnable{
     private final IClientService service;
 
-    public ClientListenerRunnable(IClientService service) {
+    public ClientListenerThread(IClientService service) {
         this.service = service;
     }
 
@@ -26,7 +26,6 @@ public class ClientListenerRunnable implements Runnable{
 
         while(service.isRunning()) {
             try {
-                // Blocking read - espera até receber mensagem
                 Message<? extends Serializable> response = (Message<? extends Serializable>) in.readObject();
 
                 if(response != null) {

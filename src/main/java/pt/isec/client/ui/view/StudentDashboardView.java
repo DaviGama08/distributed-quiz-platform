@@ -5,26 +5,21 @@ import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
-import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import pt.isec.client.ui.controller.StudentDashboardController;
 
 /**
- * View do dashboard do estudante.
- * Apenas trata de criar a UI e expor handlers/métodos de atualização.
+ * Dashboard do estudante com tema escuro. Usa dashboard.css para estilos.
  */
 public class StudentDashboardView {
-
     private final String userEmail;
-
     private Scene scene;
 
-    // UI Components
     private Label welcomeLabel;
     private TextArea notificationArea;
 
-    // Menu buttons
+    // botões do menu
     private Button answerQuestionBtn;
     private Button historyBtn;
     private Button logoutBtn;
@@ -33,68 +28,33 @@ public class StudentDashboardView {
         this.userEmail = userEmail;
     }
 
-    // --------------------------------------------------------
-    // Métodos principais: createView / registerHandlers / update
-    // --------------------------------------------------------
-
-    /**
-     * Cria toda a interface do dashboard.
-     */
     public void createView() {
         BorderPane root = new BorderPane();
-        root.getStyleClass().add("student-root");
+        root.getStyleClass().add("dashboard-root-dark");
 
-        // Top - Header
         root.setTop(createHeader());
-
-        // Left - Menu lateral
         root.setLeft(createSidebar());
-
-        // Center - Área principal
         root.setCenter(createMainArea());
 
         scene = new Scene(root, 1000, 700);
-
-        // carregar CSS
         try {
             var cssUrl = getClass().getResource("/styles/dashboard.css");
             if (cssUrl != null) {
                 scene.getStylesheets().add(cssUrl.toExternalForm());
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) { }
     }
-
-    /**
-     * Regista handlers dos botões chamando métodos do controller.
-     */
-    public void registerHandlers(StudentDashboardController controller) {
-        answerQuestionBtn.setOnAction(e -> controller.onAnswerQuestion());
-        historyBtn.setOnAction(e -> controller.onShowHistory());
-        logoutBtn.setOnAction(e -> controller.onLogout());
-    }
-
-    /**
-     * Ponto de extensão para futuros updates globais.
-     */
-    public void update() {
-        // Nada específico por agora.
-    }
-
-    // --------------------------------------------------------
-    // Criação das partes da UI
-    // --------------------------------------------------------
 
     private VBox createHeader() {
         VBox header = new VBox(10);
-        header.getStyleClass().add("header-student");
+        header.getStyleClass().add("dashboard-header-dark");
 
         welcomeLabel = new Label("Bem-vindo, Estudante!");
-        welcomeLabel.setFont(Font.font("Arial", FontWeight.BOLD, 24));
-        welcomeLabel.setTextFill(Color.WHITE);
-        welcomeLabel.getStyleClass().add("header-title");
+        welcomeLabel.setFont(Font.font("Arial", FontWeight.NORMAL, 24));
+        welcomeLabel.getStyleClass().add("header-welcome");
 
         Label emailLabel = new Label(userEmail);
-        emailLabel.getStyleClass().add("header-email");
+        emailLabel.getStyleClass().add("header-email-dark");
 
         header.getChildren().addAll(welcomeLabel, emailLabel);
         return header;
@@ -102,16 +62,16 @@ public class StudentDashboardView {
 
     private VBox createSidebar() {
         VBox sidebar = new VBox(10);
-        sidebar.getStyleClass().addAll("sidebar", "sidebar-student");
+        sidebar.getStyleClass().add("dashboard-sidebar-dark");
+        sidebar.setPrefWidth(240);
 
         Label menuLabel = new Label("MENU");
-        menuLabel.getStyleClass().add("sidebar-title");
+        menuLabel.getStyleClass().add("sidebar-title-dark");
 
-        answerQuestionBtn = createMenuButton(" Responder Pergunta", "btn-blue");
-        historyBtn = createMenuButton(" Histórico", "btn-purple");
-        logoutBtn = createMenuButton(" Logout", "btn-red");
+        answerQuestionBtn = createMenuButton("Responder Pergunta");
+        historyBtn = createMenuButton("Histórico");
+        logoutBtn = createMenuButton("Logout");
 
-        // Separador
         Region spacer = new Region();
         VBox.setVgrow(spacer, Priority.ALWAYS);
 
@@ -129,34 +89,37 @@ public class StudentDashboardView {
 
     private VBox createMainArea() {
         VBox mainArea = new VBox(20);
-        mainArea.getStyleClass().add("student-main");
+        mainArea.getStyleClass().add("dashboard-main-area");
+        mainArea.setPadding(new Insets(20));
 
-        // Área de notificações
-        Label notifLabel = new Label(" Notificações");
-        notifLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+        Label notifLabel = new Label("Notificações");
+        notifLabel.setFont(Font.font("Arial", FontWeight.NORMAL, 18));
+        notifLabel.getStyleClass().add("dashboard-section-title");
 
         notificationArea = new TextArea();
         notificationArea.setEditable(false);
         notificationArea.setPrefHeight(150);
         notificationArea.setPromptText("Aguardando notificações do servidor...");
+        notificationArea.getStyleClass().add("notification-area-dark");
         notificationArea.setWrapText(true);
 
-        // Instruções
         Label instructionsLabel = new Label("Como começar:");
-        instructionsLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
+        instructionsLabel.setFont(Font.font("Arial", FontWeight.NORMAL, 16));
+        instructionsLabel.getStyleClass().add("dashboard-section-title");
 
         VBox instructions = new VBox(10);
-        instructions.getStyleClass().add("instructions-box");
+        instructions.getStyleClass().add("instructions-box-dark");
+        instructions.setAlignment(Pos.TOP_LEFT);
 
-        Label inst1 = new Label("1️⃣  Obtenha o código da pergunta com o seu docente");
-        Label inst2 = new Label("2️⃣  Clique em 'Responder Pergunta' no menu lateral");
-        Label inst3 = new Label("3️⃣  Insira o código e responda à pergunta");
-        Label inst4 = new Label("4️⃣  Verifique seu histórico de respostas a qualquer momento");
+        Label inst1 = new Label("1. Obtenha o código da pergunta com o seu docente");
+        Label inst2 = new Label("2. Clique em 'Responder Pergunta' no menu lateral");
+        Label inst3 = new Label("3. Insira o código e responda à pergunta");
+        Label inst4 = new Label("4. Verifique seu histórico de respostas a qualquer momento");
 
-        inst1.setFont(Font.font("Arial", 14));
-        inst2.setFont(Font.font("Arial", 14));
-        inst3.setFont(Font.font("Arial", 14));
-        inst4.setFont(Font.font("Arial", 14));
+        inst1.getStyleClass().add("instruction-line");
+        inst2.getStyleClass().add("instruction-line");
+        inst3.getStyleClass().add("instruction-line");
+        inst4.getStyleClass().add("instruction-line");
 
         instructions.getChildren().addAll(inst1, inst2, inst3, inst4);
 
@@ -166,27 +129,28 @@ public class StudentDashboardView {
                 instructionsLabel,
                 instructions
         );
-
         return mainArea;
     }
 
-    private Button createMenuButton(String text, String colorClass) {
+    private Button createMenuButton(String text) {
         Button btn = new Button(text);
-        btn.getStyleClass().addAll("sidebar-button", colorClass);
+        btn.getStyleClass().add("sidebar-button-dark");
+        btn.setPrefWidth(Double.MAX_VALUE);
         return btn;
     }
 
-    // --------------------------------------------------------
-    // API para o Controller
-    // --------------------------------------------------------
+    public Scene getScene() { return scene; }
 
-    public Scene getScene() {
-        return scene;
+    public void registerHandlers(StudentDashboardController controller) {
+        answerQuestionBtn.setOnAction(e -> controller.onAnswerQuestion());
+        historyBtn.setOnAction(e -> controller.onShowHistory());
+        logoutBtn.setOnAction(e -> controller.onLogout());
     }
 
-    /**
-     * Adiciona texto à área de notificação (incluindo timestamp).
-     */
+    public void update() {
+        // nada extra
+    }
+
     public void addNotification(String message) {
         String timestamp = java.time.LocalTime.now().format(
                 java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss")

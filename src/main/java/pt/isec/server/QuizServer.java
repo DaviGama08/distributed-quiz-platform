@@ -1,12 +1,12 @@
 package pt.isec.server;
+
 import pt.isec.server.db.Db;
-import pt.isec.server.db.dao.StudentDAO;
-import pt.isec.server.db.dao.TeacherDAO;
+import pt.isec.server.db.DbFiles;
 import pt.isec.server.services.auth.AuthService;
 import pt.isec.server.threads.ClusterHeartbeatThread;
 import pt.isec.server.threads.ClientListenerThread;
 import pt.isec.server.threads.DirectoryHeartbeatThread;
-import pt.isec.server.threads.DbCopyAcceptorRunnable;
+
 import java.net.*;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -18,8 +18,6 @@ import java.util.concurrent.atomic.AtomicLong;
 public class QuizServer implements IQuizServer, Runnable, AutoCloseable {
     private volatile boolean dbInitialised = false;
     private Db db;
-    private TeacherDAO teacherDAO;
-    private StudentDAO studentDAO;
     private AuthService authService;
 
     private final String id;
@@ -39,12 +37,12 @@ public class QuizServer implements IQuizServer, Runnable, AutoCloseable {
 
     private volatile boolean running = true;
     private volatile boolean isPrimary = false;
-    private volatile Principal master;
+
     private final AtomicLong dbVersion = new AtomicLong(0);
 
     private final AtomicBoolean copying = new AtomicBoolean(false);
 
-    private Thread tMulticastReceiver, tDirectoryHB, tTcpClient, tDbCopyAcceptor;
+    private Thread tClusterHeartbeat, tDirectoryHeartbeat, tClientListener;
 
     public QuizServer(String dirHost, int dirPort, String mcIfIp,
                       int clientPort, int dbCopyPort, Path initialDbPath) throws Exception {
@@ -55,9 +53,8 @@ public class QuizServer implements IQuizServer, Runnable, AutoCloseable {
         this.dirHost = dirHost;
         this.dirPort = dirPort;
 
-        this.authService = new AuthService(teacherDAO, studentDAO);
-
-        this.dataDir = (initialDbPath.getParent() != null) ? initialDbPath.getParent().toAbsolutePath()
+        this.dataDir = (initialDbPath.getParent() != null)
+                ? initialDbPath.getParent().toAbsolutePath()
                 : Paths.get(".").toAbsolutePath();
 
         this.isPrimary = false;
@@ -100,12 +97,13 @@ public class QuizServer implements IQuizServer, Runnable, AutoCloseable {
         return null;
     }
 
-    private static String two(long v) { return String.format("%02d", v); }
-
     private synchronized void refreshDbPath() {
-        String name = "quiz-" + two(dbVersion.get()) + (isPrimary ? ".db" : "-backup.db");
+        String versionStr = String.format("%02d", dbVersion.get());
+        String name = "quiz-" + versionStr + (isPrimary ? ".db" : "-backup.db");
         this.dbPath = dataDir.resolve(name).toAbsolutePath();
-        System.out.println("[DB] agora a usar: " + this.dbPath + " (role=" + (isPrimary? "PRIMARY":"BACKUP") + ", v=" + dbVersion.get() + ")");
+        System.out.println("[DB] agora a usar: " + this.dbPath +
+                " (role=" + (isPrimary ? "PRIMARY" : "BACKUP") +
+                ", v=" + dbVersion.get() + ")");
     }
 
     @Override
@@ -120,20 +118,12 @@ public class QuizServer implements IQuizServer, Runnable, AutoCloseable {
 
             try {
                 // garante que o ficheiro .db existe e tem o schema
-                pt.isec.server.db.DbFiles.createIfMissing(
-                        this.dbPath,
-                        "/db/schema.sql"
-                );
+                DbFiles.createIfMissing(this.dbPath, "/db/schema.sql");
 
                 // cria helper Db apontando para o ficheiro atual
-                this.db = new pt.isec.server.db.Db("jdbc:sqlite:" + this.dbPath.toAbsolutePath());
+                this.db = new Db("jdbc:sqlite:" + this.dbPath.toAbsolutePath());
 
-                // cria DAOs
-                this.teacherDAO = new pt.isec.server.db.dao.TeacherDAO(db);
-                this.studentDAO = new pt.isec.server.db.dao.StudentDAO(db);
-
-                // AuthService com DAOs válidos
-                this.authService = new pt.isec.server.services.auth.AuthService(teacherDAO, studentDAO);
+                this.authService = new AuthService(db);
 
                 System.out.println("[DB] camada de dados inicializada em " + dbPath);
                 dbInitialised = true;
@@ -144,6 +134,7 @@ public class QuizServer implements IQuizServer, Runnable, AutoCloseable {
             }
         }
     }
+
     // IQUIZSERVER INTERFACE
     @Override public String id() { return id; }
     @Override public String ip() { return ip; }
@@ -156,6 +147,16 @@ public class QuizServer implements IQuizServer, Runnable, AutoCloseable {
     @Override public String mcGroup() { return mcGroup; }
     @Override public int mcPort() { return mcPort; }
     @Override public NetworkInterface mcIf() { return mcIf; }
+
+    @Override public void setRunning(boolean v) throws Exception {
+        running = v;
+        tClientListener.join();
+        System.out.println("[QuizServer] tClientListener encerrada");
+        tClusterHeartbeat.join();
+        System.out.println("[QuizServer] tClusterHeartbeat  encerrada");
+        System.out.println("[QuizServer] tDirectoryHeartbeat encerrada");
+        close();
+    }
     @Override public boolean isRunning() { return running; }
 
     @Override public AuthService getAuthService() {initDatabaseLayerIfNeeded(); return authService;}
@@ -163,13 +164,11 @@ public class QuizServer implements IQuizServer, Runnable, AutoCloseable {
     @Override public Path dbPath() { return dbPath; }
     @Override public Db getDb() {initDatabaseLayerIfNeeded(); return db;}
 
-
-    @Override public boolean tryLockCopy()  { return copying.compareAndSet(false, true); }
-    @Override public void    unlockCopy()   { copying.set(false); }
+    @Override public boolean tryLockCopy() { return copying.compareAndSet(false, true); }
+    @Override public void unlockCopy() { copying.set(false); }
 
     @Override public boolean isPrimary() { return isPrimary; }
     @Override public void setPrimary(String ip, int port) {
-        master = new Principal(ip, port);
         boolean newIsPrimary = this.ip.equals(ip) && this.clientPort == port;
         if (this.isPrimary != newIsPrimary) {
             this.isPrimary = newIsPrimary;
@@ -188,25 +187,21 @@ public class QuizServer implements IQuizServer, Runnable, AutoCloseable {
     // CLOSEABLE INTERFACE
     @Override
     public void close() throws Exception {
-        running = false;
-        if (tMulticastReceiver != null)  tMulticastReceiver.interrupt();
-        if (tDirectoryHB != null)        tDirectoryHB.interrupt();
-        if (tTcpClient != null)          tTcpClient.interrupt();
-        if (tDbCopyAcceptor != null)     tDbCopyAcceptor.interrupt();
+        if (tClusterHeartbeat != null)   tClusterHeartbeat.interrupt();
+        if (tDirectoryHeartbeat != null) tDirectoryHeartbeat.interrupt();
+        if (tClientListener != null)     tClientListener.interrupt();
     }
+
     // RUNNABLE INTERFACE
     @Override public void run() { start(); }
 
     private void start() {
-        tDirectoryHB       = new Thread(new DirectoryHeartbeatThread(this), "directory-hb");
-        tMulticastReceiver = new Thread(new ClusterHeartbeatThread(this), "multicast-receiver");
-        tTcpClient         = new Thread(new ClientListenerThread(this), "tcp-client");
-        tDbCopyAcceptor    = new Thread(new DbCopyAcceptorRunnable(this), "dbcopy-acceptor");
+        tDirectoryHeartbeat = new Thread(new DirectoryHeartbeatThread(this), "directory-heartbeat");
+        tClusterHeartbeat   = new Thread(new ClusterHeartbeatThread(this),   "cluster-heartbeat");
+        tClientListener     = new Thread(new ClientListenerThread(this),     "client-listener");
 
-        tMulticastReceiver.start();
-        tDirectoryHB.start();
-        tTcpClient.start();
-        tDbCopyAcceptor.start();
+        tClusterHeartbeat.start();
+        tDirectoryHeartbeat.start();
+        tClientListener.start();
     }
-
 }

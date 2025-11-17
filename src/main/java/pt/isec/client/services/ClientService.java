@@ -1,9 +1,8 @@
 package pt.isec.client.services;
 
 import pt.isec.client.ClientManager;
-import pt.isec.client.threads.ClientListenerRunnable;
-import pt.isec.client.threads.RequestSenderRunnable;
-import pt.isec.client.threads.ResponseHandlerRunnable;
+import pt.isec.client.threads.ClientListenerThread;
+import pt.isec.client.threads.RequestSenderThread;
 import pt.isec.common.messages.Message;
 
 import java.beans.PropertyChangeListener;
@@ -15,7 +14,12 @@ import java.io.IOException;
 import java.net.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
+/**
+ * Serviço central de gestão de rede: discovery, conexão TCP,
+ * filas de envio/recepção e propriedades observáveis.
+ */
 public class ClientService implements IClientService {
     /* === PROPRIEDADES OBSERVÁVEIS (para UI) === */
     public static final String PROP_AUTHENTICATED     = "authenticated";
@@ -42,7 +46,7 @@ public class ClientService implements IClientService {
     private static final int CONNECTION_TIMEOUT_MS = 10000;
 
     /* === THREADS === */
-    private Thread tListener, tSender, tResponse;
+    private Thread tListener, tSender;
     private DatagramSocket udpSocket;
     private Socket tcpSocket;
     private ObjectOutputStream out;
@@ -92,8 +96,12 @@ public class ClientService implements IClientService {
         boolean old = this.authenticated;
         this.authenticated = auth;
         fire(PROP_AUTHENTICATED, old, auth);
-        if (auth)
-            fire(PROP_CONNECTION_STATUS, null, "AUTHENTICATED");
+    }
+
+    public void logout() {
+        setAuthenticated(false);
+        setUserType(null);
+        setUserEmail(null);
     }
 
     public void setUserType(String t){
@@ -108,14 +116,12 @@ public class ClientService implements IClientService {
         fire(PROP_USER_EMAIL, old, e);
     }
 
-    /** notificação assíncrona vinda do servidor */
     public void pushNotification(String text){
         fire(PROP_NOTIFICATION, null, text);
     }
 
     /* ========================= API usada pelos serviços (mensagens) ========================= */
 
-    /** Enfileira pedido para ser enviado pela RequestSenderRunnable */
     public void sendMessage(Message<? extends Serializable> message) {
         try {
             requestQueue.put(message);
@@ -125,14 +131,18 @@ public class ClientService implements IClientService {
         }
     }
 
-    /** Bloqueia até receber uma resposta na responseQueue (preenchida pela ResponseHandlerRunnable) */
+    /** Bloqueia até receber resposta (sem timeout). */
     public Message<? extends Serializable> waitForResponse() throws InterruptedException {
         return responseQueue.take();
     }
 
+    /** Espera por resposta com timeout; devolve null se expirar. */
+    public Message<? extends Serializable> waitForResponse(long timeoutMs) throws InterruptedException {
+        return responseQueue.poll(timeoutMs, TimeUnit.MILLISECONDS);
+    }
+
     /* ========================= LIFECYCLE ========================= */
 
-    /** ciclo completo: discovery → TCP connect → arrancar threads */
     public void run(){
         fire(PROP_CONNECTION_STATUS, null, "CONNECTING");
 
@@ -160,7 +170,6 @@ public class ClientService implements IClientService {
 
         if (tListener != null) tListener.interrupt();
         if (tSender   != null) tSender.interrupt();
-        if (tResponse != null) tResponse.interrupt();
 
         closeConnection();
 
@@ -217,7 +226,6 @@ public class ClientService implements IClientService {
             out.flush();
             in  = new ObjectInputStream(tcpSocket.getInputStream());
 
-            // === HANDSHAKE INICIAL ===
             try {
                 Object obj = in.readObject();
                 if (!(obj instanceof Message<?>)) {
@@ -257,7 +265,6 @@ public class ClientService implements IClientService {
         }
     }
 
-
     private void closeConnection(){
         try { if (in != null) in.close(); }  catch (Exception ignored) {}
         try { if (out != null) out.close(); } catch (Exception ignored) {}
@@ -268,8 +275,8 @@ public class ClientService implements IClientService {
     }
 
     private void startThreads(){
-        tListener = new Thread(new ClientListenerRunnable(this),  "ClientListener");
-        tSender   = new Thread(new RequestSenderRunnable(this),   "RequestSender");
+        tListener = new Thread(new ClientListenerThread(this),  "ClientListener");
+        tSender   = new Thread(new RequestSenderThread(this),   "RequestSender");
 
         tListener.start();
         tSender.start();
@@ -291,7 +298,7 @@ public class ClientService implements IClientService {
 
         try { Thread.sleep(3000); } catch (InterruptedException ignored){}
 
-        run(); // tenta tudo de novo
+        run(); // tenta de novo
     }
 
     /* ========================= IClientService getters ========================= */

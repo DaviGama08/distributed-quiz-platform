@@ -1,9 +1,6 @@
 package pt.isec.server.threads;
-
 import pt.isec.server.IQuizServer;
 import pt.isec.server.QuizServer;
-import pt.isec.server.services.config.ConfigServices;
-
 import java.io.IOException;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
@@ -45,6 +42,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             Endpoint reply = waitPrincipal(s);
             if (reply == null) {
                 System.err.println("[DIR] sem resposta da diretoria");
+                tInfo.setRunning(false); // running=false e interrompe threads
                 return;
             }
 
@@ -64,17 +62,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                 try {
                     // garantir que estamos a usar o ServerNode concreto
                     if (tInfo instanceof QuizServer node) {
-
-                        // 1) inicializa BD + DAOs + AuthService (se ainda não estiver feito)
                         node.initDatabaseLayerIfNeeded();
-
-                        // 2) inicializa a tabela config com o código de registo dos docentes
-                        var cfg = new ConfigServices();
-                        node.getDb().executeUpdate(
-                                "INSERT INTO config (id, db_version, teacher_code_hash) VALUES (1, 0, ?) " +
-                                        "ON CONFLICT(id) DO UPDATE SET teacher_code_hash=excluded.teacher_code_hash",
-                                cfg.getTeachersRegisterHash()
-                        );
                     } else {
                         System.err.println("[DB] tInfo não é ServerNode — não consigo inicializar BD/Auth.");
                     }
@@ -123,6 +111,10 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
         } catch (Exception e) {
             if (tInfo.isRunning())
                 System.err.println("[DIR] erro: " + e.getMessage());
+        }finally {
+            try {
+                close();
+            }catch (Exception ignore){}
         }
     }
 
@@ -194,7 +186,6 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             return null;
         }
     }
-
 
     @Override
     public void close() {

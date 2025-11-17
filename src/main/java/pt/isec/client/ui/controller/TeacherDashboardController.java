@@ -18,11 +18,10 @@ import pt.isec.client.ui.view.TeacherDashboardView;
 import java.io.File;
 
 /**
- * Controller do dashboard do docente.
- * Contém a lógica: notificações, diálogos, navegação, etc.
+ * Controlador do dashboard do docente. Lida com criação, listagem,
+ * exportação e eliminação de perguntas, bem como logout.
  */
 public class TeacherDashboardController {
-
     private final Stage stage;
     private final ClientManager clientManager;
     private final ClientApplication application;
@@ -44,18 +43,13 @@ public class TeacherDashboardController {
         setupPropertyChangeListeners();
     }
 
-    // --------------------------------------------------------
-    // Mostrar dashboard
-    // --------------------------------------------------------
-
+    /** Mostra o dashboard */
     public void show() {
         stage.setScene(view.getScene());
+        stage.setMaximized(true);
     }
 
-    // --------------------------------------------------------
-    // Listeners de notificações do servidor
-    // --------------------------------------------------------
-
+    /** Regista listener para notificações enviadas pelo servidor */
     private void setupPropertyChangeListeners() {
         clientManager.getService().addPropertyChangeListener(
                 ClientService.PROP_NOTIFICATION,
@@ -71,10 +65,7 @@ public class TeacherDashboardController {
         );
     }
 
-    // --------------------------------------------------------
-    // Handlers chamados pela View (registerHandlers)
-    // --------------------------------------------------------
-
+    /** Handler para criação de pergunta */
     public void onCreateQuestion() {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle("Criar Nova Pergunta");
@@ -85,7 +76,6 @@ public class TeacherDashboardController {
         grid.setVgap(15);
         grid.setPadding(new Insets(20));
 
-        // Enunciado
         Label statementLabel = new Label("Enunciado:");
         statementLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
         TextArea statementField = new TextArea();
@@ -93,13 +83,11 @@ public class TeacherDashboardController {
         statementField.setPrefWidth(500);
         statementField.setPromptText("Digite o enunciado da pergunta...");
 
-        // Número de opções
         Label numOptionsLabel = new Label("Número de Opções:");
         numOptionsLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
         Spinner<Integer> numOptionsSpinner = new Spinner<>(2, 6, 4);
         numOptionsSpinner.setPrefWidth(100);
 
-        // Opções
         Label optionsLabel = new Label("Opções:");
         optionsLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
 
@@ -110,14 +98,12 @@ public class TeacherDashboardController {
         TextField optD = new TextField(); optD.setPromptText("Opção D");
         optionsBox.getChildren().addAll(optA, optB, optC, optD);
 
-        // Resposta correta
         Label correctLabel = new Label("Resposta Correta:");
         correctLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
         ComboBox<String> correctCombo = new ComboBox<>();
         correctCombo.getItems().addAll("A", "B", "C", "D");
         correctCombo.setValue("A");
 
-        // Período
         Label periodLabel = new Label("Período de Disponibilidade:");
         periodLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
 
@@ -161,7 +147,6 @@ public class TeacherDashboardController {
 
         dialog.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
-                // TODO: Validar e enviar ao servidor
                 String statement = statementField.getText().trim();
 
                 if (statement.isEmpty()) {
@@ -169,7 +154,7 @@ public class TeacherDashboardController {
                     return;
                 }
 
-                // TODO: Enviar dados ao servidor
+                // TODO: enviar ao servidor
                 showSuccessAlert("Pergunta Criada",
                         "A pergunta foi criada com sucesso!\nCódigo: [GERADO PELO SERVIDOR]");
             }
@@ -185,7 +170,6 @@ public class TeacherDashboardController {
         content.setPadding(new Insets(20));
         content.setPrefWidth(700);
 
-        // Filtros
         HBox filters = new HBox(10);
         filters.setAlignment(Pos.CENTER_LEFT);
 
@@ -193,12 +177,7 @@ public class TeacherDashboardController {
         filterLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
 
         ComboBox<String> filterCombo = new ComboBox<>();
-        filterCombo.getItems().addAll(
-                "Todas",
-                "Ativas",
-                "Futuras",
-                "Expiradas"
-        );
+        filterCombo.getItems().addAll("Todas", "Ativas", "Futuras", "Expiradas");
         filterCombo.setValue("Todas");
 
         Button applyFilterBtn = new Button("Aplicar");
@@ -206,23 +185,6 @@ public class TeacherDashboardController {
 
         filters.getChildren().addAll(filterLabel, filterCombo, applyFilterBtn);
 
-        // Tabela
-        TableView<String> table = new TableView<>();
-        table.setPrefHeight(350);
-
-        TableColumn<String, String> codeCol = new TableColumn<>("Código");
-        TableColumn<String, String> statementCol = new TableColumn<>("Enunciado");
-        TableColumn<String, String> periodCol = new TableColumn<>("Período");
-        TableColumn<String, String> statusCol = new TableColumn<>("Estado");
-
-        codeCol.setPrefWidth(100);
-        statementCol.setPrefWidth(300);
-        periodCol.setPrefWidth(150);
-        statusCol.setPrefWidth(100);
-
-        table.getColumns().addAll(codeCol, statementCol, periodCol, statusCol);
-
-        // TODO: Preencher com dados do servidor
         Label noDataLabel = new Label("Nenhuma pergunta criada ainda.");
         noDataLabel.setFont(Font.font("Arial", 14));
         noDataLabel.setTextFill(Color.web("#7f8c8d"));
@@ -257,9 +219,9 @@ public class TeacherDashboardController {
         content.setPadding(new Insets(20));
         content.setPrefWidth(750);
 
-        // Info da pergunta
         VBox infoBox = new VBox(5);
-        infoBox.setStyle("-fx-background-color: #ecf0f1; -fx-padding: 15; -fx-border-radius: 5; -fx-background-radius: 5;");
+        infoBox.setStyle("-fx-background-color: #ecf0f1; -fx-padding: 15; " +
+                "-fx-border-radius: 5; -fx-background-radius: 5;");
 
         Label questionLabel = new Label("Pergunta: [Enunciado da pergunta]");
         questionLabel.setFont(Font.font("Arial", FontWeight.BOLD, 14));
@@ -272,11 +234,11 @@ public class TeacherDashboardController {
 
         infoBox.getChildren().addAll(questionLabel, correctLabel, periodLabel);
 
-        // Estatísticas
         HBox statsBox = new HBox(20);
         statsBox.setAlignment(Pos.CENTER);
         statsBox.setPadding(new Insets(15));
-        statsBox.setStyle("-fx-background-color: white; -fx-border-color: #bdc3c7; -fx-border-radius: 5; -fx-background-radius: 5;");
+        statsBox.setStyle("-fx-background-color: white; -fx-border-color: #bdc3c7; " +
+                "-fx-border-radius: 5; -fx-background-radius: 5;");
 
         VBox totalBox = new VBox(5);
         totalBox.setAlignment(Pos.CENTER);
@@ -306,25 +268,8 @@ public class TeacherDashboardController {
 
         statsBox.getChildren().addAll(totalBox, correctBox, wrongBox);
 
-        // Tabela de respostas
         TableView<String> table = new TableView<>();
         table.setPrefHeight(250);
-
-        TableColumn<String, String> numberCol = new TableColumn<>("Nº Est.");
-        TableColumn<String, String> nameCol = new TableColumn<>("Nome");
-        TableColumn<String, String> emailCol = new TableColumn<>("Email");
-        TableColumn<String, String> answerCol = new TableColumn<>("Resposta");
-        TableColumn<String, String> timeCol = new TableColumn<>("Data/Hora");
-
-        numberCol.setPrefWidth(80);
-        nameCol.setPrefWidth(150);
-        emailCol.setPrefWidth(180);
-        answerCol.setPrefWidth(80);
-        timeCol.setPrefWidth(120);
-
-        table.getColumns().addAll(numberCol, nameCol, emailCol, answerCol, timeCol);
-
-        // TODO: Preencher com dados do servidor
 
         content.getChildren().addAll(infoBox, statsBox, new Label("Respostas:"), table);
 
@@ -352,7 +297,7 @@ public class TeacherDashboardController {
                 File file = fileChooser.showSaveDialog(stage);
 
                 if (file != null) {
-                    // TODO: Solicitar exportação ao servidor
+                    // TODO: solicitar exportação ao servidor
                     showSuccessAlert("Exportação Concluída",
                             "Resultados exportados para:\n" + file.getAbsolutePath());
                 }
@@ -375,7 +320,7 @@ public class TeacherDashboardController {
 
                 confirmAlert.showAndWait().ifPresent(response -> {
                     if (response == ButtonType.OK) {
-                        // TODO: Enviar pedido de eliminação ao servidor
+                        // TODO: enviar pedido ao servidor
                         showSuccessAlert("Pergunta Eliminada",
                                 "A pergunta " + code + " foi eliminada com sucesso.");
                     }
@@ -392,17 +337,11 @@ public class TeacherDashboardController {
 
         alert.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
-                // TODO: Fazer logout no servidor
-                AuthenticationController authController =
-                        new AuthenticationController(stage, clientManager, application);
-                authController.show();
+                clientManager.getService().logout();
+                application.showAuthentication();
             }
         });
     }
-
-    // --------------------------------------------------------
-    // Helpers
-    // --------------------------------------------------------
 
     private void showSuccessAlert(String title, String message) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);

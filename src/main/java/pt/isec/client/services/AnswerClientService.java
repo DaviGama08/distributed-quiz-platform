@@ -10,7 +10,7 @@ import pt.isec.server.model.question.OptionLetter;
 import java.util.List;
 
 /**
- * Serviço para gestão de respostas (submeter e visualizar)
+ * Serviço para gestão de respostas (submeter e visualizar).
  */
 public class AnswerClientService {
     private final ClientService clientService;
@@ -112,4 +112,3 @@ public class AnswerClientService {
         return false;
     }
 }
-

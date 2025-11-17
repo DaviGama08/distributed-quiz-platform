@@ -8,9 +8,8 @@ CREATE TABLE IF NOT EXISTS config (
     );
 
 -- linha única inicial
-INSERT INTO config (id, db_version, teacher_code_hash)
-VALUES (1, 0, 'dummy-hash')
-    ON CONFLICT(id) DO NOTHING;
+INSERT OR IGNORE INTO config (id, db_version, teacher_code_hash)
+VALUES (1, 0, '210000:KdbtTbzp4mwwjPfYW/Prww==:QqDAdfAIIsI4W5Cc+CB7dHJS0m3Nrre3Wa7GGXaWXY4=');
 
 CREATE TABLE IF NOT EXISTS teacher (
                                        id             INTEGER PRIMARY KEY AUTOINCREMENT,

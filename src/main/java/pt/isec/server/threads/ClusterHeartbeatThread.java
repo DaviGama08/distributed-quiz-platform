@@ -1,11 +1,19 @@
 package pt.isec.server.threads;
 
+import pt.isec.common.messages.Message;
+import pt.isec.common.messages.MessageType;
 import pt.isec.server.IQuizServer;
+import pt.isec.server.NetworkConnection;
 import pt.isec.server.QuizServer;
 
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.time.Duration;
 import java.time.Instant;
 
 public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
@@ -13,17 +21,22 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
     private static final int LOOP_SLEEP_MS = 50;
     private static final int MULTICAST_TTL = 1;
     private static final int RX_TIMEOUT_MS = 500;
+    private static final int ACCEPT_TIMEOUT_MS = 500;
     private static final int BUFFER_SIZE = 4096;
 
     private final IQuizServer tInfo;
     private MulticastSocket ms;
+    private ServerSocket dbCopyServerSocket;
 
     public ClusterHeartbeatThread(IQuizServer tInfo) { this.tInfo = tInfo; }
 
     @Override
     public void run() {
-        try (MulticastSocket _ms = new MulticastSocket(tInfo.mcPort())) {
+        try (MulticastSocket _ms = new MulticastSocket(tInfo.mcPort());
+             ServerSocket _ss = new ServerSocket(tInfo.dbCopyPort())) {
+
             this.ms = _ms;
+            this.dbCopyServerSocket = _ss;
 
             _ms.setReuseAddress(true);
             _ms.setSoTimeout(RX_TIMEOUT_MS);
@@ -33,6 +46,8 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
 
             InetAddress grp = InetAddress.getByName(tInfo.mcGroup());
             _ms.joinGroup(new InetSocketAddress(grp, tInfo.mcPort()), tInfo.mcIf());
+
+            _ss.setSoTimeout(ACCEPT_TIMEOUT_MS);
 
             long lastSent = 0;
 
@@ -55,7 +70,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                     lastSent = now;
                 }
 
-                // 2) receção (backups)
+                // 2) receção de heartbeats (backups)
                 if (!tInfo.isPrimary()) {
                     try {
                         _ms.receive(pkt);
@@ -78,17 +93,19 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                                         Instant.now(), needCopyBecauseMissing, tInfo.dbVersion(), rxVersion, senderIp, rxDbPort);
 
                                 if (rxDbPort > 0) {
-                                    // NOVO: usa o “fusível” do ServerNode para evitar múltiplas cópias
+                                    // para não fazer 2 cópias em paralelo
                                     if (tInfo instanceof QuizServer sn) {
                                         if (!sn.tryLockCopy()) {
                                             continue; // já há uma cópia em curso
                                         }
-                                        new Thread(() -> {
-                                            try { new DbCopyRequesterRunnable(tInfo, senderIp, rxDbPort).run(); }
-                                            finally { sn.unlockCopy(); }
-                                        }, "dbcopy-request").start();
+                                        try {
+                                            // faz a cópia SINCRONAMENTE nesta mesma thread
+                                            requestDbCopyFromPrimary(senderIp, rxDbPort, rxVersion);
+                                        } finally {
+                                            sn.unlockCopy();
+                                        }
                                     } else {
-                                        new Thread(new DbCopyRequesterRunnable(tInfo, senderIp, rxDbPort), "dbcopy-request").start();
+                                        requestDbCopyFromPrimary(senderIp, rxDbPort, rxVersion);
                                     }
                                 } else {
                                     System.err.println("[MC] heartbeat sem dbPort → não posso pedir cópia.");
@@ -96,11 +113,22 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                             }
                         }
                     } catch (SocketTimeoutException ignore) {
-                        // sem pacote
+                        // sem pacote multicast
                     } catch (Exception e) {
                         if (tInfo.isRunning())
                             System.err.println("[MC-LOOP] erro rx: " + e.getMessage());
                     }
+                }
+
+                // 3) aceitar pedidos de cópia (lado PRIMÁRIO) no MESMO thread
+                try {
+                    Socket s = _ss.accept(); // timeout curto
+                    handleDbCopySession(s);
+                } catch (SocketTimeoutException ignore) {
+                    // ninguém pediu cópia neste ciclo
+                } catch (Exception e) {
+                    if (tInfo.isRunning())
+                        System.err.println("[DBCOPY] erro no accept: " + e.getMessage());
                 }
 
                 Thread.sleep(LOOP_SLEEP_MS);
@@ -120,7 +148,114 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
         try { return Long.parseLong(raw); } catch (Exception e) { return -1; }
     }
 
+    // Lado BACKUP: pede a cópia ao primário
+    private void requestDbCopyFromPrimary(String primaryIp, int primaryPort, long rxVersion) {
+        Path target = tInfo.dbPath();
+        Path tmp    = target.resolveSibling(target.getFileName().toString() + ".tmp");
+
+        try (NetworkConnection conn = NetworkConnection.connect(
+                primaryIp, primaryPort, Duration.ofSeconds(5))) {
+
+            conn.setReadTimeout(Duration.ofSeconds(30));
+
+            // 1) envia pedido de cópia
+            conn.sendMessage(new Message<>(MessageType.DB_REQUEST_COPY, "please"));
+
+            // 2) espera ACK "copy-start"
+            var resp = conn.receiveMessage();
+            if (resp == null || resp.getType() != MessageType.ACK) {
+                System.err.println("[DBCOPY/RQ] resposta inválida (esperado ACK copy-start)");
+                return;
+            }
+
+            Files.createDirectories(target.getParent());
+
+            // 3) lê tamanho
+            long size = conn.readLong();
+
+            // 4) recebe exatamente 'size' bytes para o ficheiro temporário
+            long total;
+            try (FileOutputStream fos = new FileOutputStream(tmp.toFile())) {
+                total = conn.receiveExactly(fos, size);
+            }
+            System.out.printf("[DBCOPY/RQ] %d bytes recebidos -> %s%n", total, tmp);
+
+            boolean moved = false;
+            try {
+                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                moved = true;
+                System.out.println("[DBCOPY/RQ] move ATOMIC ok -> " + target);
+            } catch (Exception ignore) {}
+
+            if (!moved) {
+                try {
+                    Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+                    moved = true;
+                    System.out.println("[DBCOPY/RQ] move simples ok -> " + target);
+                } catch (Exception ignore) {}
+            }
+
+            if (!moved) {
+                try {
+                    Files.copy(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+                    Files.deleteIfExists(tmp);
+                    moved = true;
+                    System.out.println("[DBCOPY/RQ] copy+delete ok -> " + target);
+                } catch (Exception e) {
+                    System.err.println("[DBCOPY/RQ] falha no copy+delete: " + e.getMessage());
+                }
+            }
+
+            if (moved) {
+                System.out.println("[DBCOPY/RQ] cópia concluída em " + target);
+                // muito importante: alinhar a versão local com a do master
+                tInfo.setDbVersion(rxVersion);
+            } else {
+                System.err.println("[DBCOPY/RQ] não consegui substituir " + target + " (ficou " + tmp + ")");
+            }
+
+        } catch (Exception e) {
+            System.err.println("[DBCOPY/RQ] erro: " + e.getMessage());
+            try { Files.deleteIfExists(tmp); } catch (Exception ignore) {}
+        }
+    }
+
+    // Lado PRIMÁRIO: atende pedidos DB_REQUEST_COPY (backup → primário)
+    private void handleDbCopySession(Socket s) {
+        try (NetworkConnection connection = new NetworkConnection(s)) {
+
+            Message<?> req = connection.receiveMessage();
+            if (req == null || req.getType() != MessageType.DB_REQUEST_COPY) {
+                connection.sendMessage(new Message<>(MessageType.NACK, "bad-request", String.class));
+                return;
+            }
+
+            if (!tInfo.isPrimary()) {
+                connection.sendMessage(new Message<>(MessageType.NACK, "not-primary", String.class));
+                return;
+            }
+
+            connection.sendMessage(new Message<>(MessageType.ACK, "copy-start"));
+
+            Path dbFile = tInfo.dbPath();
+            long size = Files.size(dbFile);
+
+            connection.writeLong(size);
+
+            try (FileInputStream fis = new FileInputStream(dbFile.toFile())) {
+                long sent = connection.sendStreamViaObjectOut(fis, size);
+                System.out.printf("[DBCOPY] %d bytes enviados -> %s%n", sent, dbFile);
+            }
+
+        } catch (Exception e) {
+            System.err.println("[DBCOPY] erro sessão cópia: " + e.getMessage());
+        } finally {
+            try { s.close(); } catch (Exception ignore) {}
+        }
+    }
+
     @Override public void close() {
         if (ms != null) try { ms.close(); } catch (Exception ignore) {}
+        if (dbCopyServerSocket != null) try { dbCopyServerSocket.close(); } catch (Exception ignore) {}
     }
 }

@@ -5,6 +5,9 @@ import pt.isec.client.services.AuthClientService;
 import pt.isec.client.services.QuestionClientService;
 import pt.isec.client.services.ClientService;
 
+/**
+ * Classe que orquestra os serviços disponíveis para o cliente.
+ */
 public class ClientManager {
     private final int port;
     private final String ip;
@@ -23,18 +26,29 @@ public class ClientManager {
         this.answerService = new AnswerClientService(service);
     }
 
-    /**
-     * Arranca discovery + conexão TCP + threads de forma síncrona.
-     * IMPORTANTE: chamar isto numa thread em background (nunca na JavaFX).
-     */
+    /** Arranca o serviço de descoberta e conexão TCP */
     public void start(){
         service.run();
     }
 
-    public void stop(){ service.stop(); }
+    /** Pára o serviço e fecha conexões */
+    public void stop(){
+        service.stop();
+    }
 
-    public AuthClientService getAuthService() { return authService; }
-    public QuestionClientService getQuestionService() { return questionService; }
-    public AnswerClientService getAnswerService() { return answerService; }
-    public ClientService getService() { return service; }
+    public AuthClientService getAuthService() {
+        return authService;
+    }
+
+    public QuestionClientService getQuestionService() {
+        return questionService;
+    }
+
+    public AnswerClientService getAnswerService() {
+        return answerService;
+    }
+
+    public ClientService getService() {
+        return service;
+    }
 }

@@ -20,6 +20,7 @@ public interface IQuizServer {
     NetworkInterface mcIf();
 
     boolean isRunning();
+    void setRunning(boolean v) throws Exception;
 
     boolean isPrimary();
     void setPrimary(String ip, int port);
@@ -35,5 +36,4 @@ public interface IQuizServer {
     void unlockCopy();
 
     AuthService getAuthService();
-    record Principal(String ip, int port){}
 }

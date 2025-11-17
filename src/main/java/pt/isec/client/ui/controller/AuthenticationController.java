@@ -9,12 +9,16 @@ import pt.isec.client.services.ClientService;
 import pt.isec.client.ui.view.AuthenticationView;
 import pt.isec.common.dto.auth.LoginResponseDTO;
 
+/**
+ * Controlador da interface de autenticação. Contém apenas lógica
+ * de validação, chamadas aos serviços de autenticação e navegação.
+ */
 public class AuthenticationController {
-
     private enum Mode { LOGIN, REGISTER }
 
-    private static final Color BLUE = Color.web("#3498db");  // “processo”
-    private static final Color RED  = Color.web("#A01316");  // erro
+    private static final Color BLUE = Color.web("#3498db");  // cor informativa
+    private static final Color RED  = Color.web("#A01316");  // cor de erro
+    private static final long TIMEOUT_MS = 10000; // tempo máximo de espera (10s)
 
     private final Stage stage;
     private final ClientManager clientManager;
@@ -23,7 +27,7 @@ public class AuthenticationController {
     private final AuthenticationView view;
     private Mode mode = Mode.LOGIN;
 
-    // indica se há um login/registo em curso
+    // flag indica que uma operação de login/registo está em curso
     private volatile boolean authBusy = false;
 
     public AuthenticationController(Stage stage,
@@ -41,39 +45,31 @@ public class AuthenticationController {
         setupPropertyChangeListeners();
     }
 
-    // --------------------------------------------------------
-    // Listeners de estado do serviço
-    // --------------------------------------------------------
-
+    /** Observa quando a autenticação é bem-sucedida para abrir o dashboard */
     private void setupPropertyChangeListeners() {
         ClientService service = clientManager.getService();
-
-        // Quando autenticar com sucesso, abre dashboard
-        service.addPropertyChangeListener(
-                ClientService.PROP_AUTHENTICATED,
-                evt -> {
-                    boolean authenticated = (boolean) evt.getNewValue();
-                    if (authenticated) {
-                        Platform.runLater(() -> {
-                            String userType = service.getUserType();
-                            String email = service.getUserEmail();
-                            openDashboard(userType, email);
-                        });
-                    }
-                }
-        );
+        service.addPropertyChangeListener(ClientService.PROP_AUTHENTICATED, evt -> {
+            boolean authenticated = (boolean) evt.getNewValue();
+            if (authenticated) {
+                Platform.runLater(() -> {
+                    String userType = service.getUserType();
+                    String email    = service.getUserEmail();
+                    openDashboard(userType, email);
+                });
+            }
+        });
     }
 
-    // bloqueia / desbloqueia interação
+    /** Liga/desliga a flag de operação e actualiza a view */
     private void setAuthBusy(boolean busy) {
         authBusy = busy;
         Platform.runLater(() -> view.setAuthBusy(busy));
     }
 
-    // --------------------------------------------------------
-    // Helper para garantir ligação
-    // --------------------------------------------------------
-
+    /**
+     * Garante que o cliente está conectado. Se não estiver a correr,
+     * tenta arrancar; se falhar, devolve false e mostra erro.
+     */
     private boolean ensureConnected(String context) {
         ClientService service = clientManager.getService();
 
@@ -81,7 +77,7 @@ public class AuthenticationController {
             clientManager.start();
         }
 
-        // Espera até ~3s (20 * 150ms) pela flag isRunning()
+        // Espera até ~3s (20 * 150ms)
         int attempts = 0;
         while (attempts < 20 && !service.isRunning()) {
             try {
@@ -109,13 +105,10 @@ public class AuthenticationController {
         return true;
     }
 
-    // --------------------------------------------------------
-    // Handlers vindos da View
-    // --------------------------------------------------------
-
+    /** Alterna entre os modos login e registo */
     public void onToggleMode() {
         if (authBusy)
-            return; // não deixar trocar de ecrã no meio de login/registo
+            return;
 
         if (mode == Mode.LOGIN) {
             mode = Mode.REGISTER;
@@ -126,11 +119,9 @@ public class AuthenticationController {
         }
     }
 
+    /** Handler para o botão/Enter de login */
     public void onLogin() {
-        if (mode != Mode.LOGIN)
-            return;
-
-        if (authBusy)
+        if (mode != Mode.LOGIN || authBusy)
             return;
 
         String email = view.getLoginEmail();
@@ -148,6 +139,9 @@ public class AuthenticationController {
         setAuthBusy(true);
         view.setLoginStatus("A conectar ao servidor...", BLUE, true, false);
 
+        // Agenda timeout para evitar bloqueio permanente
+        scheduleTimeout("login");
+
         new Thread(() -> {
             try {
                 if (!ensureConnected("login")) {
@@ -158,19 +152,23 @@ public class AuthenticationController {
                         view.setLoginStatus("A autenticar...", BLUE, true, false)
                 );
 
+                // chamada ao serviço de autenticação
                 LoginResponseDTO response =
                         clientManager.getAuthService().login(email, password);
 
                 if (response != null) {
-                    Platform.runLater(() ->
-                            view.setLoginStatus("Aguarde...", BLUE, false, false)
-                    );
+                    Platform.runLater(() -> {
+                        view.setLoginStatus("Aguarde...", BLUE, false, false);
+                        ClientService service = clientManager.getService();
+                        service.setUserType(response.userType());
+                        service.setUserEmail(response.email());
+                        service.setAuthenticated(true); // dispara listener e abre dashboard
+                    });
                 } else {
                     Platform.runLater(() ->
-                            showLoginError("Credenciais inválidas")
+                            showLoginError("Credenciais inválidas.")
                     );
                 }
-
             } catch (Exception e) {
                 Platform.runLater(() ->
                         showLoginError("Erro na autenticação: " + e.getMessage())
@@ -181,14 +179,12 @@ public class AuthenticationController {
         }, "LoginThread").start();
     }
 
+    /** Handler para o botão de registo */
     public void onRegister() {
-        if (mode != Mode.REGISTER)
+        if (mode != Mode.REGISTER || authBusy)
             return;
 
-        if (authBusy)
-            return;
-
-        String type = view.getSelectedRegisterType(); // STUDENT / TEACHER
+        String type = view.getSelectedRegisterType(); // STUDENT ou TEACHER
         String name = view.getRegisterName();
         String email = view.getRegisterEmail();
         String password = view.getRegisterPassword();
@@ -209,6 +205,9 @@ public class AuthenticationController {
 
         setAuthBusy(true);
         view.setRegisterStatus("A registar...", BLUE, false);
+
+        // Agenda timeout para registo
+        scheduleTimeout("register");
 
         new Thread(() -> {
             try {
@@ -240,9 +239,11 @@ public class AuthenticationController {
                         view.setRegisterStatus(
                                 "Registo bem-sucedido! Já pode fazer login.",
                                 BLUE,
-                                true
+                                false
                         );
-                        view.prefillLoginEmail(email);
+                        // limpar campos e mudar para login
+                        view.clearRegisterFields();
+                        view.clearLoginFields();
                         mode = Mode.LOGIN;
                         view.showLoginMode();
                     });
@@ -251,7 +252,6 @@ public class AuthenticationController {
                             showRegisterError("Erro no registo. Tente novamente.")
                     );
                 }
-
             } catch (Exception e) {
                 Platform.runLater(() ->
                         showRegisterError("Erro no registo: " + e.getMessage())
@@ -262,6 +262,7 @@ public class AuthenticationController {
         }, "RegisterThread").start();
     }
 
+    /** Actualiza label do campo extra conforme o tipo */
     public void onRegisterTypeChanged(String type) {
         if ("STUDENT".equalsIgnoreCase(type)) {
             view.setRegisterExtraLabel("Número de Estudante");
@@ -270,39 +271,64 @@ public class AuthenticationController {
         }
     }
 
-    // --------------------------------------------------------
-    // Navegação
-    // --------------------------------------------------------
+    /** Agenda um timeout de 10 segundos para abortar operações longas */
+    private void scheduleTimeout(String context) {
+        new Thread(() -> {
+            try {
+                Thread.sleep(TIMEOUT_MS);
+            } catch (InterruptedException ignored) {
+            }
+            if (authBusy) {
+                Platform.runLater(() -> {
+                    if ("login".equalsIgnoreCase(context)) {
+                        showLoginError("Tempo esgotado. Tente novamente.");
+                    } else {
+                        showRegisterError("Tempo esgotado. Tente novamente.");
+                    }
+                    setAuthBusy(false);
+                });
+            }
+        }, "AuthTimeoutThread").start();
+    }
 
+    /** Abre o dashboard adequado após autenticação */
     private void openDashboard(String userType, String email) {
+        // Garante que as views são limpas
+        view.clearLoginFields();
+        view.clearRegisterFields();
+
         if ("TEACHER".equalsIgnoreCase(userType)) {
-            TeacherDashboardController controller =
-                    new TeacherDashboardController(stage, clientManager, application, email);
-            controller.show();
+            application.showTeacherDashboard(email);
         } else {
-            StudentDashboardController controller =
-                    new StudentDashboardController(stage, clientManager, application, email);
-            controller.show();
+            application.showStudentDashboard(email);
         }
     }
 
-    // --------------------------------------------------------
-    // Helpers de feedback
-    // --------------------------------------------------------
-
+    /** Mostra mensagem de erro no login e reabilita botão */
     private void showLoginError(String message) {
         view.setLoginStatus("❌ " + message, RED, false, true);
     }
 
+    /** Mostra mensagem de erro no registo e reabilita botão */
     private void showRegisterError(String message) {
         view.setRegisterStatus("❌ " + message, RED, true);
     }
 
-    // --------------------------------------------------------
-    // Mostrar view
-    // --------------------------------------------------------
-
+    /** Mostra o ecrã de login/registo e reinicia estados */
     public void show() {
+        // limpar estados e botões
+        authBusy = false;
+        mode = Mode.LOGIN;
+        view.showLoginMode();
+
+        // mensagens vazias e botões habilitados
+        view.setLoginStatus("", BLUE, false, true);
+        view.setRegisterStatus("", BLUE, true);
+
+        view.clearLoginFields();
+        view.clearRegisterFields();
+        view.showBusy(false);
+
         stage.setScene(view.getScene());
     }
 }

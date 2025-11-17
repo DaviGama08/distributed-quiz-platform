@@ -8,6 +8,9 @@ import java.io.Serializable;
 import java.net.Socket;
 import java.util.concurrent.BlockingQueue;
 
+/**
+ * Interface de acesso aos recursos de rede do cliente.
+ */
 public interface IClientService {
     void handleConnectionLost();
     ObjectOutputStream getOutputStream();

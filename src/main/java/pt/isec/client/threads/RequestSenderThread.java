@@ -8,12 +8,12 @@ import java.io.ObjectOutputStream;
 import java.io.Serializable;
 
 /**
- * Thread que envia mensagens da fila de pedidos para o servidor via TCP
+ * Thread que envia mensagens da fila de pedidos para o servidor via TCP.
  */
-public class RequestSenderRunnable implements Runnable{
+public class RequestSenderThread implements Runnable{
     private final IClientService service;
 
-    public RequestSenderRunnable(IClientService service) {
+    public RequestSenderThread(IClientService service) {
         this.service = service;
     }
 
@@ -25,7 +25,6 @@ public class RequestSenderRunnable implements Runnable{
 
         while(service.isRunning()) {
             try {
-                // Blocking take - espera até haver mensagem na fila
                 Message<? extends Serializable> request = service.getRequestQueue().take();
 
                 if(request != null) {

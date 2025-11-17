@@ -1,82 +1,61 @@
 package pt.isec.client;
-
 import javafx.application.Application;
-import javafx.application.Platform;
-import javafx.scene.control.Alert;
-import javafx.scene.control.ButtonType;
+import javafx.scene.image.Image;
 import javafx.stage.Stage;
 import pt.isec.client.ui.controller.AuthenticationController;
+import pt.isec.client.ui.controller.StudentDashboardController;
+import pt.isec.client.ui.controller.TeacherDashboardController;
+
+import java.util.Objects;
 
 /**
- * Aplicação JavaFX principal do cliente.
- * Responsável por inicializar a interface gráfica.
+ * Classe principal JavaFX que inicia a aplicação cliente.
  */
 public class ClientApplication extends Application {
 
     private static final String DIRECTORY_IP = "localhost";
     private static final int DIRECTORY_PORT = 9999;
 
+    private AuthenticationController authController;
+    private TeacherDashboardController teacherController;
+    private StudentDashboardController studentController;
+
     private ClientManager clientManager;
     private Stage primaryStage;
 
     @Override
-    public void start(Stage primaryStage) {
-        this.primaryStage = primaryStage;
-
-        // Inicializar ClientManager com IP e porta do serviço de diretoria
+    public void start(Stage stage) {
+        this.primaryStage = stage;
         this.clientManager = new ClientManager(DIRECTORY_IP, DIRECTORY_PORT);
 
-        // Configurar janela principal
+        // Cria o controlador de autenticação
+        this.authController = new AuthenticationController(primaryStage, clientManager, this);
+
+        stage.getIcons().clear();
+        stage.getIcons().add(new Image(Objects.requireNonNull(getClass().getResourceAsStream("/imgs/app-icon.png"))));
+
         primaryStage.setTitle("Sistema de Gestão de Perguntas");
-        primaryStage.setMinWidth(900);
-        primaryStage.setMinHeight(600);
-
-        // Tratar fecho da janela
-        primaryStage.setOnCloseRequest(event -> {
-            event.consume(); // Prevenir fecho automático
-            handleApplicationClose();
-        });
-
-        // Mostrar tela de login/autenticação
-        showLoginScreen();
-
+        showAuthentication();
         primaryStage.show();
     }
 
-    /**
-     * Mostra a tela de login/autenticação.
-     */
-    private void showLoginScreen() {
-        AuthenticationController authController =
-                new AuthenticationController(primaryStage, clientManager, this);
+    /** Mostra o ecrã de autenticação */
+    public void showAuthentication() {
+        teacherController = null;
+        studentController = null;
         authController.show();
     }
 
-    /**
-     * Trata o fecho da aplicação.
-     */
-    private void handleApplicationClose() {
-        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-        alert.setTitle("Confirmar Saída");
-        alert.setHeaderText("Deseja realmente sair?");
-        alert.setContentText("A conexão com o servidor será encerrada.");
-
-        alert.showAndWait().ifPresent(response -> {
-            if (response == ButtonType.OK) {
-                if (clientManager != null) {
-                    clientManager.stop();
-                }
-                Platform.exit();
-                System.exit(0);
-            }
-        });
+    /** Abre o dashboard do docente */
+    public void showTeacherDashboard(String email) {
+        teacherController = new TeacherDashboardController(primaryStage, clientManager, this, email);
+        teacherController.show();
     }
 
-    /**
-     * Método main para lançar a aplicação JavaFX.
-     */
-    public static void launchApp(String[] args) {
-        launch(args);
+    /** Abre o dashboard do estudante */
+    public void showStudentDashboard(String email) {
+        studentController = new StudentDashboardController(primaryStage, clientManager, this, email);
+        studentController.show();
     }
 
     @Override

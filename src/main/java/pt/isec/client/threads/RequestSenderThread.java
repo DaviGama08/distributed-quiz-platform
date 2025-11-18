@@ -27,11 +27,9 @@ public class RequestSenderThread implements Runnable{
             try {
                 Message<? extends Serializable> request = service.getRequestQueue().take();
 
-                if(request != null) {
-                    System.out.println("[RequestSender] Sending: " + request.getType());
-                    out.writeObject(request);
-                    out.flush();
-                }
+                System.out.println("[RequestSender] Sending: " + request.getType());
+                out.writeObject(request);
+                out.flush();
             } catch (IOException e) {
                 if(service.isRunning()) {
                     System.err.println("[RequestSender] Failed to send: " + e.getMessage());

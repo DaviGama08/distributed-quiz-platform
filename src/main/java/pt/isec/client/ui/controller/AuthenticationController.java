@@ -9,19 +9,24 @@ import pt.isec.client.services.ClientService;
 import pt.isec.client.ui.view.AuthenticationView;
 import pt.isec.common.dto.auth.LoginResponseDTO;
 
+import java.beans.PropertyChangeEvent;
+
 /**
  * Controlador da interface de autenticação. Contém lógica de validação,
  * chamadas aos serviços de autenticação e navegação.
  */
 public class AuthenticationController {
     private enum Mode { LOGIN, REGISTER }
+
     private static final Color BLUE = Color.web("#3498db");
     private static final Color RED  = Color.web("#A01316");
     private static final long TIMEOUT_MS = 10000;
+
     private final Stage stage;
     private final ClientManager clientManager;
     private final ClientApplication application;
     private final AuthenticationView view;
+
     private Mode mode = Mode.LOGIN;
     private volatile boolean authBusy = false;
 
@@ -36,22 +41,99 @@ public class AuthenticationController {
         setupPropertyChangeListeners();
     }
 
-    /** Observa quando a autenticação é bem-sucedida para abrir o dashboard */
     private void setupPropertyChangeListeners() {
         ClientService service = clientManager.getService();
-        service.addPropertyChangeListener(ClientService.PROP_AUTHENTICATED, evt -> {
-            boolean authenticated = (boolean) evt.getNewValue();
-            if (authenticated) {
-                Platform.runLater(() -> {
-                    String userType = service.getUserType();
-                    String email    = service.getUserEmail();
-                    openDashboard(userType, email);
-                });
+
+        // Escuta do estado autenticado
+        service.addPropertyChangeListener(ClientService.PROP_AUTHENTICATED, this::handleAuthenticationChange);
+
+        // Sucesso no login
+        service.addPropertyChangeListener(ClientService.PROP_LOGIN_OK, this::handleLoginSuccessResponse);
+
+        // Falha no login OU erro genérico
+        service.addPropertyChangeListener(ClientService.PROP_LOGIN_FAIL, this::handleLoginFailResponse);
+
+        // Sucesso no registo
+        service.addPropertyChangeListener(ClientService.PROP_REGISTER_OK, this::handleRegisterOkResponse);
+    }
+
+    private void handleAuthenticationChange(PropertyChangeEvent evt) {
+        boolean authenticated = (boolean) evt.getNewValue();
+        if (authenticated) {
+            Platform.runLater(() -> {
+                ClientService service = clientManager.getService();
+                String userType = service.getUserType();
+                String email    = service.getUserEmail();
+                openDashboard(userType, email);
+            });
+        }
+    }
+
+    private void handleLoginSuccessResponse(PropertyChangeEvent evt) {
+        LoginResponseDTO data = (LoginResponseDTO) evt.getNewValue();
+        ClientService service = clientManager.getService();
+        try {
+            service.setUserId(Integer.parseInt(data.userId()));
+        } catch (NumberFormatException ignored) {
+            service.setUserId(null);
+        }
+        service.setUserType(data.userType());
+        service.setUserEmail(data.email());
+        service.setAuthenticated(true);
+
+        Platform.runLater(() ->
+                view.setLoginStatus("✔️ Login OK! A carregar dashboard...", Color.GREEN, false, true)
+        );
+    }
+
+    /**
+     * Trata tanto LOGIN_FAIL como ERROR vindos do servidor.
+     * Se estivermos em modo LOGIN, mostra mensagem no formulário de login.
+     * Se estivermos em modo REGISTER, mostra mensagem no formulário de registo.
+     */
+    private void handleLoginFailResponse(PropertyChangeEvent evt) {
+        String data = (String) evt.getNewValue();
+        Platform.runLater(() -> {
+            if (mode == Mode.LOGIN) {
+                view.setLoginStatus("❌ Login Falhou: " + data, RED, false, true);
+            } else {
+                view.setRegisterStatus("❌ Registo Falhou: " + data, RED, true);
             }
+            authBusy = false;
+            view.setAuthBusy(false);
         });
     }
 
-    /** Alterna entre os modos login e registo */
+    /** Sucesso no registo */
+    private void handleRegisterOkResponse(PropertyChangeEvent evt) {
+        LoginResponseDTO data = (LoginResponseDTO) evt.getNewValue();
+        ClientService service = clientManager.getService();
+
+        try {
+            service.setUserId(Integer.parseInt(data.userId()));
+        } catch (NumberFormatException ignored) {
+            service.setUserId(null);
+        }
+        service.setUserType(data.userType());
+        service.setUserEmail(data.email());
+        service.setAuthenticated(true);
+
+        // TODO: toda a manipulação de UI tem de estar na FX thread
+        Platform.runLater(() -> {
+            view.setRegisterStatus("✔️ Registo OK! A carregar dashboard...", Color.GREEN, true);
+
+            // limpar formulários e voltar ao modo login
+            view.clearRegisterFields();
+            view.clearLoginFields();
+            mode = Mode.LOGIN;
+            view.showLoginMode();
+
+            authBusy = false;
+            view.setAuthBusy(false);
+        });
+    }
+
+    /** Alterna entre modos de autenticação */
     public void onToggleMode() {
         if (authBusy) return;
         if (mode == Mode.LOGIN) {
@@ -63,11 +145,13 @@ public class AuthenticationController {
         }
     }
 
-    /** Handler para o botão/Enter de login */
-    public void onLogin() {
+    /** Handler do botão de login */
+    public void onLogin() throws InterruptedException {
         if (mode != Mode.LOGIN || authBusy) return;
+
         String email = view.getLoginEmail();
         String password = view.getLoginPassword();
+
         if (email.isEmpty() || password.isEmpty()) {
             showLoginError("Por favor, preencha todos os campos.");
             return;
@@ -76,35 +160,24 @@ public class AuthenticationController {
             showLoginError("Email inválido.");
             return;
         }
+
         setAuthBusy(true);
         view.setLoginStatus("A conectar ao servidor...", BLUE, true, false);
-        scheduleTimeout("login");
-        new Thread(() -> {
-            try {
-                if (!ensureConnected("login")) return;
-                Platform.runLater(() -> view.setLoginStatus("A autenticar...", BLUE, true, false));
-                LoginResponseDTO response = clientManager.getAuthService().login(email, password);
-                if (response != null) {
-                    Platform.runLater(() -> view.setLoginStatus("Aguarde...", BLUE, false, false));
-                } else {
-                    Platform.runLater(() -> showLoginError("Credenciais inválidas."));
-                }
-            } catch (Exception e) {
-                Platform.runLater(() -> showLoginError("Erro na autenticação: " + e.getMessage()));
-            } finally {
-                setAuthBusy(false);
-            }
-        }, "LoginThread").start();
+        Platform.runLater(() -> view.setLoginStatus("A autenticar...", BLUE, true, false));
+
+        clientManager.getAuthService().login(email, password);
     }
 
-    /** Handler para o botão de registo */
+    /** Handler do botão de registo */
     public void onRegister() {
         if (mode != Mode.REGISTER || authBusy) return;
+
         String type = view.getSelectedRegisterType();
         String name = view.getRegisterName();
         String email = view.getRegisterEmail();
         String password = view.getRegisterPassword();
         String extra = view.getRegisterExtra();
+
         if (name.isEmpty() || email.isEmpty() || password.isEmpty() || extra.isEmpty()) {
             showRegisterError("Por favor, preencha todos os campos.");
             return;
@@ -117,45 +190,30 @@ public class AuthenticationController {
             showRegisterError("Password deve ter no mínimo 6 caracteres.");
             return;
         }
+
         setAuthBusy(true);
         view.setRegisterStatus("A registar...", BLUE, false);
-        scheduleTimeout("register");
-        new Thread(() -> {
-            try {
-                if (!ensureConnected("register")) return;
-                boolean ok;
-                if ("STUDENT".equalsIgnoreCase(type)) {
-                    int number;
-                    try {
-                        number = Integer.parseInt(extra);
-                    } catch (NumberFormatException e) {
-                        Platform.runLater(() -> showRegisterError("Número de estudante inválido."));
-                        return;
-                    }
-                    ok = clientManager.getAuthService().registerStudent(name, email, password, number);
-                } else {
-                    ok = clientManager.getAuthService().registerTeacher(name, email, password, extra);
+
+        try {
+            if ("STUDENT".equalsIgnoreCase(type)) {
+                int number;
+                try {
+                    number = Integer.parseInt(extra);
+                } catch (NumberFormatException e) {
+                    Platform.runLater(() -> showRegisterError("Número de estudante inválido."));
+                    return;
                 }
-                if (ok) {
-                    Platform.runLater(() -> {
-                        view.setRegisterStatus("Registo bem-sucedido! Já pode fazer login.", BLUE, false);
-                        view.clearRegisterFields();
-                        view.clearLoginFields();
-                        mode = Mode.LOGIN;
-                        view.showLoginMode();
-                    });
-                } else {
-                    Platform.runLater(() -> showRegisterError("Erro no registo. Tente novamente."));
-                }
-            } catch (Exception e) {
-                Platform.runLater(() -> showRegisterError("Erro no registo: " + e.getMessage()));
-            } finally {
-                setAuthBusy(false);
+                clientManager.getAuthService().registerStudent(name, email, password, number);
+            } else {
+                clientManager.getAuthService().registerTeacher(name, email, password, extra);
             }
-        }, "RegisterThread").start();
+        } catch (Exception e) {
+            Platform.runLater(() -> showRegisterError("Erro no registo: " + e.getMessage()));
+            setAuthBusy(false);
+        }
     }
 
-    /** Actualiza a label do campo extra de registo conforme o tipo (estudante ou docente) */
+    /** Handler de alteração do tipo de registo */
     public void onRegisterTypeChanged(String type) {
         if ("STUDENT".equalsIgnoreCase(type)) {
             view.setRegisterExtraLabel("Número de Estudante");
@@ -164,62 +222,13 @@ public class AuthenticationController {
         }
     }
 
-    /** Garante que o cliente está conectado ao servidor. Se não estiver, tenta iniciar o serviço e espera até 3 segundos. */
-    private boolean ensureConnected(String context) {
-        ClientService service = clientManager.getService();
-        if (!service.isRunning()) {
-            clientManager.start();
-        }
-        int attempts = 0;
-        while (attempts < 20 && !service.isRunning()) {
-            try {
-                Thread.sleep(150);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            }
-            attempts++;
-        }
-        if (!service.isRunning()) {
-            Platform.runLater(() -> {
-                String msg = "Não foi possível contactar o servidor.\nVerifique se a diretoria e o servidor estão em execução.";
-                if ("login".equalsIgnoreCase(context)) {
-                    showLoginError(msg);
-                } else {
-                    showRegisterError(msg);
-                }
-            });
-            return false;
-        }
-        return true;
-    }
-
-    /** Liga/desliga a flag de operação e actualiza a view para bloquear/desbloquear os campos */
+    /** Activa/desactiva o estado de busy e actualiza a interface */
     private void setAuthBusy(boolean busy) {
         authBusy = busy;
         Platform.runLater(() -> view.setAuthBusy(busy));
     }
 
-    /** Agenda um timeout de 10 segundos para abortar operações longas */
-    private void scheduleTimeout(String context) {
-        new Thread(() -> {
-            try {
-                Thread.sleep(TIMEOUT_MS);
-            } catch (InterruptedException ignored) { }
-            if (authBusy) {
-                Platform.runLater(() -> {
-                    if ("login".equalsIgnoreCase(context)) {
-                        showLoginError("Tempo esgotado. Tente novamente.");
-                    } else {
-                        showRegisterError("Tempo esgotado. Tente novamente.");
-                    }
-                    setAuthBusy(false);
-                });
-            }
-        }, "AuthTimeoutThread").start();
-    }
-
-    /** Abre o dashboard adequado conforme o tipo de utilizador após autenticação */
+    /** Abre o dashboard apropriado (docente/estudante) */
     private void openDashboard(String userType, String email) {
         view.clearLoginFields();
         view.clearRegisterFields();
@@ -230,17 +239,17 @@ public class AuthenticationController {
         }
     }
 
-    /** Mostra mensagem de erro no login e reabilita o botão */
+    /** Mostra erro no login */
     private void showLoginError(String message) {
         view.setLoginStatus("❌ " + message, RED, false, true);
     }
 
-    /** Mostra mensagem de erro no registo e reabilita o botão */
+    /** Mostra erro no registo */
     private void showRegisterError(String message) {
         view.setRegisterStatus("❌ " + message, RED, true);
     }
 
-    /** Mostra o ecrã de login/registo e reinicia estados */
+    /** Reinicia a vista de autenticação */
     public void show() {
         authBusy = false;
         mode = Mode.LOGIN;

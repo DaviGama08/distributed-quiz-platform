@@ -75,7 +75,7 @@ public class ClientHandlerThread implements Runnable {
                 try {
                     RegisterStudentDTO dto = message.getDataAs(RegisterStudentDTO.class);
                     LoginResponseDTO res = tInfo.getAuthService().registerStudent(dto);
-                    connection.sendMessage(new Message<>(MessageType.LOGIN_OK, res, LoginResponseDTO.class));
+                    connection.sendMessage(new Message<>(MessageType.REGISTER_OK, res, LoginResponseDTO.class));
                 } catch (Exception e) {
                     connection.sendMessage(new Message<>(MessageType.ERROR, e.getMessage(), String.class));
                 }
@@ -85,7 +85,7 @@ public class ClientHandlerThread implements Runnable {
                 try {
                     RegisterTeacherDTO dto = message.getDataAs(RegisterTeacherDTO.class);
                     LoginResponseDTO res = tInfo.getAuthService().registerTeacher(dto);
-                    connection.sendMessage(new Message<>(MessageType.LOGIN_OK, res, LoginResponseDTO.class));
+                    connection.sendMessage(new Message<>(MessageType.REGISTER_OK, res, LoginResponseDTO.class));
                 } catch (Exception e) {
                     connection.sendMessage(new Message<>(MessageType.ERROR, e.getMessage(), String.class));
                 }
@@ -97,7 +97,7 @@ public class ClientHandlerThread implements Runnable {
                     LoginResponseDTO res = tInfo.getAuthService().login(dto);
                     connection.sendMessage(new Message<>(MessageType.LOGIN_OK, res, LoginResponseDTO.class));
                 } catch (Exception e) {
-                    connection.sendMessage(new Message<>(MessageType.ERROR, e.getMessage(), String.class));
+                    connection.sendMessage(new Message<>(MessageType.LOGIN_FAIL, e.getMessage(), String.class));
                 }
             }
 

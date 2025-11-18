@@ -8,6 +8,7 @@ public enum MessageType {
     LOGIN,
     LOGIN_OK,
     LOGIN_FAIL,
+    REGISTER_OK,
     REGISTER_STUDENT,
     REGISTER_TEACHER,
     ACK,

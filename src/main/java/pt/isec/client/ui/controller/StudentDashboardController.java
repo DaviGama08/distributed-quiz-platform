@@ -16,6 +16,7 @@ import pt.isec.client.ui.view.StudentDashboardView;
 import pt.isec.common.dto.answer.SubmitAnswerDTO;
 import pt.isec.common.dto.question.JoinQuestionDTO;
 import pt.isec.server.model.question.Answer;
+import pt.isec.server.model.question.Option;
 import pt.isec.server.model.question.OptionLetter;
 import pt.isec.server.model.question.Question;
 
@@ -25,7 +26,9 @@ import java.util.List;
 
 /**
  * Controlador do dashboard do estudante. Interage com o servidor para
- * responder a perguntas e obter histórico.
+ * responder a perguntas e obter histórico, seguindo o modelo de eventos.
+ * Todos os pedidos são enfileirados e as respostas são tratadas via
+ * propriedades do ClientService.
  */
 public class StudentDashboardController {
     private final Stage stage;
@@ -33,25 +36,36 @@ public class StudentDashboardController {
     private final ClientApplication application;
     private final String userEmail;
     private final StudentDashboardView view;
+
+    // Flags de espera
+    private volatile boolean awaitingJoinQuestion = false;
+    private volatile boolean awaitingSubmitAnswer = false;
+    private volatile boolean awaitingHistory      = false;
+
     public StudentDashboardController(Stage stage, ClientManager clientManager,
                                       ClientApplication application, String userEmail) {
         this.stage = stage;
         this.clientManager = clientManager;
-        this.application = application;
-        this.userEmail = userEmail;
-        this.view = new StudentDashboardView(userEmail);
+        this.application   = application;
+        this.userEmail     = userEmail;
+        this.view          = new StudentDashboardView(userEmail);
         view.createView();
         view.registerHandlers(this);
         setupPropertyChangeListeners();
     }
-    /** Mostra o dashboard */
+
+    /** Exibe o dashboard do estudante */
     public void show() {
         stage.setScene(view.getScene());
         stage.setMaximized(true);
     }
-    /** Regista listener para notificações do servidor */
+
+    /** Regista listeners para eventos do ClientService */
     private void setupPropertyChangeListeners() {
-        clientManager.getService().addPropertyChangeListener(
+        ClientService service = clientManager.getService();
+
+        // Notificações genéricas
+        service.addPropertyChangeListener(
                 ClientService.PROP_NOTIFICATION,
                 evt -> {
                     String notification = (String) evt.getNewValue();
@@ -63,8 +77,68 @@ public class StudentDashboardController {
                     }
                 }
         );
+
+        // Resposta ao join numa pergunta
+        service.addPropertyChangeListener(
+                ClientService.PROP_JOIN_QUESTION_RESPONSE,
+                evt -> {
+                    if (!awaitingJoinQuestion) return;
+                    awaitingJoinQuestion = false;
+                    Question q = (Question) evt.getNewValue();
+                    Platform.runLater(() -> {
+                        if (q == null) {
+                            showErrorAlert("Pergunta não encontrada ou fora do período de resposta.");
+                        } else {
+                            openQuestionDialog(q);
+                        }
+                    });
+                }
+        );
+
+        // Submissão de resposta bem sucedida
+        service.addPropertyChangeListener(
+                ClientService.PROP_SUBMIT_ANSWER_OK,
+                evt -> {
+                    if (!awaitingSubmitAnswer) return;
+                    awaitingSubmitAnswer = false;
+                    String msg = (String) evt.getNewValue();
+                    Platform.runLater(() ->
+                            showSuccessAlert("Resposta submetida com sucesso!",
+                                    msg == null ? "" : msg)
+                    );
+                }
+        );
+
+        // Falha na submissão de resposta
+        service.addPropertyChangeListener(
+                ClientService.PROP_SUBMIT_ANSWER_FAIL,
+                evt -> {
+                    if (!awaitingSubmitAnswer) return;
+                    awaitingSubmitAnswer = false;
+                    String msg = (String) evt.getNewValue();
+                    Platform.runLater(() ->
+                            showErrorAlert("Falha ao submeter a resposta: " +
+                                    (msg == null ? "" : msg))
+                    );
+                }
+        );
+
+        // Histórico de respostas devolvido
+        service.addPropertyChangeListener(
+                ClientService.PROP_LIST_ANSWERED_RESPONSE,
+                evt -> {
+                    if (!awaitingHistory) return;
+                    awaitingHistory = false;
+                    @SuppressWarnings("unchecked")
+                    List<Answer> history = (List<Answer>) evt.getNewValue();
+                    Platform.runLater(() ->
+                            showHistoryDialog(history)
+                    );
+                }
+        );
     }
-    /** Handler de responder pergunta */
+
+    /** Handler para solicitar uma pergunta (insere código e envia JoinQuestion) */
     public void onAnswerQuestion() {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle("Responder Pergunta");
@@ -82,66 +156,88 @@ public class StudentDashboardController {
             if (bt == searchButtonType) {
                 String code = codeField.getText().trim();
                 if (!code.isEmpty()) {
-                    showQuestionDetails(code);
+                    Integer studentId = clientManager.getUserId();
+                    if (studentId == null) {
+                        showErrorAlert("Sessão inválida. Faça login novamente.");
+                        return;
+                    }
+                    awaitingJoinQuestion = true;
+                    try {
+                        clientManager.getQuestionService()
+                                .joinQuestion(new JoinQuestionDTO(code, studentId));
+                    } catch (Exception e) {
+                        showErrorAlert("Erro ao procurar pergunta: " + e.getMessage());
+                        awaitingJoinQuestion = false;
+                    }
                 }
             }
         });
     }
-    /** Mostra detalhes da pergunta para resposta e submete resposta ao servidor */
-    private void showQuestionDetails(String code) {
+
+    /** Abre a janela com a pergunta e envia a resposta seleccionada */
+    private void openQuestionDialog(Question question) {
         Integer studentId = clientManager.getUserId();
         if (studentId == null) {
             showErrorAlert("Sessão inválida. Faça login novamente.");
             return;
         }
-        Question question = clientManager.getQuestionService().joinQuestion(new JoinQuestionDTO(code, studentId));
-        if (question == null) {
-            showErrorAlert("Pergunta não encontrada ou fora do período de resposta.");
-            return;
-        }
         Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle("Pergunta - " + code);
+        dialog.setTitle("Pergunta - " + question.getAccessCode());
         dialog.setHeaderText(question.getStatement());
         VBox content = new VBox(15);
         content.setPadding(new Insets(20));
         ToggleGroup group = new ToggleGroup();
-        var opts = question.getOptions();
         List<RadioButton> radioButtons = new ArrayList<>();
-        for (var opt : opts) {
+        List<Option> opts = question.getOptions();
+        for (Option opt : opts) {
             RadioButton rb = new RadioButton(opt.getLetter().name() + ") " + opt.getText());
             rb.setToggleGroup(group);
             rb.setFont(Font.font("Arial", 13));
             radioButtons.add(rb);
         }
-        VBox options = new VBox(10);
-        options.getChildren().addAll(radioButtons);
-        content.getChildren().add(options);
+        VBox optionsBox = new VBox(10);
+        optionsBox.getChildren().addAll(radioButtons);
+        content.getChildren().add(optionsBox);
         dialog.getDialogPane().setContent(content);
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
         Button okButton = (Button) dialog.getDialogPane().lookupButton(ButtonType.OK);
         okButton.setText("Submeter Resposta");
-        dialog.showAndWait().ifPresent(bt -> {
-            if (bt == ButtonType.OK && group.getSelectedToggle() != null) {
+        okButton.setOnAction(ev -> {
+            if (group.getSelectedToggle() != null) {
                 RadioButton selected = (RadioButton) group.getSelectedToggle();
                 String answerLetter = selected.getText().substring(0, 1);
                 OptionLetter selectedOption = OptionLetter.valueOf(answerLetter);
-                boolean ok = clientManager.getAnswerService().submitAnswer(new SubmitAnswerDTO(question.getId(), studentId, selectedOption));
-                if (ok) {
-                    showSuccessAlert("Resposta submetida com sucesso!", "");
-                } else {
-                    showErrorAlert("Falha ao submeter a resposta.");
+                awaitingSubmitAnswer = true;
+                try {
+                    clientManager.getAnswerService().submitAnswer(
+                            new SubmitAnswerDTO(question.getId(), studentId, selectedOption));
+                } catch (Exception ex) {
+                    showErrorAlert("Erro ao submeter resposta: " + ex.getMessage());
+                    awaitingSubmitAnswer = false;
                 }
             }
         });
+        dialog.showAndWait();
     }
-    /** Handler para mostrar o histórico de respostas */
+
+    /** Handler para solicitar o histórico de respostas */
     public void onShowHistory() {
         Integer studentId = clientManager.getUserId();
         if (studentId == null) {
             showErrorAlert("Sessão inválida. Faça login novamente.");
             return;
         }
-        List<Answer> history = clientManager.getAnswerService().viewAnswersForStudent(studentId);
+        awaitingHistory = true;
+        try {
+            clientManager.getAnswerService().viewAnswersForStudent(studentId);
+        } catch (Exception e) {
+            showErrorAlert("Erro ao obter histórico: " + e.getMessage());
+            awaitingHistory = false;
+        }
+    }
+
+    /** Exibe histórico de respostas numa janela (ao receber LIST_ANSWERED_RESPONSE) */
+    private void showHistoryDialog(List<Answer> history) {
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Histórico de Respostas");
         dialog.setHeaderText("Perguntas respondidas");
@@ -160,7 +256,6 @@ public class StudentDashboardController {
             TableColumn<Answer, String> dateCol = new TableColumn<>("Data/Hora");
             dateCol.setCellValueFactory(data -> new SimpleStringProperty(
                     data.getValue().getAnsweredAt().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"))));
-            // Mostra o identificador da pergunta em vez de chamar getQuestion()
             TableColumn<Answer, String> questionCol = new TableColumn<>("Pergunta");
             questionCol.setCellValueFactory(data -> new SimpleStringProperty(
                     String.valueOf(data.getValue().getQuestionId())));
@@ -192,6 +287,7 @@ public class StudentDashboardController {
             }
         });
     }
+
     /** Mostra mensagem de sucesso */
     private void showSuccessAlert(String title, String message) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
@@ -200,6 +296,7 @@ public class StudentDashboardController {
         alert.setContentText(message);
         alert.showAndWait();
     }
+
     /** Mostra mensagem de erro */
     private void showErrorAlert(String message) {
         Alert alert = new Alert(Alert.AlertType.ERROR);

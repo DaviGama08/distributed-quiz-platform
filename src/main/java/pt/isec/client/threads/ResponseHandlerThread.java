@@ -1,29 +1,38 @@
 package pt.isec.client.threads;
 
 import pt.isec.client.services.IClientService;
+import pt.isec.common.dto.auth.LoginResponseDTO;
+import pt.isec.common.dto.question.CreateQuestionResponseDTO;
 import pt.isec.common.messages.Message;
 import pt.isec.common.messages.MessageType;
+import pt.isec.server.model.question.Answer;
+import pt.isec.server.model.question.Question;
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Thread que processa as respostas do servidor da fila de respostas
  * e executa a lógica apropriada para cada tipo de mensagem.
+ *
+ * Esta classe delega no IClientService a emissão de eventos (propriedades)
+ * para que os controladores da UI actualizem a interface conforme necessário.
  */
 public class ResponseHandlerThread implements Runnable{
-    private final IClientService service;
+    private final IClientService tInfo;
 
-    public ResponseHandlerThread(IClientService service) {
-        this.service = service;
+    public ResponseHandlerThread(IClientService tInfo) {
+        this.tInfo = tInfo;
     }
 
     @Override
     public void run() {
         System.out.println("[ResponseHandler] Started processing responses...");
 
-        while(service.isRunning()) {
+        while(tInfo.isRunning()) {
             try {
-                Message<? extends Serializable> response = service.getResponseQueue().take();
+                Message<? extends Serializable> response = tInfo.getResponseQueue().take();
                 processResponse(response);
             } catch (InterruptedException e) {
                 System.out.println("[ResponseHandler] Interrupted");
@@ -41,56 +50,94 @@ public class ResponseHandlerThread implements Runnable{
         System.out.println("[ResponseHandler] Processing: " + type);
 
         switch(type) {
-            case LOGIN_OK:
+            /* ===== AUTENTICAÇÃO ===== */
+            case LOGIN_OK -> {
                 System.out.println("[ResponseHandler] Login successful!");
-                break;
+                if(response.getData() instanceof LoginResponseDTO dto)
+                    tInfo.setPropLoginOk(dto);
+            }
+            case LOGIN_FAIL -> {
+                System.err.println("[ResponseHandler] Login fail: " + response.getData());
+                if(response.getData() instanceof String s)
+                    tInfo.setPropError(s);
+            }
+            case REGISTER_OK -> {
+                System.out.println("[ResponseHandler] Register successful!");
+                if(response.getData() instanceof LoginResponseDTO dto)
+                    tInfo.setPropRegisterOk(dto);
+            }
 
-            case LOGIN_FAIL:
-                System.err.println("[ResponseHandler] Login failed!");
-                break;
-
-            case ACK:
+            /* ===== ACK/NACK/ERROR genéricos ===== */
+            case ACK -> {
                 System.out.println("[ResponseHandler] Operation acknowledged");
-                break;
-
-            case NACK:
-                System.err.println("[ResponseHandler] Operation failed");
-                break;
-
-            case ERROR:
+                // ACK é genérico; em caso de logout a UI deve observar PROP_AUTHENTICATED
+            }
+            case NACK -> System.err.println("[ResponseHandler] Operation failed");
+            case ERROR -> {
                 System.err.println("[ResponseHandler] Server error: " + response.getData());
-                break;
+                if(response.getData() instanceof String s)
+                    tInfo.setPropError(s);
+            }
 
-            case PONG:
-                System.out.println("[ResponseHandler] Pong received");
-                break;
+            case PONG -> System.out.println("[ResponseHandler] Pong received");
 
-            case LIST_QUESTIONS_RESPONSE:
+            /* ===== OPERAÇÕES DE PERGUNTAS ===== */
+
+            case CREATE_QUESTION_RESPONSE -> {
+                System.out.println("[ResponseHandler] New question created");
+                CreateQuestionResponseDTO dto = response.getDataAs(CreateQuestionResponseDTO.class);
+                tInfo.setPropCreateQuestionResponse(dto);
+            }
+
+            case LIST_QUESTIONS_RESPONSE -> {
                 System.out.println("[ResponseHandler] Questions list received");
-                break;
+                Serializable data = response.getData();
+                if (data instanceof ArrayList<?> list) {
+                    // suprime warning de cast inseguro
+                    List<Question> qList = (List<Question>) list;
+                    tInfo.setPropListQuestionsResponse(qList);
+                }
+            }
 
-            case VIEW_ANSWERS_RESPONSE:
-                System.out.println("[ResponseHandler] Answers received");
-                break;
-
-            case QUESTION_DETAILS:
+            case QUESTION_DETAILS -> {
                 System.out.println("[ResponseHandler] Question details received");
-                break;
+                Question q = response.getDataAs(Question.class);
+                tInfo.setPropJoinQuestionResponse(q);
+            }
 
-            case SUBMIT_OK:
+            /* ===== OPERAÇÕES DE RESPOSTAS ===== */
+
+            case SUBMIT_OK -> {
                 System.out.println("[ResponseHandler] Answer submitted successfully");
-                break;
+                String msg = response.getData() instanceof String s ? s : "answer-ok";
+                tInfo.setPropSubmitAnswerOk(msg);
+            }
 
-            case SUBMIT_FAIL:
+            case SUBMIT_FAIL -> {
                 System.err.println("[ResponseHandler] Failed to submit answer");
-                break;
+                String msg = response.getData() instanceof String s ? s : "answer-fail";
+                tInfo.setPropSubmitAnswerFail(msg);
+            }
 
-            case LIST_ANSWERED_RESPONSE:
+            case VIEW_ANSWERS_RESPONSE -> {
+                System.out.println("[ResponseHandler] Answers received");
+                Serializable data = response.getData();
+                if (data instanceof ArrayList<?> list) {
+                    List<Answer> answers = (List<Answer>) list;
+                    tInfo.setPropViewAnswersResponse(answers);
+                }
+            }
+
+            case LIST_ANSWERED_RESPONSE -> {
                 System.out.println("[ResponseHandler] Answered questions history received");
-                break;
+                Serializable data = response.getData();
+                if (data instanceof ArrayList<?> list) {
+                    List<Answer> answers = (List<Answer>) list;
+                    tInfo.setPropListAnsweredResponse(answers);
+                }
+            }
 
-            default:
-                System.out.println("[ResponseHandler] Unhandled message type: " + type);
+            default -> System.out.println("[ResponseHandler] Unhandled message type: " + type);
         }
     }
 }

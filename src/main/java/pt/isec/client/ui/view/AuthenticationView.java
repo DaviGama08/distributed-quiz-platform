@@ -354,8 +354,20 @@ public class AuthenticationView {
 
     public void registerHandlers(AuthenticationController controller) {
         toggleModeButton.setOnAction(e -> controller.onToggleMode());
-        loginPasswordField.setOnAction(e -> controller.onLogin());
-        loginButton.setOnAction(e -> controller.onLogin());
+        loginPasswordField.setOnAction(e -> {
+            try {
+                controller.onLogin();
+            } catch (InterruptedException ex) {
+                throw new RuntimeException(ex);
+            }
+        });
+        loginButton.setOnAction(e -> {
+            try {
+                controller.onLogin();
+            } catch (InterruptedException ex) {
+                throw new RuntimeException(ex);
+            }
+        });
 
         registerButton.setOnAction(e -> controller.onRegister());
         rbStudent.setOnAction(e -> controller.onRegisterTypeChanged("STUDENT"));

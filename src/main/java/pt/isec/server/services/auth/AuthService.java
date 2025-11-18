@@ -121,7 +121,10 @@ public class AuthService implements IAuthService {
         String email = dto.email();
         String pw    = dto.password();
 
-        if (!isValidEmail(email)) throw new IllegalArgumentException("Email inválido");
+        if (!isValidEmail(email)){
+            throw new IllegalArgumentException("Email inválido");
+        }
+
         if (pw == null || pw.isBlank()) throw new IllegalArgumentException("Password em falta");
 
         Map<String,Object> teacher = db.selectOne(

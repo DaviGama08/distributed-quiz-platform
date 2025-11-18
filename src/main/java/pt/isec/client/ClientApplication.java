@@ -28,6 +28,8 @@ public class ClientApplication extends Application {
         this.primaryStage = stage;
         this.clientManager = new ClientManager(DIRECTORY_IP, DIRECTORY_PORT);
 
+        new Thread(() -> clientManager.start()).start();
+
         // Cria o controlador de autenticação
         this.authController = new AuthenticationController(primaryStage, clientManager, this);
 

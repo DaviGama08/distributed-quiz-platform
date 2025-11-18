@@ -20,21 +20,19 @@ public class AnswerClientService {
     }
 
     /**
-     * Submete resposta de um estudante
+     * Submete a resposta de um estudante.
      */
     public boolean submitAnswer(Integer questionId, Integer studentId, OptionLetter selectedOption) {
         SubmitAnswerDTO dto = new SubmitAnswerDTO(questionId, studentId, selectedOption);
         Message<SubmitAnswerDTO> message = new Message<>(MessageType.SUBMIT_ANSWER, dto);
-
         System.out.println("[AnswerClient] Submitting answer for question " + questionId);
         clientService.sendMessage(message);
-
         try {
             Message<?> response = clientService.waitForResponse();
-            if(response.getType() == MessageType.SUBMIT_OK) {
+            if (response.getType() == MessageType.SUBMIT_OK) {
                 System.out.println("[AnswerClient] Answer submitted successfully");
                 return true;
-            } else if(response.getType() == MessageType.SUBMIT_FAIL) {
+            } else if (response.getType() == MessageType.SUBMIT_FAIL) {
                 System.err.println("[AnswerClient] Failed to submit answer: " + response.getData());
                 return false;
             } else {
@@ -49,19 +47,16 @@ public class AnswerClientService {
     }
 
     /**
-     * Visualiza respostas de uma questão (apenas professor e questão expirada)
+     * Visualiza respostas de uma questão (apenas professor e após período expirar).
      */
     public List<Answer> viewAnswers(Integer questionId, Integer teacherId) {
         ViewAnswersDTO dto = new ViewAnswersDTO(questionId, teacherId);
         Message<ViewAnswersDTO> message = new Message<>(MessageType.VIEW_ANSWERS, dto);
-
         System.out.println("[AnswerClient] Requesting answers for question " + questionId);
         clientService.sendMessage(message);
-
         try {
             Message<?> response = clientService.waitForResponse();
-            if(response.getType() == MessageType.VIEW_ANSWERS_RESPONSE) {
-                @SuppressWarnings("unchecked")
+            if (response.getType() == MessageType.VIEW_ANSWERS_RESPONSE) {
                 List<Answer> answers = (List<Answer>) response.getData();
                 System.out.println("[AnswerClient] Received " + answers.size() + " answers");
                 return answers;
@@ -77,18 +72,15 @@ public class AnswerClientService {
     }
 
     /**
-     * Obtém histórico de questões respondidas (estudante)
+     * Obtém histórico de questões respondidas (estudante).
      */
     public List<Answer> getStudentHistory(Integer studentId) {
         Message<Integer> message = new Message<>(MessageType.LIST_ANSWERED_QUESTIONS, studentId);
-
         System.out.println("[AnswerClient] Requesting history for student " + studentId);
         clientService.sendMessage(message);
-
         try {
             Message<?> response = clientService.waitForResponse();
-            if(response.getType() == MessageType.LIST_ANSWERED_RESPONSE) {
-                @SuppressWarnings("unchecked")
+            if (response.getType() == MessageType.LIST_ANSWERED_RESPONSE) {
                 List<Answer> history = (List<Answer>) response.getData();
                 System.out.println("[AnswerClient] Received history with " + history.size() + " entries");
                 return history;
@@ -104,10 +96,9 @@ public class AnswerClientService {
     }
 
     /**
-     * Exporta resultados para CSV (professor)
+     * Exporta resultados para CSV (professor). Esta função poderá ser implementada quando o servidor suportar.
      */
     public boolean exportResultsToCSV(Integer questionId, Integer teacherId, String filePath) {
-        // TODO: Implementar quando servidor suportar
         System.out.println("[AnswerClient] Export to CSV not yet implemented");
         return false;
     }

@@ -7,5 +7,3 @@ public record ViewAnswersDTO(
         Integer teacherId
 ) implements Serializable {}
 
-
-

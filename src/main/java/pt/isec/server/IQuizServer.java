@@ -2,9 +2,13 @@ package pt.isec.server;
 
 import pt.isec.server.db.Db;
 import pt.isec.server.services.auth.AuthService;
+import pt.isec.server.services.question.AnswerService;
+import pt.isec.server.services.question.QuestionService;
 
 import java.net.NetworkInterface;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 public interface IQuizServer {
     String id();
@@ -34,6 +38,11 @@ public interface IQuizServer {
     Db getDb();
     boolean tryLockCopy();
     void unlockCopy();
+
+    QuestionService getQuestionService();
+    AnswerService getAnswerService();
+    void recordSqlUpdate(String sql);
+    List<String> pollPendingSqlUpdates();
 
     AuthService getAuthService();
 }

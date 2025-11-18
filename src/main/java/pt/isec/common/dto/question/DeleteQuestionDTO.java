@@ -6,4 +6,3 @@ public record DeleteQuestionDTO(
         Integer questionId,
         Integer teacherId
 ) implements Serializable {}
-

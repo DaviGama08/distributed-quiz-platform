@@ -1,32 +1,42 @@
 package pt.isec.common.messages;
 
+/**
+ * Define os tipos de mensagens trocadas entre clientes e servidor.
+ */
 public enum MessageType {
-    // handshake / util
-    ACK, NACK, PING, PONG, MESSAGE, ERROR,
+    // Autenticação (já existentes)
+    LOGIN,
+    LOGIN_OK,
+    LOGIN_FAIL,
+    REGISTER_STUDENT,
+    REGISTER_TEACHER,
+    ACK,
+    NACK,
+    ERROR,
+    LOGOUT,
+    PONG,
 
-    // auth
-    REGISTER_STUDENT, REGISTER_TEACHER, LOGIN, LOGIN_OK, LOGIN_FAIL, LOGOUT,
+    // Perguntas – professor
+    CREATE_QUESTION,
+    CREATE_QUESTION_RESPONSE,
+    EDIT_QUESTION,
+    DELETE_QUESTION,
+    LIST_QUESTIONS,
+    LIST_QUESTIONS_RESPONSE,
+    // Pergunta – aluno
+    JOIN_QUESTION,
+    QUESTION_DETAILS,
 
-    // teacher messages
-    CREATE_QUESTION, EDIT_QUESTION, DELETE_QUESTION,
-    LIST_QUESTIONS, LIST_QUESTIONS_RESPONSE,
-    VIEW_ANSWERS, VIEW_ANSWERS_RESPONSE,
-    EXPORT_RESULTS_CSV, EXPORT_RESULTS_OK, EXPORT_RESULTS_FAIL,
+    // Respostas
+    SUBMIT_ANSWER,
+    SUBMIT_OK,
+    SUBMIT_FAIL,
+    VIEW_ANSWERS,
+    VIEW_ANSWERS_RESPONSE,
+    LIST_ANSWERED_QUESTIONS,
+    LIST_ANSWERED_RESPONSE,
 
-    //student messages
-    JOIN_QUESTION, QUESTION_DETAILS,
-    SUBMIT_ANSWER, SUBMIT_OK, SUBMIT_FAIL,
-    LIST_ANSWERED_QUESTIONS, LIST_ANSWERED_RESPONSE,
-
-
-    // DB mgmt (servidor primário)
-    DB_CREATE, DB_OK,DB_REQUEST_COPY,
-
-    // backup push (cliente -> servidor)
-    BACKUP_PUSH_BEGIN,   // meta (nome, tamanho, checksum)
-    BACKUP_PUSH_STREAM,  // stream “bruto” (ver nota abaixo)
-    BACKUP_PUSH_END,     // finalizar/confirmar
-    BACKUP_OK
-
-
+    // Replicação incremental via SQL (heartbeat)
+    SQL_UPDATE,
+    DB_REQUEST_COPY
 }

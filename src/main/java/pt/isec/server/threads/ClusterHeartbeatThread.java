@@ -15,7 +15,14 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.List;
 
+/**
+ * Thread que emite e recebe heartbeats para sincronização entre servidores.
+ * Envia SQL pendente quando primário e aplica updates ao receber.
+ */
 public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
     private static final int HEARTBEAT_INTERVAL_MS = 5000;
     private static final int LOOP_SLEEP_MS = 50;
@@ -49,83 +56,100 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
 
             _ss.setSoTimeout(ACCEPT_TIMEOUT_MS);
 
-            long lastSent = 0;
-
+            long lastSent = 0L;
             byte[] buf = new byte[BUFFER_SIZE];
             DatagramPacket pkt = new DatagramPacket(buf, buf.length);
 
             while (tInfo.isRunning()) {
                 long now = System.currentTimeMillis();
 
-                // 1) envio (só master)
+                // PRIMÁRIO: envia heartbeat
                 if (tInfo.isPrimary() && now - lastSent >= HEARTBEAT_INTERVAL_MS) {
-                    String beat = "MC_HB;"
-                            + "id=servidor" + tInfo.clientPort()
-                            + ";role=" + (tInfo.isPrimary() ? "MASTER" : "BACKUP")
-                            + ";version=" + tInfo.dbVersion()
-                            + ";dbPort=" + tInfo.dbCopyPort()
-                            + ";clientPort=" + tInfo.clientPort();
+                    List<String> sqlUpdates = new ArrayList<>();
+                    if (tInfo instanceof QuizServer qs) {
+                        sqlUpdates = qs.pollPendingSqlUpdates();
+                    }
+                    String encodedSql = "";
+                    if (!sqlUpdates.isEmpty()) {
+                        String joined = String.join(";;", sqlUpdates);
+                        encodedSql = Base64.getEncoder().encodeToString(joined.getBytes(StandardCharsets.UTF_8));
+                    }
+                    String beat = "MC_HB;id=servidor" + tInfo.clientPort() +
+                            ";role=MASTER" +
+                            ";version=" + tInfo.dbVersion() +
+                            ";dbPort=" + tInfo.dbCopyPort() +
+                            ";clientPort=" + tInfo.clientPort() +
+                            ";sql=" + encodedSql;
                     byte[] data = beat.getBytes(StandardCharsets.UTF_8);
                     _ms.send(new DatagramPacket(data, data.length, grp, tInfo.mcPort()));
                     lastSent = now;
                 }
 
-                // 2) receção de heartbeats (backups)
+                // BACKUP: recebe heartbeat e aplica updates
                 if (!tInfo.isPrimary()) {
                     try {
                         _ms.receive(pkt);
                         String senderIp = pkt.getAddress().getHostAddress();
-                        String s = new String(pkt.getData(), 0, pkt.getLength(), StandardCharsets.UTF_8);
+                        String msg = new String(pkt.getData(), 0, pkt.getLength(), StandardCharsets.UTF_8);
 
-                        if (s.startsWith("MC_HB;")) {
-                            long rxClientPort = extractLong(s, "clientPort");
+                        if (msg.startsWith("MC_HB;")) {
+                            long rxClientPort = extractLong(msg, "clientPort");
+                            // ignora batimentos que o próprio servidor enviou
                             boolean fromMe = senderIp.equals(tInfo.ip()) && rxClientPort == tInfo.clientPort();
-                            if (fromMe) continue;
-
-                            long rxVersion = extractLong(s, "version");
-                            int  rxDbPort  = (int) extractLong(s, "dbPort");
-
-                            boolean needCopyBecauseMissing = !Files.exists(tInfo.dbPath());
-                            boolean needCopyBecauseVersion = (rxVersion >= 0 && rxVersion != tInfo.dbVersion());
-
-                            if (needCopyBecauseMissing || needCopyBecauseVersion) {
-                                System.err.printf("[%s][MC] pedir cópia: falta=%s versao(local=%d, rx=%d) → %s:%d%n",
-                                        Instant.now(), needCopyBecauseMissing, tInfo.dbVersion(), rxVersion, senderIp, rxDbPort);
-
-                                if (rxDbPort > 0) {
-                                    // para não fazer 2 cópias em paralelo
-                                    if (tInfo instanceof QuizServer sn) {
-                                        if (!sn.tryLockCopy()) {
-                                            continue; // já há uma cópia em curso
+                            if (!fromMe) {
+                                // Aplica SQL updates codificados em base64
+                                String sqlEncoded = extractString(msg, "sql");
+                                if (sqlEncoded != null && !sqlEncoded.isBlank()) {
+                                    byte[] bytes = Base64.getDecoder().decode(sqlEncoded);
+                                    String joined = new String(bytes, StandardCharsets.UTF_8);
+                                    for (String stmt : joined.split(";;")) {
+                                        if (!stmt.isBlank()) {
+                                            tInfo.getDb().executeUpdate(stmt);
                                         }
-                                        try {
-                                            // faz a cópia SINCRONAMENTE nesta mesma thread
+                                    }
+                                }
+
+                                long rxVersion = extractLong(msg, "version");
+                                int  rxDbPort  = (int) extractLong(msg, "dbPort");
+
+                                boolean missingDb = !Files.exists(tInfo.dbPath());
+                                boolean versionMismatch = rxVersion >= 0 && rxVersion != tInfo.dbVersion();
+
+                                if (missingDb || versionMismatch) {
+                                    System.err.printf("[%s][MC] pedir cópia: falta=%s versao(local=%d, rx=%d) → %s:%d%n",
+                                            Instant.now(), missingDb, tInfo.dbVersion(), rxVersion, senderIp, rxDbPort);
+
+                                    if (rxDbPort > 0) {
+                                        if (tInfo instanceof QuizServer sn) {
+                                            if (!sn.tryLockCopy()) continue;
+                                            try {
+                                                requestDbCopyFromPrimary(senderIp, rxDbPort, rxVersion);
+                                            } finally {
+                                                sn.unlockCopy();
+                                            }
+                                        } else {
                                             requestDbCopyFromPrimary(senderIp, rxDbPort, rxVersion);
-                                        } finally {
-                                            sn.unlockCopy();
                                         }
                                     } else {
-                                        requestDbCopyFromPrimary(senderIp, rxDbPort, rxVersion);
+                                        System.err.println("[MC] heartbeat sem dbPort → não posso pedir cópia.");
                                     }
-                                } else {
-                                    System.err.println("[MC] heartbeat sem dbPort → não posso pedir cópia.");
                                 }
                             }
                         }
                     } catch (SocketTimeoutException ignore) {
-                        // sem pacote multicast
+                        // sem heartbeat no ciclo
                     } catch (Exception e) {
                         if (tInfo.isRunning())
                             System.err.println("[MC-LOOP] erro rx: " + e.getMessage());
                     }
                 }
 
-                // 3) aceitar pedidos de cópia (lado PRIMÁRIO) no MESMO thread
+                // aceitar pedidos de cópia de BD (lado primário)
                 try {
                     Socket s = _ss.accept(); // timeout curto
                     handleDbCopySession(s);
                 } catch (SocketTimeoutException ignore) {
-                    // ninguém pediu cópia neste ciclo
+                    // sem pedido
                 } catch (Exception e) {
                     if (tInfo.isRunning())
                         System.err.println("[DBCOPY] erro no accept: " + e.getMessage());
@@ -144,8 +168,20 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
         int i = payload.indexOf(needle);
         if (i < 0) return -1;
         int j = payload.indexOf(';', i + needle.length());
-        String raw = (j > 0 ? payload.substring(i + needle.length(), j) : payload.substring(i + needle.length())).trim();
-        try { return Long.parseLong(raw); } catch (Exception e) { return -1; }
+        String raw = (j > 0 ? payload.substring(i + needle.length(), j)
+                : payload.substring(i + needle.length()));
+        try { return Long.parseLong(raw.trim()); }
+        catch (Exception e) { return -1; }
+    }
+
+    private static String extractString(String payload, String key) {
+        String needle = key + "=";
+        int i = payload.indexOf(needle);
+        if (i < 0) return null;
+        int j = payload.indexOf(';', i + needle.length());
+        String raw = (j > 0 ? payload.substring(i + needle.length(), j)
+                : payload.substring(i + needle.length()));
+        return raw.trim();
     }
 
     // Lado BACKUP: pede a cópia ao primário
@@ -157,11 +193,8 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                 primaryIp, primaryPort, Duration.ofSeconds(5))) {
 
             conn.setReadTimeout(Duration.ofSeconds(30));
-
-            // 1) envia pedido de cópia
             conn.sendMessage(new Message<>(MessageType.DB_REQUEST_COPY, "please"));
 
-            // 2) espera ACK "copy-start"
             var resp = conn.receiveMessage();
             if (resp == null || resp.getType() != MessageType.ACK) {
                 System.err.println("[DBCOPY/RQ] resposta inválida (esperado ACK copy-start)");
@@ -169,11 +202,8 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
             }
 
             Files.createDirectories(target.getParent());
-
-            // 3) lê tamanho
             long size = conn.readLong();
 
-            // 4) recebe exatamente 'size' bytes para o ficheiro temporário
             long total;
             try (FileOutputStream fos = new FileOutputStream(tmp.toFile())) {
                 total = conn.receiveExactly(fos, size);
@@ -184,23 +214,18 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
             try {
                 Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
                 moved = true;
-                System.out.println("[DBCOPY/RQ] move ATOMIC ok -> " + target);
             } catch (Exception ignore) {}
-
             if (!moved) {
                 try {
                     Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
                     moved = true;
-                    System.out.println("[DBCOPY/RQ] move simples ok -> " + target);
                 } catch (Exception ignore) {}
             }
-
             if (!moved) {
                 try {
                     Files.copy(tmp, target, StandardCopyOption.REPLACE_EXISTING);
                     Files.deleteIfExists(tmp);
                     moved = true;
-                    System.out.println("[DBCOPY/RQ] copy+delete ok -> " + target);
                 } catch (Exception e) {
                     System.err.println("[DBCOPY/RQ] falha no copy+delete: " + e.getMessage());
                 }
@@ -208,7 +233,6 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
 
             if (moved) {
                 System.out.println("[DBCOPY/RQ] cópia concluída em " + target);
-                // muito importante: alinhar a versão local com a do master
                 tInfo.setDbVersion(rxVersion);
             } else {
                 System.err.println("[DBCOPY/RQ] não consegui substituir " + target + " (ficou " + tmp + ")");
@@ -220,7 +244,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
         }
     }
 
-    // Lado PRIMÁRIO: atende pedidos DB_REQUEST_COPY (backup → primário)
+    // Lado PRIMÁRIO: atende pedidos DB_REQUEST_COPY
     private void handleDbCopySession(Socket s) {
         try (NetworkConnection connection = new NetworkConnection(s)) {
 
@@ -238,8 +262,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
             connection.sendMessage(new Message<>(MessageType.ACK, "copy-start"));
 
             Path dbFile = tInfo.dbPath();
-            long size = Files.size(dbFile);
-
+            long size   = Files.size(dbFile);
             connection.writeLong(size);
 
             try (FileInputStream fis = new FileInputStream(dbFile.toFile())) {

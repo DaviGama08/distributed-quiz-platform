@@ -5,5 +5,6 @@ import java.io.Serializable;
 public record ChangePasswordDTO(
         Integer sessionId,
         String oldPassword,
-        String newPassword
+        String newPassword,
+        String userType
 ) implements Serializable {}

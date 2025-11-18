@@ -15,4 +15,3 @@ public record CreateQuestionDTO(
         LocalDateTime startAt,
         LocalDateTime endAt
 ) implements Serializable {}
-

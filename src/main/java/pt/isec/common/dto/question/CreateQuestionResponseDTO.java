@@ -6,4 +6,3 @@ public record CreateQuestionResponseDTO(
         Integer questionId,
         String accessCode
 ) implements Serializable {}
-

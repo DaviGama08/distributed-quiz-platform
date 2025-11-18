@@ -1,83 +1,68 @@
 package pt.isec.client.services;
 
-import pt.isec.common.dto.question.*;
+import pt.isec.common.dto.question.CreateQuestionDTO;
+import pt.isec.common.dto.question.CreateQuestionResponseDTO;
+import pt.isec.common.dto.question.DeleteQuestionDTO;
+import pt.isec.common.dto.question.EditQuestionDTO;
+import pt.isec.common.dto.question.JoinQuestionDTO;
+import pt.isec.common.dto.question.ListQuestionsDTO;
 import pt.isec.common.messages.Message;
 import pt.isec.common.messages.MessageType;
-import pt.isec.server.model.question.OptionLetter;
 import pt.isec.server.model.question.Option;
+import pt.isec.server.model.question.OptionLetter;
 import pt.isec.server.model.question.Question;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * Serviço de gestão de questões para professores
+ * Serviço de gestão de questões para professores e acesso de estudantes.
  */
 public class QuestionClientService {
     private final ClientService clientService;
-
-    public QuestionClientService(ClientService clientService) {
-        this.clientService = clientService;
-    }
+    public QuestionClientService(ClientService clientService) { this.clientService = clientService; }
 
     /**
-     * Cria uma nova questão (apenas professores)
+     * Cria uma nova questão (apenas professores).
      */
-    public CreateQuestionResponseDTO createQuestion(
-            Integer teacherId,
-            String statement,
-            List<Option> options,
-            OptionLetter correctOption,
-            LocalDateTime startAt,
-            LocalDateTime endAt) {
-
-        CreateQuestionDTO dto = new CreateQuestionDTO(
-                statement, teacherId, options, correctOption, startAt, endAt
-        );
-
+    public CreateQuestionResponseDTO createQuestion(Integer teacherId, String statement,
+                                                    List<Option> options,
+                                                    OptionLetter correctOption,
+                                                    LocalDateTime startAt,
+                                                    LocalDateTime endAt) {
+        // Constrói e envia a mensagem
+        CreateQuestionDTO dto = new CreateQuestionDTO(statement, teacherId, options, correctOption, startAt, endAt);
         Message<CreateQuestionDTO> message = new Message<>(MessageType.CREATE_QUESTION, dto);
-
-        System.out.println("[QuestionClient] Creating question...");
         clientService.sendMessage(message);
 
         try {
             Message<?> response = clientService.waitForResponse();
-            if (response.getType() == MessageType.ACK) {
-                CreateQuestionResponseDTO result = response.getDataAs(CreateQuestionResponseDTO.class);
-                System.out.println("[QuestionClient] Question created with code: " + result.accessCode());
-                return result;
+            if (response.getType() == MessageType.CREATE_QUESTION_RESPONSE) {
+                // servidor devolve o código de acesso aqui
+                return response.getDataAs(CreateQuestionResponseDTO.class);
+            } else if (response.getType() == MessageType.ERROR) {
+                System.err.println("[QuestionClient] Falha ao criar pergunta: " + response.getData());
+                return null;
             } else {
-                System.err.println("[QuestionClient] Failed to create question: " + response.getType());
+                System.err.println("[QuestionClient] Resposta inesperada: " + response.getType());
                 return null;
             }
         } catch (InterruptedException e) {
-            System.err.println("[QuestionClient] Create interrupted: " + e.getMessage());
             Thread.currentThread().interrupt();
             return null;
         }
     }
 
+
     /**
-     * Edita uma questão existente (apenas sem respostas)
+     * Edita uma questão existente (apenas sem respostas).
      */
-    public boolean editQuestion(
-            Integer questionId,
-            Integer teacherId,
-            String statement,
-            List<Option> options,
-            OptionLetter correctOption,
-            LocalDateTime startAt,
-            LocalDateTime endAt) {
-
-        EditQuestionDTO dto = new EditQuestionDTO(
-                questionId, teacherId, statement, options, correctOption, startAt, endAt
-        );
-
+    public boolean editQuestion(Integer questionId, Integer teacherId, String statement, List<Option> options,
+                                OptionLetter correctOption, LocalDateTime startAt, LocalDateTime endAt) {
+        EditQuestionDTO dto = new EditQuestionDTO(questionId, teacherId, statement, options, correctOption, startAt, endAt);
         Message<EditQuestionDTO> message = new Message<>(MessageType.EDIT_QUESTION, dto);
-
         System.out.println("[QuestionClient] Editing question " + questionId);
         clientService.sendMessage(message);
-
         try {
             Message<?> response = clientService.waitForResponse();
             if (response.getType() == MessageType.ACK) {
@@ -95,15 +80,13 @@ public class QuestionClientService {
     }
 
     /**
-     * Elimina uma questão (apenas sem respostas)
+     * Elimina uma questão (apenas sem respostas).
      */
     public boolean deleteQuestion(Integer questionId, Integer teacherId) {
         DeleteQuestionDTO dto = new DeleteQuestionDTO(questionId, teacherId);
         Message<DeleteQuestionDTO> message = new Message<>(MessageType.DELETE_QUESTION, dto);
-
         System.out.println("[QuestionClient] Deleting question " + questionId);
         clientService.sendMessage(message);
-
         try {
             Message<?> response = clientService.waitForResponse();
             if (response.getType() == MessageType.ACK) {
@@ -121,16 +104,14 @@ public class QuestionClientService {
     }
 
     /**
-     * Lista questões de um professor
+     * Lista questões de um professor.
      * @param filter "active", "future", "expired" ou null para todas
      */
     public List<Question> listQuestions(Integer teacherId, String filter) {
         ListQuestionsDTO dto = new ListQuestionsDTO(teacherId, filter);
         Message<ListQuestionsDTO> message = new Message<>(MessageType.LIST_QUESTIONS, dto);
-
         System.out.println("[QuestionClient] Listing questions with filter: " + filter);
         clientService.sendMessage(message);
-
         try {
             Message<?> response = clientService.waitForResponse();
             if (response.getType() == MessageType.LIST_QUESTIONS_RESPONSE) {
@@ -150,15 +131,13 @@ public class QuestionClientService {
     }
 
     /**
-     * Acessa uma questão pelo código (estudantes)
+     * Acessa uma questão pelo código (estudantes).
      */
     public Question joinQuestion(String accessCode, Integer studentId) {
         JoinQuestionDTO dto = new JoinQuestionDTO(accessCode, studentId);
         Message<JoinQuestionDTO> message = new Message<>(MessageType.JOIN_QUESTION, dto);
-
         System.out.println("[QuestionClient] Joining question with code: " + accessCode);
         clientService.sendMessage(message);
-
         try {
             Message<?> response = clientService.waitForResponse();
             if (response.getType() == MessageType.QUESTION_DETAILS) {

@@ -6,4 +6,3 @@ public record JoinQuestionDTO(
         String accessCode,
         Integer studentId
 ) implements Serializable {}
-

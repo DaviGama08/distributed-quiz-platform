@@ -3,6 +3,8 @@ package pt.isec.server;
 import pt.isec.server.db.Db;
 import pt.isec.server.db.DbFiles;
 import pt.isec.server.services.auth.AuthService;
+import pt.isec.server.services.question.AnswerService;
+import pt.isec.server.services.question.QuestionService;
 import pt.isec.server.threads.ClusterHeartbeatThread;
 import pt.isec.server.threads.ClientListenerThread;
 import pt.isec.server.threads.DirectoryHeartbeatThread;
@@ -10,8 +12,7 @@ import pt.isec.server.threads.DirectoryHeartbeatThread;
 import java.net.*;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Enumeration;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -24,6 +25,11 @@ public class QuizServer implements IQuizServer, Runnable, AutoCloseable {
     private final String ip;
     private final int clientPort;
     private final int dbCopyPort;
+
+    private QuestionService questionService;
+    private AnswerService answerService;
+    private final List<String> pendingSqlUpdates = Collections.synchronizedList(new ArrayList<>());
+
 
     private final String dirHost;
     private final int dirPort;
@@ -108,34 +114,48 @@ public class QuizServer implements IQuizServer, Runnable, AutoCloseable {
 
     @Override
     public void initDatabaseLayerIfNeeded() {
-        // só o primeiro thread faz a inicialização
         if (dbInitialised)
             return;
-
         synchronized (this) {
             if (dbInitialised)
                 return;
-
             try {
-                // garante que o ficheiro .db existe e tem o schema
                 DbFiles.createIfMissing(this.dbPath, "/db/schema.sql");
-
-                // cria helper Db apontando para o ficheiro atual
                 this.db = new Db("jdbc:sqlite:" + this.dbPath.toAbsolutePath());
-
                 this.authService = new AuthService(db);
+
+                // inicializa novos serviços
+                this.questionService = new QuestionService(this, db);
+                this.answerService = new AnswerService(this, db);
 
                 System.out.println("[DB] camada de dados inicializada em " + dbPath);
                 dbInitialised = true;
             } catch (Exception e) {
                 System.err.println("[DB] erro a inicializar camada de dados: " + e.getMessage());
-                e.printStackTrace();
                 throw new RuntimeException("Falha a inicializar DB/DAOs/AuthService", e);
             }
         }
     }
 
     // IQUIZSERVER INTERFACE
+    @Override
+    public QuestionService getQuestionService() { initDatabaseLayerIfNeeded(); return questionService; }
+    @Override
+    public AnswerService getAnswerService() { initDatabaseLayerIfNeeded(); return answerService; }
+    @Override
+    public void recordSqlUpdate(String sql) {
+        if (sql != null && !sql.isBlank())
+            pendingSqlUpdates.add(sql);
+    }
+    @Override
+    public List<String> pollPendingSqlUpdates() {
+        synchronized (pendingSqlUpdates) {
+            List<String> copy = new ArrayList<>(pendingSqlUpdates);
+            pendingSqlUpdates.clear();
+            return copy;
+        }
+    }
+
     @Override public String id() { return id; }
     @Override public String ip() { return ip; }
     @Override public int clientPort() { return clientPort; }

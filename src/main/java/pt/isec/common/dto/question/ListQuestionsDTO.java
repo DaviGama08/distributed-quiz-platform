@@ -4,6 +4,6 @@ import java.io.Serializable;
 
 public record ListQuestionsDTO(
         Integer teacherId,
-        String filter  // "active", "future", "expired", or null for all
+        String filter  // "active" | "future" | "expired" | null
 ) implements Serializable {}
 

@@ -157,8 +157,7 @@ public class AuthService implements IAuthService {
     public void changePassword(ChangePasswordDTO changePasswordDTO) {
         if (changePasswordDTO == null) throw new IllegalArgumentException("Dados em falta");
         String userType = changePasswordDTO.userType();
-        String id       = changePasswordDTO.sessionId() == null ?
-                String.valueOf(changePasswordDTO.sessionId()) : String.valueOf(changePasswordDTO.sessionId());
+        String id       = String.valueOf(changePasswordDTO.sessionId());
         String oldPass  = changePasswordDTO.oldPassword();
         String newPass  = changePasswordDTO.newPassword();
 

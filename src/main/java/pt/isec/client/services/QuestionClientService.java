@@ -1,157 +1,169 @@
 package pt.isec.client.services;
 
-import pt.isec.common.dto.question.CreateQuestionDTO;
-import pt.isec.common.dto.question.CreateQuestionResponseDTO;
-import pt.isec.common.dto.question.DeleteQuestionDTO;
-import pt.isec.common.dto.question.EditQuestionDTO;
-import pt.isec.common.dto.question.JoinQuestionDTO;
-import pt.isec.common.dto.question.ListQuestionsDTO;
+import pt.isec.common.dto.question.*;
 import pt.isec.common.messages.Message;
 import pt.isec.common.messages.MessageType;
-import pt.isec.server.model.question.Option;
-import pt.isec.server.model.question.OptionLetter;
 import pt.isec.server.model.question.Question;
 
-import java.time.LocalDateTime;
+import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
- * Serviço de gestão de questões para professores e acesso de estudantes.
+ * Serviço especializado em operações relacionadas com perguntas.
  */
 public class QuestionClientService {
-    private final ClientService clientService;
-    public QuestionClientService(ClientService clientService) { this.clientService = clientService; }
+
+    private final ClientService service;
+
+    public QuestionClientService(ClientService service) {
+        this.service = service;
+    }
 
     /**
-     * Cria uma nova questão (apenas professores).
+     * Aguarda a próxima mensagem relevante, ignorando ACKs, devolvendo-a
+     * ou null em caso de timeout.
      */
-    public CreateQuestionResponseDTO createQuestion(Integer teacherId, String statement,
-                                                    List<Option> options,
-                                                    OptionLetter correctOption,
-                                                    LocalDateTime startAt,
-                                                    LocalDateTime endAt) {
-        // Constrói e envia a mensagem
-        CreateQuestionDTO dto = new CreateQuestionDTO(statement, teacherId, options, correctOption, startAt, endAt);
-        Message<CreateQuestionDTO> message = new Message<>(MessageType.CREATE_QUESTION, dto);
-        clientService.sendMessage(message);
-
+    private Message<? extends Serializable> awaitRelevantResponse(long timeoutSecs) {
         try {
-            Message<?> response = clientService.waitForResponse();
-            if (response.getType() == MessageType.CREATE_QUESTION_RESPONSE) {
-                // servidor devolve o código de acesso aqui
-                return response.getDataAs(CreateQuestionResponseDTO.class);
-            } else if (response.getType() == MessageType.ERROR) {
-                System.err.println("[QuestionClient] Falha ao criar pergunta: " + response.getData());
-                return null;
-            } else {
-                System.err.println("[QuestionClient] Resposta inesperada: " + response.getType());
-                return null;
+            while (true) {
+                Message<? extends Serializable> resp =
+                        service.waitForResponse(timeoutSecs);
+                if (resp == null) {
+                    return null;
+                }
+                if (resp.getType() == MessageType.ACK) {
+                    continue;
+                }
+                return resp;
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        } catch (Exception e) {
             return null;
         }
     }
 
+    /**
+     * Cria uma nova pergunta.
+     * Devolve CreateQuestionResponseDTO em caso de sucesso ou null se falhar.
+     */
+    public CreateQuestionResponseDTO createQuestion(CreateQuestionDTO dto) {
+        service.sendMessage(new Message<>(MessageType.CREATE_QUESTION, dto));
+        Message<?> resp = awaitRelevantResponse(5);
+        if (resp == null) {
+            System.err.println("[QuestionClientService] Timeout ao criar pergunta.");
+            return null;
+        }
+        return switch (resp.getType()) {
+            case CREATE_QUESTION_RESPONSE -> resp.getDataAs(CreateQuestionResponseDTO.class);
+            case ERROR -> {
+                System.err.println("[QuestionClientService] Erro a criar pergunta: " + resp.getData());
+                yield null;
+            }
+            default -> {
+                System.err.println("[QuestionClientService] Resposta inesperada: " + resp.getType());
+                yield null;
+            }
+        };
+    }
 
     /**
-     * Edita uma questão existente (apenas sem respostas).
+     * Edita uma pergunta se ainda não existirem respostas.
      */
-    public boolean editQuestion(Integer questionId, Integer teacherId, String statement, List<Option> options,
-                                OptionLetter correctOption, LocalDateTime startAt, LocalDateTime endAt) {
-        EditQuestionDTO dto = new EditQuestionDTO(questionId, teacherId, statement, options, correctOption, startAt, endAt);
-        Message<EditQuestionDTO> message = new Message<>(MessageType.EDIT_QUESTION, dto);
-        System.out.println("[QuestionClient] Editing question " + questionId);
-        clientService.sendMessage(message);
-        try {
-            Message<?> response = clientService.waitForResponse();
-            if (response.getType() == MessageType.ACK) {
-                System.out.println("[QuestionClient] Question edited successfully");
-                return true;
-            } else {
-                System.err.println("[QuestionClient] Failed to edit: " + response.getType());
-                return false;
-            }
-        } catch (InterruptedException e) {
-            System.err.println("[QuestionClient] Edit interrupted: " + e.getMessage());
-            Thread.currentThread().interrupt();
+    public boolean editQuestion(EditQuestionDTO dto) {
+        service.sendMessage(new Message<>(MessageType.EDIT_QUESTION, dto));
+        Message<?> resp = awaitRelevantResponse(5);
+        if (resp == null) {
+            System.err.println("[QuestionClientService] Timeout ao editar pergunta.");
+            return false;
+        }
+        if (resp.getType() == MessageType.ACK) {
+            return true;
+        } else if (resp.getType() == MessageType.NACK || resp.getType() == MessageType.ERROR) {
+            System.err.println("[QuestionClientService] Erro ao editar pergunta: " + resp.getData());
+            return false;
+        } else {
+            System.err.println("[QuestionClientService] Resposta inesperada: " + resp.getType());
             return false;
         }
     }
 
     /**
-     * Elimina uma questão (apenas sem respostas).
+     * Elimina uma pergunta se ainda não existirem respostas.
      */
-    public boolean deleteQuestion(Integer questionId, Integer teacherId) {
-        DeleteQuestionDTO dto = new DeleteQuestionDTO(questionId, teacherId);
-        Message<DeleteQuestionDTO> message = new Message<>(MessageType.DELETE_QUESTION, dto);
-        System.out.println("[QuestionClient] Deleting question " + questionId);
-        clientService.sendMessage(message);
-        try {
-            Message<?> response = clientService.waitForResponse();
-            if (response.getType() == MessageType.ACK) {
-                System.out.println("[QuestionClient] Question deleted successfully");
-                return true;
-            } else {
-                System.err.println("[QuestionClient] Failed to delete: " + response.getType());
-                return false;
-            }
-        } catch (InterruptedException e) {
-            System.err.println("[QuestionClient] Delete interrupted: " + e.getMessage());
-            Thread.currentThread().interrupt();
+    public boolean deleteQuestion(DeleteQuestionDTO dto) {
+        service.sendMessage(new Message<>(MessageType.DELETE_QUESTION, dto));
+        Message<?> resp = awaitRelevantResponse(5);
+        if (resp == null) {
+            System.err.println("[QuestionClientService] Timeout ao eliminar pergunta.");
+            return false;
+        }
+        if (resp.getType() == MessageType.ACK) {
+            return true;
+        } else if (resp.getType() == MessageType.NACK || resp.getType() == MessageType.ERROR) {
+            System.err.println("[QuestionClientService] Erro ao eliminar pergunta: " + resp.getData());
+            return false;
+        } else {
+            System.err.println("[QuestionClientService] Resposta inesperada: " + resp.getType());
             return false;
         }
     }
 
     /**
-     * Lista questões de um professor.
-     * @param filter "active", "future", "expired" ou null para todas
+     * Lista perguntas de um docente com um filtro opcional.
      */
-    public List<Question> listQuestions(Integer teacherId, String filter) {
-        ListQuestionsDTO dto = new ListQuestionsDTO(teacherId, filter);
-        Message<ListQuestionsDTO> message = new Message<>(MessageType.LIST_QUESTIONS, dto);
-        System.out.println("[QuestionClient] Listing questions with filter: " + filter);
-        clientService.sendMessage(message);
-        try {
-            Message<?> response = clientService.waitForResponse();
-            if (response.getType() == MessageType.LIST_QUESTIONS_RESPONSE) {
-                @SuppressWarnings("unchecked")
-                List<Question> questions = (List<Question>) response.getData();
-                System.out.println("[QuestionClient] Received " + questions.size() + " questions");
-                return questions;
-            } else {
-                System.err.println("[QuestionClient] Failed to list questions: " + response.getType());
-                return List.of();
-            }
-        } catch (InterruptedException e) {
-            System.err.println("[QuestionClient] List interrupted: " + e.getMessage());
-            Thread.currentThread().interrupt();
-            return List.of();
+    public List<Question> listQuestions(ListQuestionsDTO dto) {
+        service.sendMessage(new Message<>(MessageType.LIST_QUESTIONS, dto));
+        Message<?> resp = awaitRelevantResponse(5);
+        if (resp == null) {
+            System.err.println("[QuestionClientService] Timeout ao listar perguntas.");
+            return null;
         }
+        return switch (resp.getType()) {
+            case LIST_QUESTIONS_RESPONSE -> {
+                Serializable data = resp.getData();
+                if (data instanceof ArrayList<?> list) {
+                    yield (List<Question>) list;
+                } else {
+                    System.err.println("[QuestionClientService] Formato de dados inválido em LIST_QUESTIONS_RESPONSE.");
+                    yield null;
+                }
+            }
+            case ERROR -> {
+                System.err.println("[QuestionClientService] Erro ao listar perguntas: " + resp.getData());
+                yield null;
+            }
+            default -> {
+                System.err.println("[QuestionClientService] Resposta inesperada: " + resp.getType());
+                yield null;
+            }
+        };
     }
 
     /**
-     * Acessa uma questão pelo código (estudantes).
+     * Permite a um estudante juntar-se a uma pergunta com um código de acesso.
      */
-    public Question joinQuestion(String accessCode, Integer studentId) {
-        JoinQuestionDTO dto = new JoinQuestionDTO(accessCode, studentId);
-        Message<JoinQuestionDTO> message = new Message<>(MessageType.JOIN_QUESTION, dto);
-        System.out.println("[QuestionClient] Joining question with code: " + accessCode);
-        clientService.sendMessage(message);
-        try {
-            Message<?> response = clientService.waitForResponse();
-            if (response.getType() == MessageType.QUESTION_DETAILS) {
-                Question question = response.getDataAs(Question.class);
-                System.out.println("[QuestionClient] Question accessed: " + question.getStatement());
-                return question;
-            } else {
-                System.err.println("[QuestionClient] Failed to join question: " + response.getType());
-                return null;
-            }
-        } catch (InterruptedException e) {
-            System.err.println("[QuestionClient] Join interrupted: " + e.getMessage());
-            Thread.currentThread().interrupt();
+    public Question joinQuestion(JoinQuestionDTO dto) {
+        service.sendMessage(new Message<>(MessageType.JOIN_QUESTION, dto));
+        Message<?> resp = awaitRelevantResponse(5);
+        if (resp == null) {
+            System.err.println("[QuestionClientService] Timeout ao juntar-se à pergunta.");
             return null;
         }
+        return switch (resp.getType()) {
+            case QUESTION_DETAILS -> resp.getDataAs(Question.class);
+            case NACK -> {
+                System.err.println("[QuestionClientService] Código de acesso inválido.");
+                yield null;
+            }
+            case ERROR -> {
+                System.err.println("[QuestionClientService] Erro ao juntar-se à pergunta: " + resp.getData());
+                yield null;
+            }
+            default -> {
+                System.err.println("[QuestionClientService] Resposta inesperada: " + resp.getType());
+                yield null;
+            }
+        };
     }
 }

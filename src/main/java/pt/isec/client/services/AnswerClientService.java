@@ -5,101 +5,124 @@ import pt.isec.common.dto.answer.ViewAnswersDTO;
 import pt.isec.common.messages.Message;
 import pt.isec.common.messages.MessageType;
 import pt.isec.server.model.question.Answer;
-import pt.isec.server.model.question.OptionLetter;
 
+import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
- * Serviço para gestão de respostas (submeter e visualizar).
+ * Serviço especializado em submissão e consulta de respostas.
  */
 public class AnswerClientService {
-    private final ClientService clientService;
 
-    public AnswerClientService(ClientService clientService) {
-        this.clientService = clientService;
+    private final ClientService service;
+
+    public AnswerClientService(ClientService service) {
+        this.service = service;
     }
 
     /**
-     * Submete a resposta de um estudante.
+     * Aguarda a próxima mensagem relevante ignorando ACKs.
      */
-    public boolean submitAnswer(Integer questionId, Integer studentId, OptionLetter selectedOption) {
-        SubmitAnswerDTO dto = new SubmitAnswerDTO(questionId, studentId, selectedOption);
-        Message<SubmitAnswerDTO> message = new Message<>(MessageType.SUBMIT_ANSWER, dto);
-        System.out.println("[AnswerClient] Submitting answer for question " + questionId);
-        clientService.sendMessage(message);
+    private Message<? extends Serializable> awaitRelevantResponse(long timeoutSecs) {
         try {
-            Message<?> response = clientService.waitForResponse();
-            if (response.getType() == MessageType.SUBMIT_OK) {
-                System.out.println("[AnswerClient] Answer submitted successfully");
-                return true;
-            } else if (response.getType() == MessageType.SUBMIT_FAIL) {
-                System.err.println("[AnswerClient] Failed to submit answer: " + response.getData());
-                return false;
-            } else {
-                System.err.println("[AnswerClient] Unexpected response: " + response.getType());
-                return false;
+            while (true) {
+                Message<? extends Serializable> resp =
+                        service.waitForResponse(timeoutSecs);
+                if (resp == null) {
+                    return null;
+                }
+                if (resp.getType() == MessageType.ACK) {
+                    continue;
+                }
+                return resp;
             }
-        } catch (InterruptedException e) {
-            System.err.println("[AnswerClient] Submit interrupted: " + e.getMessage());
-            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Submete uma resposta de um estudante.
+     */
+    public boolean submitAnswer(SubmitAnswerDTO dto) {
+        service.sendMessage(new Message<>(MessageType.SUBMIT_ANSWER, dto));
+        Message<?> resp = awaitRelevantResponse(5);
+        if (resp == null) {
+            System.err.println("[AnswerClientService] Timeout ao submeter resposta.");
+            return false;
+        }
+        if (resp.getType() == MessageType.SUBMIT_OK) {
+            return true;
+        } else if (resp.getType() == MessageType.SUBMIT_FAIL || resp.getType() == MessageType.ERROR) {
+            System.err.println("[AnswerClientService] Falha ao submeter resposta: " + resp.getData());
+            return false;
+        } else {
+            System.err.println("[AnswerClientService] Resposta inesperada: " + resp.getType());
             return false;
         }
     }
 
     /**
-     * Visualiza respostas de uma questão (apenas professor e após período expirar).
+     * Lista respostas de uma pergunta (vista de docente).
      */
-    public List<Answer> viewAnswers(Integer questionId, Integer teacherId) {
-        ViewAnswersDTO dto = new ViewAnswersDTO(questionId, teacherId);
-        Message<ViewAnswersDTO> message = new Message<>(MessageType.VIEW_ANSWERS, dto);
-        System.out.println("[AnswerClient] Requesting answers for question " + questionId);
-        clientService.sendMessage(message);
-        try {
-            Message<?> response = clientService.waitForResponse();
-            if (response.getType() == MessageType.VIEW_ANSWERS_RESPONSE) {
-                List<Answer> answers = (List<Answer>) response.getData();
-                System.out.println("[AnswerClient] Received " + answers.size() + " answers");
-                return answers;
-            } else {
-                System.err.println("[AnswerClient] Failed to get answers: " + response.getType());
-                return List.of();
-            }
-        } catch (InterruptedException e) {
-            System.err.println("[AnswerClient] View interrupted: " + e.getMessage());
-            Thread.currentThread().interrupt();
-            return List.of();
+    public List<Answer> viewAnswersForTeacher(ViewAnswersDTO dto) {
+        service.sendMessage(new Message<>(MessageType.VIEW_ANSWERS, dto));
+        Message<?> resp = awaitRelevantResponse(5);
+        if (resp == null) {
+            System.err.println("[AnswerClientService] Timeout ao obter respostas para docente.");
+            return null;
         }
+        return switch (resp.getType()) {
+            case VIEW_ANSWERS_RESPONSE -> {
+                Serializable data = resp.getData();
+                if (data instanceof ArrayList<?> list) {
+                    yield (List<Answer>) list;
+                } else {
+                    System.err.println("[AnswerClientService] Formato inválido em VIEW_ANSWERS_RESPONSE.");
+                    yield null;
+                }
+            }
+            case ERROR -> {
+                System.err.println("[AnswerClientService] Erro ao obter respostas para docente: " + resp.getData());
+                yield null;
+            }
+            default -> {
+                System.err.println("[AnswerClientService] Resposta inesperada: " + resp.getType());
+                yield null;
+            }
+        };
     }
 
     /**
-     * Obtém histórico de questões respondidas (estudante).
+     * Lista o histórico de respostas de um estudante (perguntas expiradas).
      */
-    public List<Answer> getStudentHistory(Integer studentId) {
-        Message<Integer> message = new Message<>(MessageType.LIST_ANSWERED_QUESTIONS, studentId);
-        System.out.println("[AnswerClient] Requesting history for student " + studentId);
-        clientService.sendMessage(message);
-        try {
-            Message<?> response = clientService.waitForResponse();
-            if (response.getType() == MessageType.LIST_ANSWERED_RESPONSE) {
-                List<Answer> history = (List<Answer>) response.getData();
-                System.out.println("[AnswerClient] Received history with " + history.size() + " entries");
-                return history;
-            } else {
-                System.err.println("[AnswerClient] Failed to get history: " + response.getType());
-                return List.of();
-            }
-        } catch (InterruptedException e) {
-            System.err.println("[AnswerClient] History request interrupted: " + e.getMessage());
-            Thread.currentThread().interrupt();
-            return List.of();
+    public List<Answer> viewAnswersForStudent(Integer studentId) {
+        service.sendMessage(new Message<>(MessageType.LIST_ANSWERED_QUESTIONS, studentId));
+        Message<?> resp = awaitRelevantResponse(5);
+        if (resp == null) {
+            System.err.println("[AnswerClientService] Timeout ao obter histórico de respostas.");
+            return null;
         }
-    }
-
-    /**
-     * Exporta resultados para CSV (professor). Esta função poderá ser implementada quando o servidor suportar.
-     */
-    public boolean exportResultsToCSV(Integer questionId, Integer teacherId, String filePath) {
-        System.out.println("[AnswerClient] Export to CSV not yet implemented");
-        return false;
+        return switch (resp.getType()) {
+            case LIST_ANSWERED_RESPONSE -> {
+                Serializable data = resp.getData();
+                if (data instanceof ArrayList<?> list) {
+                    yield (List<Answer>) list;
+                } else {
+                    System.err.println("[AnswerClientService] Formato inválido em LIST_ANSWERED_RESPONSE.");
+                    yield null;
+                }
+            }
+            case ERROR -> {
+                System.err.println("[AnswerClientService] Erro ao obter histórico de respostas: " + resp.getData());
+                yield null;
+            }
+            default -> {
+                System.err.println("[AnswerClientService] Resposta inesperada: " + resp.getType());
+                yield null;
+            }
+        };
     }
 }

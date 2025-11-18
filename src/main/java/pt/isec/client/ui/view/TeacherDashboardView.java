@@ -168,7 +168,7 @@ public class TeacherDashboardView {
         createQuestionBtn.setOnAction(e -> controller.onCreateQuestion());
         listQuestionsBtn.setOnAction(e -> controller.onListQuestions());
         viewAnswersBtn.setOnAction(e -> controller.onViewAnswers());
-        exportBtn.setOnAction(e -> controller.onExport());
+        //exportBtn.setOnAction(e -> controller.onExport());
         deleteBtn.setOnAction(e -> controller.onDeleteQuestion());
         logoutBtn.setOnAction(e -> controller.onLogout());
     }

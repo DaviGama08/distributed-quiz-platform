@@ -13,6 +13,8 @@ import pt.isec.client.ClientApplication;
 import pt.isec.client.ClientManager;
 import pt.isec.client.services.ClientService;
 import pt.isec.client.ui.view.StudentDashboardView;
+import pt.isec.common.dto.answer.SubmitAnswerDTO;
+import pt.isec.common.dto.question.JoinQuestionDTO;
 import pt.isec.server.model.question.Answer;
 import pt.isec.server.model.question.OptionLetter;
 import pt.isec.server.model.question.Question;
@@ -92,7 +94,7 @@ public class StudentDashboardController {
             showErrorAlert("Sessão inválida. Faça login novamente.");
             return;
         }
-        Question question = clientManager.getQuestionService().joinQuestion(code, studentId);
+        Question question = clientManager.getQuestionService().joinQuestion(new JoinQuestionDTO(code, studentId));
         if (question == null) {
             showErrorAlert("Pergunta não encontrada ou fora do período de resposta.");
             return;
@@ -123,7 +125,7 @@ public class StudentDashboardController {
                 RadioButton selected = (RadioButton) group.getSelectedToggle();
                 String answerLetter = selected.getText().substring(0, 1);
                 OptionLetter selectedOption = OptionLetter.valueOf(answerLetter);
-                boolean ok = clientManager.getAnswerService().submitAnswer(question.getId(), studentId, selectedOption);
+                boolean ok = clientManager.getAnswerService().submitAnswer(new SubmitAnswerDTO(question.getId(), studentId, selectedOption));
                 if (ok) {
                     showSuccessAlert("Resposta submetida com sucesso!", "");
                 } else {
@@ -139,7 +141,7 @@ public class StudentDashboardController {
             showErrorAlert("Sessão inválida. Faça login novamente.");
             return;
         }
-        List<Answer> history = clientManager.getAnswerService().getStudentHistory(studentId);
+        List<Answer> history = clientManager.getAnswerService().viewAnswersForStudent(studentId);
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Histórico de Respostas");
         dialog.setHeaderText("Perguntas respondidas");

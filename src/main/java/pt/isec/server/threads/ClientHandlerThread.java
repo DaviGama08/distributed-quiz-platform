@@ -10,6 +10,7 @@ import pt.isec.server.IQuizServer;
 import pt.isec.server.NetworkConnection;
 import pt.isec.server.model.question.Question;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -51,16 +52,18 @@ public class ClientHandlerThread implements Runnable {
                     break;
                 processMessage(msg);
             }
-        } catch (Exception ignore) {
-            // cliente fechou
-        } finally {
+        } catch (Exception e) {
+            System.err.println("Client connection closed with exception: " + e.getMessage());
+            e.printStackTrace(); // <-- Adicione isto para ver a stack trace completa
+        }finally{
             try {
                 connection.close();
-            } catch (Exception ignore) {}
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 
-    @SuppressWarnings({"rawtypes","unchecked"})
     private void processMessage(Message<?> message) throws Exception {
         if (message == null) return;
 

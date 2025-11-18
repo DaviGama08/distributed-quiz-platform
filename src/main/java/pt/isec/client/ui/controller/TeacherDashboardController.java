@@ -15,7 +15,11 @@ import pt.isec.client.ClientApplication;
 import pt.isec.client.ClientManager;
 import pt.isec.client.services.ClientService;
 import pt.isec.client.ui.view.TeacherDashboardView;
+import pt.isec.common.dto.answer.ViewAnswersDTO;
+import pt.isec.common.dto.question.CreateQuestionDTO;
 import pt.isec.common.dto.question.CreateQuestionResponseDTO;
+import pt.isec.common.dto.question.DeleteQuestionDTO;
+import pt.isec.common.dto.question.ListQuestionsDTO;
 import pt.isec.server.model.question.Option;
 import pt.isec.server.model.question.OptionLetter;
 import pt.isec.server.model.question.Question;
@@ -172,9 +176,8 @@ public class TeacherDashboardController {
                         showErrorAlert("Erro", "Sessão inválida. Faça login novamente.");
                         return;
                     }
-                    CreateQuestionResponseDTO resp = clientManager.getQuestionService().createQuestion(
-                            teacherId, statement, options, correctOption, startAt, endAt
-                    );
+                    CreateQuestionResponseDTO resp = clientManager.getQuestionService().createQuestion(new CreateQuestionDTO(
+                            statement, teacherId, options, correctOption, startAt, endAt));
                     if (resp != null) {
                         showSuccessAlert("Pergunta Criada",
                                 "A pergunta foi criada com sucesso!\nCódigo: " + resp.accessCode());
@@ -239,7 +242,7 @@ public class TeacherDashboardController {
             if ("Ativas".equalsIgnoreCase(sel)) filter = "active";
             else if ("Futuras".equalsIgnoreCase(sel)) filter = "future";
             else if ("Expiradas".equalsIgnoreCase(sel)) filter = "expired";
-            List<Question> questions = clientManager.getQuestionService().listQuestions(teacherId, filter);
+            List<Question> questions = clientManager.getQuestionService().listQuestions(new ListQuestionsDTO(teacherId, filter));
             table.getItems().clear();
             if (questions != null) table.getItems().addAll(questions);
         });
@@ -267,7 +270,7 @@ public class TeacherDashboardController {
                     showErrorAlert("Erro", "Pergunta não encontrada ou não é sua.");
                     return;
                 }
-                var answers = clientManager.getAnswerService().viewAnswers(q.getId(), teacherId);
+                var answers = clientManager.getAnswerService().viewAnswersForTeacher(new ViewAnswersDTO(q.getId(), teacherId));
                 showAnswersDetails(code.trim(), q, answers);
             }
         });
@@ -340,7 +343,7 @@ public class TeacherDashboardController {
         dialog.showAndWait();
     }
 
-    /** Handler para exportar respostas para CSV */
+    /*
     public void onExport() {
         TextInputDialog dialog = new TextInputDialog();
         dialog.setTitle("Exportar Resultados");
@@ -375,7 +378,8 @@ public class TeacherDashboardController {
                 }
             }
         });
-    }
+    }*/
+
 
     /** Handler para eliminar uma pergunta */
     public void onDeleteQuestion() {
@@ -401,7 +405,7 @@ public class TeacherDashboardController {
                             showErrorAlert("Erro", "Pergunta não encontrada ou não é sua.");
                             return;
                         }
-                        boolean ok = clientManager.getQuestionService().deleteQuestion(q.getId(), teacherId);
+                        boolean ok = clientManager.getQuestionService().deleteQuestion(new DeleteQuestionDTO(q.getId(), teacherId));
                         if (ok) {
                             showSuccessAlert("Pergunta Eliminada",
                                     "A pergunta " + code + " foi eliminada com sucesso.");
@@ -452,7 +456,7 @@ public class TeacherDashboardController {
         if (teacherId == null || accessCode == null || accessCode.isBlank()) {
             return null;
         }
-        List<Question> list = clientManager.getQuestionService().listQuestions(teacherId, null);
+        List<Question> list = clientManager.getQuestionService().listQuestions(new ListQuestionsDTO(teacherId, null));
         if (list != null) {
             for (Question q : list) {
                 if (accessCode.equalsIgnoreCase(q.getAccessCode())) {

@@ -1,5 +1,6 @@
 package pt.isec.client.services;
 
+import javafx.beans.property.Property;
 import pt.isec.client.ClientManager;
 import pt.isec.client.threads.ClientListenerThread;
 import pt.isec.client.threads.RequestSenderThread;
@@ -21,7 +22,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Serviço central de gestão de rede: descoberta, conexão TCP,
+ * Serviço central de gestão de rede: discovery, conexão TCP,
  * filas de envio/recepção e propriedades observáveis.
  */
 public class ClientService implements IClientService {
@@ -61,33 +62,52 @@ public class ClientService implements IClientService {
         this.directoryHost = directoryHost;
     }
 
-    /* =============== Observadores =============== */
-    public void addPropertyChangeListener(PropertyChangeListener l){ pcs.addPropertyChangeListener(l); }
-    public void addPropertyChangeListener(String prop, PropertyChangeListener l){ pcs.addPropertyChangeListener(prop, l); }
-    public void removePropertyChangeListener(PropertyChangeListener l){ pcs.removePropertyChangeListener(l); }
-    public void removePropertyChangeListener(String prop, PropertyChangeListener l){ pcs.removePropertyChangeListener(prop, l); }
+    public void addPropertyChangeListener(PropertyChangeListener l){
+        pcs.addPropertyChangeListener(l);
+    }
 
-    private void fire(String prop, Object oldV, Object newV){ pcs.firePropertyChange(prop, oldV, newV); }
+    public void addPropertyChangeListener(String prop, PropertyChangeListener l){
+        pcs.addPropertyChangeListener(prop, l);
+    }
 
-    /* =============== Setters de Estado =============== */
+    public void removePropertyChangeListener(PropertyChangeListener l){
+        pcs.removePropertyChangeListener(l);
+    }
+
+    /** Define o ID do utilizador autenticado. */
     public void setUserId(Integer id) { this.userId = id; }
+    /** Obtém o ID do utilizador autenticado. */
     public Integer getUserId() { return userId; }
+
     public void setAuthenticated(boolean auth){
         boolean old = this.authenticated;
         this.authenticated = auth;
-        fire(PROP_AUTHENTICATED, old, auth);
+        pcs.firePropertyChange(PROP_AUTHENTICATED, old, auth);
     }
+
     public void logout() {
         setAuthenticated(false);
         setUserType(null);
         setUserEmail(null);
         setUserId(null);
     }
-    public void setUserType(String t){ String old = this.userType; this.userType = t; fire(PROP_USER_TYPE, old, t); }
-    public void setUserEmail(String e){ String old = this.userEmail; this.userEmail = e; fire(PROP_USER_EMAIL, old, e); }
-    public void pushNotification(String text){ fire(PROP_NOTIFICATION, null, text); }
 
-    /* =============== Envio/recepção de mensagens =============== */
+    public void setUserType(String t){
+        String old = this.userType;
+        this.userType = t;
+        pcs.firePropertyChange(PROP_USER_TYPE, old, t);
+    }
+
+    public void setUserEmail(String e){
+        String old = this.userEmail;
+        this.userEmail = e;
+        pcs.firePropertyChange(PROP_USER_EMAIL, old, e);
+    }
+
+    public void pushNotification(String text){
+        pcs.firePropertyChange(PROP_NOTIFICATION, null, text);
+    }
+
     public void sendMessage(Message<? extends Serializable> message) {
         try {
             requestQueue.put(message);
@@ -96,36 +116,49 @@ public class ClientService implements IClientService {
             Thread.currentThread().interrupt();
         }
     }
-    public Message<? extends Serializable> waitForResponse() throws InterruptedException { return responseQueue.take(); }
-    public Message<? extends Serializable> waitForResponse(long timeoutMs) throws InterruptedException { return responseQueue.poll(timeoutMs, TimeUnit.MILLISECONDS); }
 
-    /* =============== Ciclo de Vida =============== */
+    public Message<? extends Serializable> waitForResponse() throws InterruptedException {
+        return responseQueue.take();
+    }
+
+    public Message<? extends Serializable> waitForResponse(long timeoutMs) throws InterruptedException {
+        return responseQueue.poll(timeoutMs, TimeUnit.MILLISECONDS);
+    }
+
     public void run(){
-        fire(PROP_CONNECTION_STATUS, null, "CONNECTING");
+        pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "CONNECTING");
         boolean discovered = false;
         for (int i = 0; i < 3 && !discovered; i++) discovered = discoverServer();
-        if (!discovered){ fire(PROP_CONNECTION_STATUS, null, "DISCONNECTED"); return; }
-        if (!connectToServer()){ fire(PROP_CONNECTION_STATUS, null, "DISCONNECTED"); return; }
-        fire(PROP_CONNECTION_STATUS, null, "CONNECTED");
+        if (!discovered){
+            pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "DISCONNECTED");
+            return;
+        }
+        if (!connectToServer()){
+            pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "DISCONNECTED");
+            return;
+        }
+        pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "CONNECTED");
         running = true;
         startThreads();
     }
+
     public void stop(){
         running = false;
         if (tListener != null) tListener.interrupt();
         if (tSender   != null) tSender.interrupt();
         closeConnection();
         if (udpSocket != null && !udpSocket.isClosed()) udpSocket.close();
-        fire(PROP_CONNECTION_STATUS, null, "DISCONNECTED");
+        pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "DISCONNECTED");
     }
 
-    /* =============== Descoberta de Servidor =============== */
     private boolean discoverServer() {
         try{
-            if (udpSocket == null || udpSocket.isClosed()) udpSocket = new DatagramSocket();
+            if (udpSocket == null || udpSocket.isClosed())
+                udpSocket = new DatagramSocket();
             udpSocket.setSoTimeout(DISCOVERY_TIMEOUT_MS);
             byte[] data = "TYPE=LOGIN".getBytes();
-            DatagramPacket packet = new DatagramPacket(data, data.length, InetAddress.getByName(directoryHost), directoryUdpPort);
+            DatagramPacket packet = new DatagramPacket(data, data.length,
+                    InetAddress.getByName(directoryHost), directoryUdpPort);
             udpSocket.send(packet);
             byte[] buffer = new byte[DATAGRAM_PACKET_SIZE];
             DatagramPacket receive = new DatagramPacket(buffer, buffer.length);
@@ -187,7 +220,9 @@ public class ClientService implements IClientService {
     private void closeConnection(){
         try { if (in != null) in.close(); }  catch (Exception ignored) {}
         try { if (out != null) out.close(); } catch (Exception ignored) {}
-        try { if (tcpSocket != null && !tcpSocket.isClosed()) tcpSocket.close(); } catch (Exception ignored) {}
+        try {
+            if (tcpSocket != null && !tcpSocket.isClosed()) tcpSocket.close();
+        } catch (Exception ignored) {}
     }
 
     private void startThreads(){
@@ -198,7 +233,7 @@ public class ClientService implements IClientService {
     }
 
     public void handleConnectionLost(){
-        fire(PROP_CONNECTION_STATUS, null, "DISCONNECTED");
+        pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "DISCONNECTED");
         if (++reconnectAttempts > MAX_RECONNECT_ATTEMPTS){
             System.err.println("[ClientService] Max reconnect attempts reached. Stopping client.");
             manager.stop();
@@ -206,17 +241,17 @@ public class ClientService implements IClientService {
         }
         System.err.println("[ClientService] Connection lost. Trying to reconnect (" + reconnectAttempts + "/" + MAX_RECONNECT_ATTEMPTS + ")...");
         closeConnection();
-        try { Thread.sleep(3000); } catch (InterruptedException ignored) {}
+        try { Thread.sleep(3000); } catch (InterruptedException ignored){}
         run();
     }
 
-    /* =============== Getters expostos =============== */
-    @Override public ObjectInputStream getInputStream() { return in; }
-    @Override public ObjectOutputStream getOutputStream() { return out; }
-    @Override public BlockingQueue<Message<? extends Serializable>> getRequestQueue() { return requestQueue; }
-    @Override public BlockingQueue<Message<? extends Serializable>> getResponseQueue() { return responseQueue; }
-    @Override public boolean isRunning() { return running; }
-    @Override public Socket getTcpSocket() { return tcpSocket; }
+    // Getters de IClientService
+    public ObjectInputStream getInputStream() { return in; }
+    public ObjectOutputStream getOutputStream() { return out; }
+    public BlockingQueue<Message<? extends Serializable>> getRequestQueue() { return requestQueue; }
+    public BlockingQueue<Message<? extends Serializable>> getResponseQueue() { return responseQueue; }
+    public boolean isRunning() { return running; }
+    public Socket getTcpSocket() { return tcpSocket; }
     public boolean isAuthenticated(){ return authenticated; }
     public String  getUserType(){ return userType; }
     public String  getUserEmail(){ return userEmail; }

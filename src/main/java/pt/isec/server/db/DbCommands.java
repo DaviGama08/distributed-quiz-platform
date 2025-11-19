@@ -13,7 +13,7 @@ import java.util.Map;
  *  - selectOne(sql, args...)     → SELECT (0..1 linha) como Map<String,Object>
  *  - runInTransaction(work)      → transação com Transaction (executeUpdate/selectOne/getLastInsertId)
  */
-public final class Db {
+public final class DbCommands {
 
     /* ========================= 0) CONFIG ========================= */
 
@@ -21,7 +21,7 @@ public final class Db {
     private final String url;
 
     /** Constrói o helper apontando para o ficheiro .db. */
-    public Db(String url) { this.url = url; }
+    public DbCommands(String url) { this.url = url; }
 
     /** Expor a URL quando precisarmos abrir uma Connection direta noutro ponto. */
     public String getUrl() { return url; }
@@ -126,7 +126,8 @@ public final class Db {
      * Faz o "bind" (ligação) dos valores Java aos "?" da query SQL, em ordem.
      * Vantagens: evita SQL injection, melhora desempenho (prepare/plan reuso) e tipagem correta.
      */
-    private static void bind(PreparedStatement ps, Object... args) throws SQLException {
+    private static void
+    bind(PreparedStatement ps, Object... args) throws SQLException {
         for (int i = 0; i < args.length; i++) {
             ps.setObject(i + 1, args[i]);
         }

@@ -1,6 +1,6 @@
 package pt.isec.directory;
 
-public class LauncherDirectory {
+public class MainDirectory {
     // Defaults
     private static final int  DEF_UDP_PORT     = 9999;
     private static final int  DEF_QUEUE        = 1024;
@@ -46,7 +46,7 @@ public class LauncherDirectory {
                     udpPort, queueCapacity, maxPacketSize, ttlMillis
             );
 
-            DirectoryService ds = new DirectoryService(udpPort, queueCapacity, maxPacketSize);
+            DirectoryManager ds = new DirectoryManager(udpPort, queueCapacity, maxPacketSize);
             // Se o teu DirectoryService suportar TTL, adiciona-o no construtor ou como setter aqui.
 
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {

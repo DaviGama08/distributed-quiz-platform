@@ -1,12 +1,12 @@
 package pt.isec.server;
-import pt.isec.common.messages.Message;
+import pt.isec.common.messages.TcpMessage;
 
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.time.Duration;
 
-public class NetworkConnection implements AutoCloseable {
+public class NetworkTcpConnection implements AutoCloseable {
     private static final int BUFFER_SIZE = 64 * 1024;
     private static final int MAX_INT_TIMEOUT = Integer.MAX_VALUE;
 
@@ -14,17 +14,17 @@ public class NetworkConnection implements AutoCloseable {
     private final ObjectOutputStream out;
     private final ObjectInputStream in;
 
-    public NetworkConnection(Socket socket) throws IOException {
+    public NetworkTcpConnection(Socket socket) throws IOException {
         this.socket = socket;
         this.out = new ObjectOutputStream(socket.getOutputStream());
         this.in  = new ObjectInputStream(socket.getInputStream());
     }
 
-    public static NetworkConnection connect(String host, int port, Duration timeout) throws IOException {
+    public static NetworkTcpConnection connect(String host, int port, Duration timeout) throws IOException {
         Socket s = new Socket();
         int to = (int) Math.min(MAX_INT_TIMEOUT, Math.max(0, timeout.toMillis()));
         s.connect(new InetSocketAddress(host, port), to);
-        return new NetworkConnection(s);
+        return new NetworkTcpConnection(s);
     }
 
     public void setReadTimeout(Duration timeout) throws IOException {
@@ -32,14 +32,14 @@ public class NetworkConnection implements AutoCloseable {
         socket.setSoTimeout(to);
     }
 
-    public <T extends Serializable> void sendMessage(Message<T> message) throws IOException {
-        out.writeObject(message);
+    public <T extends Serializable> void sendMessage(TcpMessage<T> tcpMessage) throws IOException {
+        out.writeObject(tcpMessage);
         out.flush();
         out.reset();
     }
 
-    public Message<?> receiveMessage() throws IOException, ClassNotFoundException {
-        return (Message<?>) in.readObject();
+    public TcpMessage<?> receiveMessage() throws IOException, ClassNotFoundException {
+        return (TcpMessage<?>) in.readObject();
     }
 
     /* ===== NOVO: tipos primitivos e fluxo binário pelo MESMO ObjectStream ===== */

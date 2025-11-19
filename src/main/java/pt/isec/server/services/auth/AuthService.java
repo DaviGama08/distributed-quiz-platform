@@ -1,7 +1,7 @@
 package pt.isec.server.services.auth;
 
 import pt.isec.common.dto.auth.*;
-import pt.isec.server.db.Db;
+import pt.isec.server.db.DbCommands;
 
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
@@ -16,19 +16,19 @@ import java.util.UUID;
  */
 public class AuthService implements IAuthService {
 
-    private final Db db;
+    private final DbCommands dbCommands;
     private static final int ITERATIONS = 210_000;
     private static final int KEY_LENGTH  = 256;
     private static final String ALGORITHM = "PBKDF2WithHmacSHA256";
 
     private volatile String teacherCodeHashCache;
 
-    public AuthService(Db db) {
-        this.db = db;
+    public AuthService(DbCommands dbCommands) {
+        this.dbCommands = dbCommands;
     }
 
     @Override
-    public LoginResponseDTO registerTeacher(RegisterTeacherDTO dto) throws Exception {
+    public AuthResponseDTO registerTeacher(RegisterTeacherDTO dto) throws Exception {
         if (dto == null) throw new IllegalArgumentException("Dados em falta");
 
         String name  = dto.name();
@@ -42,7 +42,7 @@ public class AuthService implements IAuthService {
         if (code == null || code.isBlank()) throw new IllegalArgumentException("Código obrigatório");
 
         // verifica email
-        Map<String,Object> exists = db.selectOne(
+        Map<String,Object> exists = dbCommands.selectOne(
                 "SELECT 1 FROM teacher WHERE email = ? UNION SELECT 1 FROM student WHERE email = ? LIMIT 1",
                 email, email
         );
@@ -58,21 +58,21 @@ public class AuthService implements IAuthService {
 
         // inserir teacher
         long newId;
-        db.runInTransaction(tx -> {
+        dbCommands.runInTransaction(tx -> {
             tx.executeUpdate(
                     "INSERT INTO teacher (name, email, password_hash, created_at) VALUES (?, ?, ?, datetime('now'))",
                     name, email, hashPw
             );
         });
-        Map<String,Object> row = db.selectOne("SELECT last_insert_rowid() AS id");
+        Map<String,Object> row = dbCommands.selectOne("SELECT last_insert_rowid() AS id");
         newId = row == null ? -1L : ((Number) row.get("id")).longValue();
 
         String session = newSessionId();
-        return new LoginResponseDTO(session, String.valueOf(newId), "TEACHER", name, email);
+        return new AuthResponseDTO(session, String.valueOf(newId), "TEACHER", name, email);
     }
 
     @Override
-    public LoginResponseDTO registerStudent(RegisterStudentDTO dto) throws Exception {
+    public AuthResponseDTO registerStudent(RegisterStudentDTO dto) throws Exception {
         if (dto == null) throw new IllegalArgumentException("Dados em falta");
 
         String name   = dto.name();
@@ -85,7 +85,7 @@ public class AuthService implements IAuthService {
         if (!isValidPassword(pw)) throw new IllegalArgumentException("Password fraca");
         if (number == null || number <= 0) throw new IllegalArgumentException("Número de estudante inválido");
 
-        Map<String,Object> exists = db.selectOne(
+        Map<String,Object> exists = dbCommands.selectOne(
                 "SELECT 1 FROM teacher WHERE email = ? UNION SELECT 1 FROM student WHERE email = ? LIMIT 1",
                 email, email
         );
@@ -95,28 +95,28 @@ public class AuthService implements IAuthService {
 
         long newId;
         if (number > 0) {
-            db.executeUpdate(
+            dbCommands.executeUpdate(
                     "INSERT INTO student (student_number, name, email, password_hash, created_at) VALUES (?, ?, ?, ?, datetime('now'))",
                     number, name, email, hashPw
             );
             newId = number;
         } else {
-            db.runInTransaction(tx -> {
+            dbCommands.runInTransaction(tx -> {
                 tx.executeUpdate(
                         "INSERT INTO student (name, email, password_hash, created_at) VALUES (?, ?, ?, datetime('now'))",
                         name, email, hashPw
                 );
             });
-            Map<String,Object> r = db.selectOne("SELECT last_insert_rowid() AS id");
+            Map<String,Object> r = dbCommands.selectOne("SELECT last_insert_rowid() AS id");
             newId = r == null ? -1L : ((Number) r.get("id")).longValue();
         }
 
         String session = newSessionId();
-        return new LoginResponseDTO(session, String.valueOf(newId), "STUDENT", name, email);
+        return new AuthResponseDTO(session, String.valueOf(newId), "STUDENT", name, email);
     }
 
     @Override
-    public LoginResponseDTO login(LoginRequestDTO dto) throws Exception {
+    public AuthResponseDTO login(LoginRequestDTO dto) throws Exception {
         if (dto == null) throw new IllegalArgumentException("Dados em falta");
         String email = dto.email();
         String pw    = dto.password();
@@ -127,7 +127,7 @@ public class AuthService implements IAuthService {
 
         if (pw == null || pw.isBlank()) throw new IllegalArgumentException("Password em falta");
 
-        Map<String,Object> teacher = db.selectOne(
+        Map<String,Object> teacher = dbCommands.selectOne(
                 "SELECT id, name, password_hash FROM teacher WHERE email = ? LIMIT 1",
                 email
         );
@@ -135,12 +135,12 @@ public class AuthService implements IAuthService {
             String stored = (String) teacher.get("password_hash");
             if (!verifyPassword(pw, stored)) throw new IllegalArgumentException("Credenciais inválidas");
             String session = newSessionId();
-            return new LoginResponseDTO(session,
+            return new AuthResponseDTO(session,
                     String.valueOf(((Number) teacher.get("id")).longValue()),
                     "TEACHER", (String) teacher.get("name"), email);
         }
 
-        Map<String,Object> student = db.selectOne(
+        Map<String,Object> student = dbCommands.selectOne(
                 "SELECT student_number, name, password_hash FROM student WHERE email = ? LIMIT 1",
                 email
         );
@@ -148,7 +148,7 @@ public class AuthService implements IAuthService {
             String stored = (String) student.get("password_hash");
             if (!verifyPassword(pw, stored)) throw new IllegalArgumentException("Credenciais inválidas");
             String session = newSessionId();
-            return new LoginResponseDTO(session,
+            return new AuthResponseDTO(session,
                     String.valueOf(((Number) student.get("student_number")).longValue()),
                     "STUDENT", (String) student.get("name"), email);
         }
@@ -172,7 +172,7 @@ public class AuthService implements IAuthService {
         }
         try {
             if ("TEACHER".equalsIgnoreCase(userType)) {
-                Map<String,Object> rec = db.selectOne(
+                Map<String,Object> rec = dbCommands.selectOne(
                         "SELECT password_hash FROM teacher WHERE id = ?", Long.parseLong(id));
                 if (rec == null) throw new IllegalArgumentException("Utilizador não encontrado");
                 String stored = (String) rec.get("password_hash");
@@ -180,11 +180,11 @@ public class AuthService implements IAuthService {
                     throw new IllegalArgumentException("Password antiga incorreta");
                 }
                 String newHash = hashPassword(newPass);
-                db.executeUpdate("UPDATE teacher SET password_hash = ? WHERE id = ?",
+                dbCommands.executeUpdate("UPDATE teacher SET password_hash = ? WHERE id = ?",
                         newHash, Long.parseLong(id));
 
             } else if ("STUDENT".equalsIgnoreCase(userType)) {
-                Map<String,Object> rec = db.selectOne(
+                Map<String,Object> rec = dbCommands.selectOne(
                         "SELECT password_hash FROM student WHERE student_number = ?", Long.parseLong(id));
                 if (rec == null) throw new IllegalArgumentException("Utilizador não encontrado");
                 String stored = (String) rec.get("password_hash");
@@ -192,7 +192,7 @@ public class AuthService implements IAuthService {
                     throw new IllegalArgumentException("Password antiga incorreta");
                 }
                 String newHash = hashPassword(newPass);
-                db.executeUpdate("UPDATE student SET password_hash = ? WHERE student_number = ?",
+                dbCommands.executeUpdate("UPDATE student SET password_hash = ? WHERE student_number = ?",
                         newHash, Long.parseLong(id));
 
             } else {
@@ -218,7 +218,7 @@ public class AuthService implements IAuthService {
         synchronized (this) {
             if (teacherCodeHashCache != null) return teacherCodeHashCache;
 
-            Map<String,Object> row = db.selectOne(
+            Map<String,Object> row = dbCommands.selectOne(
                     "SELECT teacher_code_hash FROM config WHERE id = 1"
             );
             if (row == null) throw new IllegalStateException("Registo de config não encontrado");

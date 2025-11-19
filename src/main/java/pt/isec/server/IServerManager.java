@@ -1,6 +1,6 @@
 package pt.isec.server;
 
-import pt.isec.server.db.Db;
+import pt.isec.server.db.DbCommands;
 import pt.isec.server.services.auth.AuthService;
 import pt.isec.server.services.question.AnswerService;
 import pt.isec.server.services.question.QuestionService;
@@ -9,7 +9,7 @@ import java.net.NetworkInterface;
 import java.nio.file.Path;
 import java.util.List;
 
-public interface IQuizServer {
+public interface IServerManager {
     String id();
     String serverTcpIp();
     int serverTcpPort();
@@ -34,7 +34,7 @@ public interface IQuizServer {
     Path dbPath();
 
     void initDatabaseLayerIfNeeded();
-    Db getDb();
+    DbCommands getDb();
     boolean tryLockCopy();
     void unlockCopy();
 

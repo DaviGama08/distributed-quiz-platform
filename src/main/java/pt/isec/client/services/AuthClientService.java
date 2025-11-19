@@ -1,7 +1,7 @@
 package pt.isec.client.services;
 
 import pt.isec.common.dto.auth.*;
-import pt.isec.common.messages.Message;
+import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;
 
 /**
@@ -26,7 +26,7 @@ public class AuthClientService {
      */
     public void login(String email, String password) throws InterruptedException {
         LoginRequestDTO dto = new LoginRequestDTO(email, password);
-        service.getRequestQueue().put(new Message<>(MessageType.LOGIN, dto));
+        service.getRequestQueue().put(new TcpMessage<>(MessageType.LOGIN, dto));
     }
 
     /**
@@ -35,7 +35,7 @@ public class AuthClientService {
     public void registerTeacher(String name, String email,
                                 String password, String teacherCode) throws InterruptedException {
         RegisterTeacherDTO dto = new RegisterTeacherDTO(name, email, password, teacherCode);
-        service.getRequestQueue().put(new Message<>(MessageType.REGISTER_TEACHER, dto));
+        service.getRequestQueue().put(new TcpMessage<>(MessageType.REGISTER_TEACHER, dto));
     }
 
     /**
@@ -44,7 +44,7 @@ public class AuthClientService {
     public void registerStudent(String name, String email,
                                 String password, Integer studentNumber) throws InterruptedException {
         RegisterStudentDTO dto = new RegisterStudentDTO(name, email, password, studentNumber);
-        service.getRequestQueue().put(new Message<>(MessageType.REGISTER_STUDENT, dto));
+        service.getRequestQueue().put(new TcpMessage<>(MessageType.REGISTER_STUDENT, dto));
     }
 
     /**
@@ -61,6 +61,6 @@ public class AuthClientService {
      * o ClientService actualizará o estado de autenticação (PROP_AUTHENTICATED).
      */
     public void logout() throws InterruptedException {
-        service.getRequestQueue().put(new Message<>(MessageType.LOGOUT, null));
+        service.getRequestQueue().put(new TcpMessage<>(MessageType.LOGOUT, null));
     }
 }

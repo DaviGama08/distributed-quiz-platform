@@ -1,26 +1,24 @@
 package pt.isec.common.messages;
 
-import pt.isec.common.dto.auth.LoginResponseDTO;
-
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
-public class Message<T extends Serializable> implements Serializable {
+public class TcpMessage<T extends Serializable> implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
     private MessageType msgType;      // Tipo da mensagem (REGISTER, LOGIN, etc.)
     private T data;                   // Dados que viajam na mensagem
     private Class<T> payloadType;     // Guarda o tipo real do objeto (ex: RegisterStudentDTO.class)
 
-    public Message() {}
+    public TcpMessage() {}
 
-    public Message(MessageType msgType, T data) {
+    public TcpMessage(MessageType msgType, T data) {
         this.msgType = msgType;
         this.data = data;
     }
 
-    public Message(MessageType msgType, T data, Class<T> payloadType) {
+    public TcpMessage(MessageType msgType, T data, Class<T> payloadType) {
         this.msgType = msgType;
         this.data = data;
         this.payloadType = payloadType;
@@ -66,7 +64,7 @@ public class Message<T extends Serializable> implements Serializable {
     public boolean equals(Object o) {
         if (o == this) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        Message<?> messages = (Message<?>) o;
+        TcpMessage<?> messages = (TcpMessage<?>) o;
         return msgType == messages.msgType && Objects.equals(data, messages.data);
     }
 

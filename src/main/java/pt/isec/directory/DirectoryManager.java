@@ -16,7 +16,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-public class DirectoryService implements IDirectoryService {
+public class DirectoryManager implements IDirectoryManager {
     private final int udpPort;
     private final int queueCapacity;
     private volatile boolean running = true;
@@ -42,13 +42,13 @@ public class DirectoryService implements IDirectoryService {
     private Thread tMetrics;
     private final Thread[] tWorkers;
 
-    public DirectoryService(int udpPort, int queueCapacity, int maxPacketSize) {
+    public DirectoryManager(int udpPort, int queueCapacity, int maxPacketSize) {
         this(udpPort, queueCapacity, maxPacketSize,
                 4,
                 DEFAULT_TTL_MS, DEFAULT_REAPER_EVERY, DEFAULT_METRICS_EVERY);
     }
 
-    public DirectoryService(int udpPort,
+    public DirectoryManager(int udpPort,
                             int queueCapacity,
                             int maxPacketSize,
                             int maxWorkers,

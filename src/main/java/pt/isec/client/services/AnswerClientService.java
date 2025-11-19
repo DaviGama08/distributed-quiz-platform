@@ -2,7 +2,7 @@ package pt.isec.client.services;
 
 import pt.isec.common.dto.answer.SubmitAnswerDTO;
 import pt.isec.common.dto.answer.ViewAnswersDTO;
-import pt.isec.common.messages.Message;
+import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;
 
 /**
@@ -23,7 +23,7 @@ public class AnswerClientService {
     /** Submete a resposta de um estudante a uma pergunta. */
     public void submitAnswer(SubmitAnswerDTO dto) {
         try {
-            service.getRequestQueue().put(new Message<>(MessageType.SUBMIT_ANSWER, dto));
+            service.getRequestQueue().put(new TcpMessage<>(MessageType.SUBMIT_ANSWER, dto));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -32,7 +32,7 @@ public class AnswerClientService {
     /** Lista respostas submetidas a uma pergunta (vista do docente). */
     public void viewAnswersForTeacher(ViewAnswersDTO dto) {
         try {
-            service.getRequestQueue().put(new Message<>(MessageType.VIEW_ANSWERS, dto));
+            service.getRequestQueue().put(new TcpMessage<>(MessageType.VIEW_ANSWERS, dto));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -41,7 +41,7 @@ public class AnswerClientService {
     /** Lista o histórico de respostas de um estudante (perguntas expiradas). */
     public void viewAnswersForStudent(Integer studentId) {
         try {
-            service.getRequestQueue().put(new Message<>(MessageType.LIST_ANSWERED_QUESTIONS, studentId));
+            service.getRequestQueue().put(new TcpMessage<>(MessageType.LIST_ANSWERED_QUESTIONS, studentId));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }

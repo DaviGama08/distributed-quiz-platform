@@ -4,10 +4,9 @@ import pt.isec.client.ClientManager;
 import pt.isec.client.threads.ClientListenerThread;
 import pt.isec.client.threads.RequestSenderThread;
 import pt.isec.client.threads.ResponseHandlerThread;
-import pt.isec.common.dto.auth.LoginResponseDTO;
+import pt.isec.common.dto.auth.AuthResponseDTO;
 import pt.isec.common.dto.question.CreateQuestionResponseDTO;
-import pt.isec.common.messages.Message;
-import pt.isec.common.messages.MessageType;
+import pt.isec.common.messages.TcpMessage;
 import pt.isec.server.model.question.Answer;
 import pt.isec.server.model.question.Question;
 
@@ -22,7 +21,6 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -81,8 +79,8 @@ public class ClientService implements IClientService {
     private ObjectOutputStream out;
     private ObjectInputStream in;
 
-    private final BlockingQueue<Message<? extends Serializable>> requestQueue  = new LinkedBlockingQueue<>();
-    private final BlockingQueue<Message<? extends Serializable>> responseQueue = new LinkedBlockingQueue<>();
+    private final BlockingQueue<TcpMessage<? extends Serializable>> requestQueue  = new LinkedBlockingQueue<>();
+    private final BlockingQueue<TcpMessage<? extends Serializable>> responseQueue = new LinkedBlockingQueue<>();
 
     private volatile boolean running = false;
     private int reconnectAttempts = 0;
@@ -117,9 +115,9 @@ public class ClientService implements IClientService {
     /* ==================== Envio/Recepção de Mensagens ==================== */
 
     /** Enfileira uma mensagem para ser enviada pela thread RequestSenderThread. */
-    public void sendMessage(Message<? extends Serializable> message) {
+    public void sendMessage(TcpMessage<? extends Serializable> tcpMessage) {
         try {
-            requestQueue.put(message);
+            requestQueue.put(tcpMessage);
         } catch (InterruptedException e) {
             System.err.println("[ClientService] Failed to queue message: " + e.getMessage());
             Thread.currentThread().interrupt();
@@ -127,12 +125,12 @@ public class ClientService implements IClientService {
     }
 
     /** Bloqueia até obter uma resposta da fila. */
-    public Message<? extends Serializable> waitForResponse() throws InterruptedException {
+    public TcpMessage<? extends Serializable> waitForResponse() throws InterruptedException {
         return responseQueue.take();
     }
 
     /** Bloqueia até obter uma resposta da fila durante um determinado timeout. */
-    public Message<? extends Serializable> waitForResponse(long timeoutMs) throws InterruptedException {
+    public TcpMessage<? extends Serializable> waitForResponse(long timeoutMs) throws InterruptedException {
         return responseQueue.poll(timeoutMs, TimeUnit.MILLISECONDS);
     }
 
@@ -234,13 +232,13 @@ public class ClientService implements IClientService {
 
             try {
                 Object obj = in.readObject();
-                if (!(obj instanceof Message<?>)) {
+                if (!(obj instanceof TcpMessage<?>)) {
                     System.err.println("[ClientService] Unexpected handshake object: " + obj);
                     closeConnection();
                     return false;
                 }
 
-                Message<?> handshake = (Message<?>) obj;
+                TcpMessage<?> handshake = (TcpMessage<?>) obj;
                 return switch (handshake.getType()) {
                     case ACK -> true;
                     case NACK -> {
@@ -313,8 +311,8 @@ public class ClientService implements IClientService {
     @Override public ObjectOutputStream getOutputStream() { return out; }
     @Override public boolean isRunning() { return running; }
     @Override public Socket getTcpSocket() { return tcpSocket; }
-    @Override public BlockingQueue<Message<? extends Serializable>> getRequestQueue() { return requestQueue; }
-    @Override public BlockingQueue<Message<? extends Serializable>> getResponseQueue() { return responseQueue; }
+    @Override public BlockingQueue<TcpMessage<? extends Serializable>> getRequestQueue() { return requestQueue; }
+    @Override public BlockingQueue<TcpMessage<? extends Serializable>> getResponseQueue() { return responseQueue; }
     @Override public boolean isAuthenticated(){ return authenticated; }
     @Override public Integer getUserId() { return userId; }
     @Override public String  getUserType(){ return userType; }
@@ -344,7 +342,7 @@ public class ClientService implements IClientService {
     }
 
     @Override
-    public void setPropLoginOk(LoginResponseDTO dto){
+    public void setPropLoginOk(AuthResponseDTO dto){
         pcs.firePropertyChange(PROP_LOGIN_OK, null , dto);
     }
 
@@ -354,7 +352,7 @@ public class ClientService implements IClientService {
     }
 
     @Override
-    public void setPropRegisterOk(LoginResponseDTO dto){
+    public void setPropRegisterOk(AuthResponseDTO dto){
         pcs.firePropertyChange(PROP_REGISTER_OK, null , dto);
     }
 

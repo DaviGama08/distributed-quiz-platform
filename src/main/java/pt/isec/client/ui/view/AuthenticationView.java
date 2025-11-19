@@ -7,6 +7,7 @@ import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
 import pt.isec.client.ui.controller.AuthenticationController;
 
 import java.util.Objects;
@@ -300,19 +301,19 @@ public class AuthenticationView {
     }
 
     /** Actualiza a mensagem de estado do login, mostra ou oculta o progresso e ajusta o botão */
-    public void setLoginStatus(String message, javafx.scene.paint.Color color,
+    public void setLoginStatus(String message, Color color,
                                boolean showProgress, boolean loginButtonEnabled) {
         loginStatusLabel.setText(message == null ? "" : message);
-        loginStatusLabel.setTextFill(color != null ? color : javafx.scene.paint.Color.WHITE);
+        loginStatusLabel.setTextFill(color != null ? color : Color.WHITE);
         loginProgress.setVisible(showProgress);
         loginButton.setDisable(!loginButtonEnabled);
         loginButton.setDefaultButton(loginButtonEnabled);
     }
 
     /** Actualiza a mensagem de estado do registo e o botão de registo */
-    public void setRegisterStatus(String message, javafx.scene.paint.Color color, boolean buttonEnabled) {
+    public void setRegisterStatus(String message, Color color, boolean buttonEnabled) {
         registerStatusLabel.setText(message == null ? "" : message);
-        registerStatusLabel.setTextFill(color != null ? color : javafx.scene.paint.Color.WHITE);
+        registerStatusLabel.setTextFill(color != null ? color : Color.WHITE);
         registerButton.setDisable(!buttonEnabled);
         registerButton.setDefaultButton(buttonEnabled);
     }
@@ -338,7 +339,7 @@ public class AuthenticationView {
     public void clearLoginFields() {
         loginEmailField.clear();
         loginPasswordField.clear();
-        setLoginStatus("", javafx.scene.paint.Color.WHITE, false, true);
+        setLoginStatus("", Color.WHITE, false, true);
     }
 
     public void clearRegisterFields() {
@@ -349,7 +350,7 @@ public class AuthenticationView {
         rbStudent.setSelected(true);
         rbTeacher.setSelected(false);
         setRegisterExtraLabel("Número de Estudante");
-        setRegisterStatus("", javafx.scene.paint.Color.WHITE, true);
+        setRegisterStatus("", Color.WHITE, true);
     }
 
     public void registerHandlers(AuthenticationController controller) {

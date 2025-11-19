@@ -1,6 +1,6 @@
 package pt.isec.server.threads;
-import pt.isec.server.IQuizServer;
-import pt.isec.server.QuizServer;
+import pt.isec.server.IServerManager;
+import pt.isec.server.ServerManagerManager;
 import java.io.IOException;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
@@ -14,10 +14,10 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
     private static final int SLEEP_INTERVAL_MS = 50;
     private static final int BUFFER_SIZE = 512;
 
-    private final IQuizServer tInfo;
+    private final IServerManager tInfo;
     private DatagramSocket socket;
 
-    public DirectoryHeartbeatThread(IQuizServer tInfo) { this.tInfo = tInfo; }
+    public DirectoryHeartbeatThread(IServerManager tInfo) { this.tInfo = tInfo; }
 
     @Override
     public void run() {
@@ -61,7 +61,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             if (iAmPrimary) {
                 try {
                     // garantir que estamos a usar o ServerNode concreto
-                    if (tInfo instanceof QuizServer node) {
+                    if (tInfo instanceof ServerManagerManager node) {
                         node.initDatabaseLayerIfNeeded();
                     } else {
                         System.err.println("[DB] tInfo não é ServerNode — não consigo inicializar BD/Auth.");

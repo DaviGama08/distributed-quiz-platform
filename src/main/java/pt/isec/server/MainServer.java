@@ -4,7 +4,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
-public class LauncherServer {
+public class MainServer {
     public static void main(String[] args) throws Exception {
         if (args.length != 6) {
             System.out.println("usage: LauncherServer <dirHost> <dirPort> <dataDir|PROJECT|HOME> <mcIfIp|AUTO> <clientPort> <dbCopyPort>");
@@ -42,8 +42,8 @@ public class LauncherServer {
         System.out.println("[DB] file: " + dbFile + " (exists=" + Files.exists(dbFile) + ")");
 
         // NÃO usar try-with-resources aqui, para o servidor não fechar logo
-        QuizServer quizServer = new QuizServer(dirHost, dirPort, mcIfIp, clientPort, dbCopyPort, dbFile);
-        quizServer.run();
+        ServerManagerManager serverManager = new ServerManagerManager(dirHost, dirPort, mcIfIp, clientPort, dbCopyPort, dbFile);
+        serverManager.run();
 
         System.out.println("[LauncherServer] Servidor iniciado. Ctrl+C para terminar.");
     }

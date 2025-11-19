@@ -1,7 +1,7 @@
 package pt.isec.directory.threads;
 
 import pt.isec.common.messages.UdpMessage;
-import pt.isec.directory.IDirectoryService;
+import pt.isec.directory.IDirectoryManager;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -33,9 +33,9 @@ import java.net.DatagramSocket;
  *  - "500 ERROR <motivo>"
  */
 public class UdpListenerThread implements Runnable {
-    private final IDirectoryService tInfo;
+    private final IDirectoryManager tInfo;
 
-    public UdpListenerThread(IDirectoryService tInfo) {
+    public UdpListenerThread(IDirectoryManager tInfo) {
         this.tInfo = tInfo;
     }
 

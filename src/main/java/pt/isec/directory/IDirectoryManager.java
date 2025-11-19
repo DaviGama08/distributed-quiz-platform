@@ -7,7 +7,7 @@ import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentMap;
 
-public interface IDirectoryService {
+public interface IDirectoryManager {
     int udpPort();
     int queueCapacity();
     boolean isRunning();

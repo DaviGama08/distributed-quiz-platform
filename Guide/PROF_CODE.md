@@ -170,9 +170,9 @@ public class SynchBlock implements Runnable {
         synchronized (buffer) {
             System.out.print("Starting synchronized block ");
             int temp = counter++;
-            String message = "Count value is : " + temp + System.lineSeparator();
+            String tcpMessage = "Count value is : " + temp + System.lineSeparator();
             try { Thread.sleep(100); } catch (InterruptedException ie) {}
-            buffer.append(message);
+            buffer.append(tcpMessage);
             System.out.println("... ending synchronized block");
         }
     }
@@ -487,12 +487,12 @@ public class DaytimeServer
     {
         try {
             // BIND TO THE SERVICE PORT
-            ServerSocket server = new ServerSocket(SERVICE_PORT);
+            ServerSocket serverManager = new ServerSocket(SERVICE_PORT);
             System.out.println("Daytime service started");
             // LOOP INDEFINITELY, ACCEPTING CLIENTS
             while(true){
                 // GET THE NEXT TCP CLIENT
-                Socket nextClient = server.accept();
+                Socket nextClient = serverManager.accept();
                 System.out.println ("Received request from " +
                         nextClient.getInetAddress() + ":" + nextClient.getPort() );
                 OutputStream out = nextClient.getOutputStream();
@@ -615,8 +615,8 @@ public class EchoServer {
         }
     }
     public static void main(String args[]) {
-        EchoServer server = new EchoServer();
-        server.serviceClients();
+        EchoServer serverManager = new EchoServer();
+        serverManager.serviceClients();
     }
 }
 ```
@@ -647,8 +647,8 @@ public class EchoClient {
             DatagramSocket socket = new DatagramSocket();
             socket.setSoTimeout(2 * 1000);
             for (int i = 1; i <= 10; i++) {
-                String message = "Packet number " + i;
-                byte[] sendbuf = message.getBytes();
+                String tcpMessage = "Packet number " + i;
+                byte[] sendbuf = tcpMessage.getBytes();
                 DatagramPacket sendPacket =
                     new DatagramPacket(sendbuf, sendbuf.length, addr, SERVICE_PORT);
                 System.out.println("Sending packet to " + hostname);

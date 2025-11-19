@@ -8,8 +8,8 @@ import java.nio.file.*;
 import java.sql.*;
 
 /** Cria o ficheiro .db se não existir (ou se estiver sem tabelas) e aplica o schema.sql do classpath. */
-public final class DbFiles {
-    private DbFiles() {}
+public final class DbCreate {
+    private DbCreate() {}
 
     /**
      * @param dbPath caminho absoluto do ficheiro .db
@@ -29,7 +29,7 @@ public final class DbFiles {
             }
 
             if (needSchema) {
-                try (InputStream is = DbFiles.class.getResourceAsStream(schemaResourceOnClasspath)) {
+                try (InputStream is = DbCreate.class.getResourceAsStream(schemaResourceOnClasspath)) {
                     if (is == null)
                         throw new IllegalStateException("Recurso não encontrado: " + schemaResourceOnClasspath);
                     runSqlScript(c, is);

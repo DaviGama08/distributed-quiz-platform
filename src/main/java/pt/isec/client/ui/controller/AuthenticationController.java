@@ -7,7 +7,7 @@ import pt.isec.client.ClientApplication;
 import pt.isec.client.ClientManager;
 import pt.isec.client.services.ClientService;
 import pt.isec.client.ui.view.AuthenticationView;
-import pt.isec.common.dto.auth.LoginResponseDTO;
+import pt.isec.common.dto.auth.AuthResponseDTO;
 
 import java.beans.PropertyChangeEvent;
 
@@ -70,7 +70,7 @@ public class AuthenticationController {
     }
 
     private void handleLoginSuccessResponse(PropertyChangeEvent evt) {
-        LoginResponseDTO data = (LoginResponseDTO) evt.getNewValue();
+        AuthResponseDTO data = (AuthResponseDTO) evt.getNewValue();
         ClientService service = clientManager.getService();
         try {
             service.setUserId(Integer.parseInt(data.userId()));
@@ -106,7 +106,7 @@ public class AuthenticationController {
 
     /** Sucesso no registo */
     private void handleRegisterOkResponse(PropertyChangeEvent evt) {
-        LoginResponseDTO data = (LoginResponseDTO) evt.getNewValue();
+        AuthResponseDTO data = (AuthResponseDTO) evt.getNewValue();
         ClientService service = clientManager.getService();
 
         try {

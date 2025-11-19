@@ -2,8 +2,8 @@ package pt.isec.server.services.question;
 
 import pt.isec.common.dto.answer.SubmitAnswerDTO;
 import pt.isec.common.dto.answer.ViewAnswersDTO;
-import pt.isec.server.IQuizServer;
-import pt.isec.server.db.Db;
+import pt.isec.server.IServerManager;
+import pt.isec.server.db.DbCommands;
 import pt.isec.server.model.question.Answer;
 import pt.isec.server.model.question.OptionLetter;
 
@@ -17,12 +17,12 @@ import java.util.Map;
  * Usa colunas correctas da tabela answer (student_number, question_id, chosen_option, created_at).
  */
 public class AnswerService {
-    private final IQuizServer server;
-    private final Db db;
+    private final IServerManager server;
+    private final DbCommands dbCommands;
 
-    public AnswerService(IQuizServer server, Db db) {
+    public AnswerService(IServerManager server, DbCommands dbCommands) {
         this.server = server;
-        this.db = db;
+        this.dbCommands = dbCommands;
     }
 
     /** Regista uma resposta e actualiza a replicação. */
@@ -33,7 +33,7 @@ public class AnswerService {
         LocalDateTime now = LocalDateTime.now();
 
         // valida pergunta
-        Map<String,Object> q = db.selectOne(
+        Map<String,Object> q = dbCommands.selectOne(
                 "SELECT correct_option, start_at, end_at FROM question WHERE id = ?",
                 questionId
         );
@@ -45,7 +45,7 @@ public class AnswerService {
         }
 
         // insere a resposta
-        db.executeUpdate(
+        dbCommands.executeUpdate(
                 "INSERT INTO answer (student_number, question_id, chosen_option, created_at) VALUES (?, ?, ?, ?)",
                 studentId, questionId, selected.name(), now.toString()
         );
@@ -65,7 +65,7 @@ public class AnswerService {
         Integer teacherId  = dto.teacherId();
 
         // verifica docência
-        Map<String,Object> rec = db.selectOne(
+        Map<String,Object> rec = dbCommands.selectOne(
                 "SELECT correct_option FROM question WHERE id = ? AND teacher_id = ?",
                 questionId, teacherId
         );
@@ -73,7 +73,7 @@ public class AnswerService {
         OptionLetter correct = OptionLetter.valueOf((String) rec.get("correct_option"));
 
         List<Answer> out = new ArrayList<>();
-        try (var con = java.sql.DriverManager.getConnection(db.getUrl());
+        try (var con = java.sql.DriverManager.getConnection(dbCommands.getUrl());
              var ps = con.prepareStatement(
                      "SELECT student_number, chosen_option, created_at FROM answer WHERE question_id = ? ORDER BY created_at")) {
             ps.setInt(1, questionId);
@@ -93,7 +93,7 @@ public class AnswerService {
     /** Histórico de respostas de um estudante. Calcula isCorrect pelo correcto_option da pergunta. */
     public List<Answer> getStudentHistory(Integer studentId) throws Exception {
         List<Answer> out = new ArrayList<>();
-        try (var con = java.sql.DriverManager.getConnection(db.getUrl());
+        try (var con = java.sql.DriverManager.getConnection(dbCommands.getUrl());
              var ps = con.prepareStatement(
                      "SELECT question_id, chosen_option, created_at FROM answer WHERE student_number = ? ORDER BY created_at DESC")) {
             ps.setInt(1, studentId);
@@ -103,7 +103,7 @@ public class AnswerService {
                     OptionLetter sel = OptionLetter.valueOf(rs.getString("chosen_option"));
                     LocalDateTime at = LocalDateTime.parse(rs.getString("created_at"));
                     // verificar se a resposta é correcta
-                    Map<String,Object> rec = db.selectOne(
+                    Map<String,Object> rec = dbCommands.selectOne(
                             "SELECT correct_option FROM question WHERE id = ?", qId
                     );
                     boolean isCorrect = false;

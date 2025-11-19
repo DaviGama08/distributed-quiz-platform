@@ -1,6 +1,6 @@
 package pt.isec.server.threads;
-import pt.isec.server.IQuizServer;
-import pt.isec.server.NetworkConnection;
+import pt.isec.server.IServerManager;
+import pt.isec.server.NetworkTcpConnection;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
@@ -16,10 +16,10 @@ public class ClientListenerThread implements Runnable, AutoCloseable {
     private static final int THREAD_POOL_SIZE = 8;
     private final ExecutorService pool = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
 
-    private final IQuizServer tInfo;
+    private final IServerManager tInfo;
     private ServerSocket serverSocket;
 
-    public ClientListenerThread(IQuizServer tInfo) {this.tInfo = tInfo;}
+    public ClientListenerThread(IServerManager tInfo) {this.tInfo = tInfo;}
 
     @Override
     public void run() {
@@ -33,7 +33,7 @@ public class ClientListenerThread implements Runnable, AutoCloseable {
             while (tInfo.isRunning()) {
                 try {
                     Socket newSocket = serverSocket.accept();
-                    pool.execute(new ClientHandlerThread(tInfo, new NetworkConnection(newSocket)));
+                    pool.execute(new ClientHandlerThread(tInfo, new NetworkTcpConnection(newSocket)));
 
                 } catch (SocketTimeoutException e) {
                     // timeout normal: volta ao while e verifica tInfo.isRunning()

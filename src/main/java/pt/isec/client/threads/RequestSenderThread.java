@@ -1,7 +1,7 @@
 package pt.isec.client.threads;
 
 import pt.isec.client.services.IClientService;
-import pt.isec.common.messages.Message;
+import pt.isec.common.messages.TcpMessage;
 
 import java.io.IOException;
 import java.io.ObjectOutputStream;
@@ -25,7 +25,7 @@ public class RequestSenderThread implements Runnable{
 
         while(service.isRunning()) {
             try {
-                Message<? extends Serializable> request = service.getRequestQueue().take();
+                TcpMessage<? extends Serializable> request = service.getRequestQueue().take();
 
                 System.out.println("[RequestSender] Sending: " + request.getType());
                 out.writeObject(request);

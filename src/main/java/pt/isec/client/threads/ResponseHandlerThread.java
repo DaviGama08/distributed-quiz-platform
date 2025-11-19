@@ -1,9 +1,9 @@
 package pt.isec.client.threads;
 
 import pt.isec.client.services.IClientService;
-import pt.isec.common.dto.auth.LoginResponseDTO;
+import pt.isec.common.dto.auth.AuthResponseDTO;
 import pt.isec.common.dto.question.CreateQuestionResponseDTO;
-import pt.isec.common.messages.Message;
+import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;
 import pt.isec.server.model.question.Answer;
 import pt.isec.server.model.question.Question;
@@ -32,7 +32,7 @@ public class ResponseHandlerThread implements Runnable{
 
         while(tInfo.isRunning()) {
             try {
-                Message<? extends Serializable> response = tInfo.getResponseQueue().take();
+                TcpMessage<? extends Serializable> response = tInfo.getResponseQueue().take();
                 processResponse(response);
             } catch (InterruptedException e) {
                 System.out.println("[ResponseHandler] Interrupted");
@@ -44,7 +44,7 @@ public class ResponseHandlerThread implements Runnable{
         System.out.println("[ResponseHandler] Stopped");
     }
 
-    private void processResponse(Message<? extends Serializable> response) {
+    private void processResponse(TcpMessage<? extends Serializable> response) {
         MessageType type = response.getType();
 
         System.out.println("[ResponseHandler] Processing: " + type);
@@ -53,7 +53,7 @@ public class ResponseHandlerThread implements Runnable{
             /* ===== AUTENTICAÇÃO ===== */
             case LOGIN_OK -> {
                 System.out.println("[ResponseHandler] Login successful!");
-                if(response.getData() instanceof LoginResponseDTO dto)
+                if(response.getData() instanceof AuthResponseDTO dto)
                     tInfo.setPropLoginOk(dto);
             }
             case LOGIN_FAIL -> {
@@ -63,7 +63,7 @@ public class ResponseHandlerThread implements Runnable{
             }
             case REGISTER_OK -> {
                 System.out.println("[ResponseHandler] Register successful!");
-                if(response.getData() instanceof LoginResponseDTO dto)
+                if(response.getData() instanceof AuthResponseDTO dto)
                     tInfo.setPropRegisterOk(dto);
             }
 

@@ -1,8 +1,8 @@
 package pt.isec.server.services.question;
 
 import pt.isec.common.dto.question.*;
-import pt.isec.server.IQuizServer;
-import pt.isec.server.db.Db;
+import pt.isec.server.IServerManager;
+import pt.isec.server.db.DbCommands;
 import pt.isec.server.model.question.Option;
 import pt.isec.server.model.question.OptionLetter;
 import pt.isec.server.model.question.Question;
@@ -14,12 +14,12 @@ import java.util.*;
  * Serviço que trata da criação, edição, listagem e acesso de perguntas.
  */
 public class QuestionService {
-    private final IQuizServer server;
-    private final Db db;
+    private final IServerManager server;
+    private final DbCommands dbCommands;
 
-    public QuestionService(IQuizServer server, Db db) {
+    public QuestionService(IServerManager server, DbCommands dbCommands) {
         this.server = server;
-        this.db = db;
+        this.dbCommands = dbCommands;
     }
 
     /** Cria uma pergunta para um docente. */
@@ -50,7 +50,7 @@ public class QuestionService {
         String accessCode = UUID.randomUUID().toString().substring(0, 6).toUpperCase();
 
         final long[] qIdArr = new long[1];
-        db.runInTransaction(tx -> {
+        dbCommands.runInTransaction(tx -> {
             tx.executeUpdate(
                     "INSERT INTO question (statement, teacher_id, correct_option, start_at, end_at, access_code) " +
                             "VALUES (?, ?, ?, ?, ?, ?)",
@@ -109,7 +109,7 @@ public class QuestionService {
         }
 
         List<Map<String,Object>> rows = new ArrayList<>();
-        try (var con = java.sql.DriverManager.getConnection(db.getUrl());
+        try (var con = java.sql.DriverManager.getConnection(dbCommands.getUrl());
              var ps = con.prepareStatement(sql.toString())) {
             for (int i = 0; i < params.size(); i++) {
                 ps.setObject(i + 1, params.get(i));
@@ -153,7 +153,7 @@ public class QuestionService {
     /** Carrega opções de uma pergunta. */
     private List<Option> loadOptions(int questionId) throws Exception {
         List<Option> opts = new ArrayList<>();
-        try (var con = java.sql.DriverManager.getConnection(db.getUrl());
+        try (var con = java.sql.DriverManager.getConnection(dbCommands.getUrl());
              var ps = con.prepareStatement(
                      "SELECT letter, text FROM option WHERE question_id = ? ORDER BY letter")) {
             ps.setInt(1, questionId);
@@ -171,7 +171,7 @@ public class QuestionService {
     /** Acessa pergunta por código. */
     public Question joinQuestion(JoinQuestionDTO dto) throws Exception {
         String access = dto.accessCode();
-        Map<String,Object> r = db.selectOne(
+        Map<String,Object> r = dbCommands.selectOne(
                 "SELECT id, statement, teacher_id, correct_option, start_at, end_at, access_code " +
                         "FROM question WHERE access_code = ? LIMIT 1",
                 access
@@ -205,7 +205,7 @@ public class QuestionService {
         LocalDateTime startAt = dto.startAt();
         LocalDateTime endAt   = dto.endAt();
 
-        Map<String,Object> ans = db.selectOne(
+        Map<String,Object> ans = dbCommands.selectOne(
                 "SELECT 1 as one FROM answer WHERE question_id = ? LIMIT 1",
                 quizId
         );
@@ -213,7 +213,7 @@ public class QuestionService {
             throw new IllegalStateException("Não é possível editar pergunta com respostas registadas");
         }
 
-        db.runInTransaction(tx -> {
+        dbCommands.runInTransaction(tx -> {
             tx.executeUpdate(
                     "UPDATE question SET statement = ?, correct_option = ?, start_at = ?, end_at = ? " +
                             "WHERE id = ? AND teacher_id = ?",
@@ -248,7 +248,7 @@ public class QuestionService {
         Integer qId = dto.questionId();
         Integer teacherId = dto.teacherId();
 
-        Map<String,Object> ans = db.selectOne(
+        Map<String,Object> ans = dbCommands.selectOne(
                 "SELECT 1 as one FROM answer WHERE question_id = ? LIMIT 1",
                 qId
         );
@@ -256,7 +256,7 @@ public class QuestionService {
             throw new IllegalStateException("Não é possível eliminar pergunta com respostas registadas");
         }
 
-        db.runInTransaction(tx -> {
+        dbCommands.runInTransaction(tx -> {
             tx.executeUpdate("DELETE FROM option WHERE question_id = ?", qId);
             tx.executeUpdate("DELETE FROM question WHERE id = ? AND teacher_id = ?", qId, teacherId);
         });

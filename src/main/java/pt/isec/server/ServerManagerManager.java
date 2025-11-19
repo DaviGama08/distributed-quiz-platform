@@ -1,7 +1,7 @@
 package pt.isec.server;
 
-import pt.isec.server.db.Db;
-import pt.isec.server.db.DbFiles;
+import pt.isec.server.db.DbCommands;
+import pt.isec.server.db.DbCreate;
 import pt.isec.server.services.auth.AuthService;
 import pt.isec.server.services.question.AnswerService;
 import pt.isec.server.services.question.QuestionService;
@@ -16,9 +16,9 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class QuizServer implements IQuizServer, Runnable, AutoCloseable {
+public class ServerManagerManager implements IServerManager, Runnable, AutoCloseable {
     private volatile boolean dbInitialised = false;
-    private Db db;
+    private DbCommands dbCommands;
     private AuthService authService;
 
     private final String id;
@@ -34,9 +34,9 @@ public class QuizServer implements IQuizServer, Runnable, AutoCloseable {
     private final String dirHost;
     private final int dirPort;
 
-    private final String mcGroup = "230.30.30.30";
-    private final int mcPort = 3030;
-    private NetworkInterface mcIf;
+    private final String multicastGroup = "230.30.30.30";
+    private final int multicastPort = 3030;
+    private NetworkInterface multicastInterface;
 
     private final Path dataDir;
     private volatile Path dbPath;
@@ -50,8 +50,8 @@ public class QuizServer implements IQuizServer, Runnable, AutoCloseable {
 
     private Thread tClusterHeartbeat, tDirectoryHeartbeat, tClientListener;
 
-    public QuizServer(String dirHost, int dirPort, String mcIfIp,
-                      int clientPort, int dbCopyPort, Path initialDbPath) throws Exception {
+    public ServerManagerManager(String dirHost, int dirPort, String mcIfIp,
+                                int clientPort, int dbCopyPort, Path initialDbPath) throws Exception {
         this.id = UUID.randomUUID().toString();
         this.ip = InetAddress.getLocalHost().getHostAddress();
         this.clientPort = clientPort;
@@ -66,11 +66,11 @@ public class QuizServer implements IQuizServer, Runnable, AutoCloseable {
         this.isPrimary = false;
         refreshDbPath();
 
-        this.mcIf = resolveMulticastInterface(mcIfIp);
-        if (this.mcIf == null)
+        this.multicastInterface = resolveMulticastInterface(mcIfIp);
+        if (this.multicastInterface == null)
             throw new IllegalArgumentException("Interface de rede inválida para IP/criterio: " + mcIfIp);
 
-        System.out.println("[MC] usando interface: " + mcIf.getName());
+        System.out.println("[MC] usando interface: " + multicastInterface.getName());
         System.out.println("[DB] path inicial=" + dbPath + " (versão=" + dbVersion.get() + ", role=BACKUP)");
     }
 
@@ -120,13 +120,13 @@ public class QuizServer implements IQuizServer, Runnable, AutoCloseable {
             if (dbInitialised)
                 return;
             try {
-                DbFiles.createIfMissing(this.dbPath, "/db/schema.sql");
-                this.db = new Db("jdbc:sqlite:" + this.dbPath.toAbsolutePath());
-                this.authService = new AuthService(db);
+                DbCreate.createIfMissing(this.dbPath, "/db/schema.sql");
+                this.dbCommands = new DbCommands("jdbc:sqlite:" + this.dbPath.toAbsolutePath());
+                this.authService = new AuthService(dbCommands);
 
                 // inicializa novos serviços
-                this.questionService = new QuestionService(this, db);
-                this.answerService = new AnswerService(this, db);
+                this.questionService = new QuestionService(this, dbCommands);
+                this.answerService = new AnswerService(this, dbCommands);
 
                 System.out.println("[DB] camada de dados inicializada em " + dbPath);
                 dbInitialised = true;
@@ -164,9 +164,9 @@ public class QuizServer implements IQuizServer, Runnable, AutoCloseable {
     @Override public String directoryHost() { return dirHost; }
     @Override public int directoryPort() { return dirPort; }
 
-    @Override public String multicastGroup() { return mcGroup; }
-    @Override public int multicastPort() { return mcPort; }
-    @Override public NetworkInterface multicastInterface() { return mcIf; }
+    @Override public String multicastGroup() { return multicastGroup; }
+    @Override public int multicastPort() { return multicastPort; }
+    @Override public NetworkInterface multicastInterface() { return multicastInterface; }
 
     @Override public void setRunning(boolean v) throws Exception {
         running = v;
@@ -182,7 +182,7 @@ public class QuizServer implements IQuizServer, Runnable, AutoCloseable {
     @Override public AuthService getAuthService() {initDatabaseLayerIfNeeded(); return authService;}
     @Override public long dbVersion() { return dbVersion.get(); }
     @Override public Path dbPath() { return dbPath; }
-    @Override public Db getDb() {initDatabaseLayerIfNeeded(); return db;}
+    @Override public DbCommands getDb() {initDatabaseLayerIfNeeded(); return dbCommands;}
 
     @Override public boolean tryLockCopy() { return copying.compareAndSet(false, true); }
     @Override public void unlockCopy() { copying.set(false); }

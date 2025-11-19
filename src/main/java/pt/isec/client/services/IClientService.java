@@ -1,10 +1,10 @@
 package pt.isec.client.services;
 
-import pt.isec.common.dto.auth.LoginResponseDTO;
+import pt.isec.common.dto.auth.AuthResponseDTO;
 import pt.isec.common.dto.question.CreateQuestionResponseDTO;
+import pt.isec.common.messages.TcpMessage;
 import pt.isec.server.model.question.Question;
 import pt.isec.server.model.question.Answer;
-import pt.isec.common.messages.Message;
 
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -28,8 +28,8 @@ public interface IClientService {
     Socket getTcpSocket();
 
     // Filas de pedidos e respostas
-    BlockingQueue<Message<? extends Serializable>> getRequestQueue();
-    BlockingQueue<Message<? extends Serializable>> getResponseQueue();
+    BlockingQueue<TcpMessage<? extends Serializable>> getRequestQueue();
+    BlockingQueue<TcpMessage<? extends Serializable>> getResponseQueue();
 
     // Estado de execução
     boolean isRunning();
@@ -46,9 +46,9 @@ public interface IClientService {
     boolean isAuthenticated();
 
     // Eventos (property changes) para autenticação
-    void setPropLoginOk(LoginResponseDTO dto);
+    void setPropLoginOk(AuthResponseDTO dto);
     void setPropError(String s);
-    void setPropRegisterOk(LoginResponseDTO dto);
+    void setPropRegisterOk(AuthResponseDTO dto);
 
     // Eventos para perguntas e respostas
     void setPropCreateQuestionResponse(CreateQuestionResponseDTO dto);

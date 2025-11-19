@@ -4,10 +4,10 @@ import pt.isec.common.dto.answer.SubmitAnswerDTO;
 import pt.isec.common.dto.answer.ViewAnswersDTO;
 import pt.isec.common.dto.auth.*;
 import pt.isec.common.dto.question.*;
-import pt.isec.common.messages.Message;
+import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;
-import pt.isec.server.IQuizServer;
-import pt.isec.server.NetworkConnection;
+import pt.isec.server.IServerManager;
+import pt.isec.server.NetworkTcpConnection;
 import pt.isec.server.model.question.Question;
 
 import java.io.IOException;
@@ -23,11 +23,11 @@ public class ClientHandlerThread implements Runnable {
     private static final int FIRST_MESSAGE_TIMEOUT_SEC = 30;
     private static final Duration NO_TIMEOUT = Duration.ZERO;
 
-    private final IQuizServer tInfo;
-    private final NetworkConnection connection;
+    private final IServerManager threadInfo;
+    private final NetworkTcpConnection connection;
 
-    public ClientHandlerThread(IQuizServer tInfo, NetworkConnection connection) {
-        this.tInfo = tInfo;
+    public ClientHandlerThread(IServerManager threadInfo, NetworkTcpConnection connection) {
+        this.threadInfo = threadInfo;
         this.connection = connection;
     }
 
@@ -37,17 +37,17 @@ public class ClientHandlerThread implements Runnable {
             connection.setReadTimeout(Duration.ofSeconds(FIRST_MESSAGE_TIMEOUT_SEC));
 
             // se o servidor não for primário, rejeita
-            if (!tInfo.isPrimary()) {
-                connection.sendMessage(new Message<>(MessageType.NACK, "not-primary"));
+            if (!threadInfo.isPrimary()) {
+                connection.sendMessage(new TcpMessage<>(MessageType.NACK, "not-primary"));
                 return;
             }
 
             // ligação aceite
-            connection.sendMessage(new Message<>(MessageType.ACK, "ok"));
+            connection.sendMessage(new TcpMessage<>(MessageType.ACK, "ok"));
             connection.setReadTimeout(NO_TIMEOUT);
 
-            while (tInfo.isRunning()) {
-                Message<?> msg = connection.receiveMessage();
+            while (threadInfo.isRunning()) {
+                TcpMessage<?> msg = connection.receiveMessage();
                 if (msg == null)
                     break;
                 processMessage(msg);
@@ -64,102 +64,102 @@ public class ClientHandlerThread implements Runnable {
         }
     }
 
-    private void processMessage(Message<?> message) throws Exception {
-        if (message == null) return;
+    private void processMessage(TcpMessage<?> tcpMessage) throws Exception {
+        if (tcpMessage == null) return;
 
-        switch (message.getType()) {
+        switch (tcpMessage.getType()) {
 
             /* ========= AUTENTICAÇÃO ========= */
 
             case REGISTER_STUDENT -> {
                 try {
-                    RegisterStudentDTO dto = message.getDataAs(RegisterStudentDTO.class);
-                    LoginResponseDTO res = tInfo.getAuthService().registerStudent(dto);
-                    connection.sendMessage(new Message<>(MessageType.REGISTER_OK, res, LoginResponseDTO.class));
+                    RegisterStudentDTO dto = tcpMessage.getDataAs(RegisterStudentDTO.class);
+                    AuthResponseDTO res = threadInfo.getAuthService().registerStudent(dto);
+                    connection.sendMessage(new TcpMessage<>(MessageType.REGISTER_OK, res, AuthResponseDTO.class));
                 } catch (Exception e) {
-                    connection.sendMessage(new Message<>(MessageType.ERROR, e.getMessage(), String.class));
+                    connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
                 }
             }
 
             case REGISTER_TEACHER -> {
                 try {
-                    RegisterTeacherDTO dto = message.getDataAs(RegisterTeacherDTO.class);
-                    LoginResponseDTO res = tInfo.getAuthService().registerTeacher(dto);
-                    connection.sendMessage(new Message<>(MessageType.REGISTER_OK, res, LoginResponseDTO.class));
+                    RegisterTeacherDTO dto = tcpMessage.getDataAs(RegisterTeacherDTO.class);
+                    AuthResponseDTO res = threadInfo.getAuthService().registerTeacher(dto);
+                    connection.sendMessage(new TcpMessage<>(MessageType.REGISTER_OK, res, AuthResponseDTO.class));
                 } catch (Exception e) {
-                    connection.sendMessage(new Message<>(MessageType.ERROR, e.getMessage(), String.class));
+                    connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
                 }
             }
 
             case LOGIN -> {
                 try {
-                    LoginRequestDTO dto = message.getDataAs(LoginRequestDTO.class);
-                    LoginResponseDTO res = tInfo.getAuthService().login(dto);
-                    connection.sendMessage(new Message<>(MessageType.LOGIN_OK, res, LoginResponseDTO.class));
+                    LoginRequestDTO dto = tcpMessage.getDataAs(LoginRequestDTO.class);
+                    AuthResponseDTO res = threadInfo.getAuthService().login(dto);
+                    connection.sendMessage(new TcpMessage<>(MessageType.LOGIN_OK, res, AuthResponseDTO.class));
                 } catch (Exception e) {
-                    connection.sendMessage(new Message<>(MessageType.LOGIN_FAIL, e.getMessage(), String.class));
+                    connection.sendMessage(new TcpMessage<>(MessageType.LOGIN_FAIL, e.getMessage(), String.class));
                 }
             }
 
             case LOGOUT -> {
                 // sem gestão real de sessão para já
-                connection.sendMessage(new Message<>(MessageType.ACK, "logout-ok", String.class));
+                connection.sendMessage(new TcpMessage<>(MessageType.ACK, "logout-ok", String.class));
             }
 
             /* ========= PERGUNTAS (DOCENTE) ========= */
 
             case CREATE_QUESTION -> {
                 try {
-                    CreateQuestionDTO dto = message.getDataAs(CreateQuestionDTO.class);
-                    CreateQuestionResponseDTO res = tInfo.getQuestionService().createQuestion(dto);
-                    connection.sendMessage(new Message<>(MessageType.CREATE_QUESTION_RESPONSE, res,
+                    CreateQuestionDTO dto = tcpMessage.getDataAs(CreateQuestionDTO.class);
+                    CreateQuestionResponseDTO res = threadInfo.getQuestionService().createQuestion(dto);
+                    connection.sendMessage(new TcpMessage<>(MessageType.CREATE_QUESTION_RESPONSE, res,
                             CreateQuestionResponseDTO.class));
                 } catch (Exception e) {
-                    connection.sendMessage(new Message<>(MessageType.ERROR, e.getMessage(), String.class));
+                    connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
                 }
             }
 
             case EDIT_QUESTION -> {
                 try {
-                    EditQuestionDTO dto = message.getDataAs(EditQuestionDTO.class);
-                    boolean ok = tInfo.getQuestionService().editQuestion(dto);
-                    connection.sendMessage(new Message<>(
+                    EditQuestionDTO dto = tcpMessage.getDataAs(EditQuestionDTO.class);
+                    boolean ok = threadInfo.getQuestionService().editQuestion(dto);
+                    connection.sendMessage(new TcpMessage<>(
                             ok ? MessageType.ACK : MessageType.NACK,
                             ok ? "edit-ok" : "edit-fail",
                             String.class
                     ));
                 } catch (Exception e) {
-                    connection.sendMessage(new Message<>(MessageType.ERROR, e.getMessage(), String.class));
+                    connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
                 }
             }
 
             case DELETE_QUESTION -> {
                 try {
-                    DeleteQuestionDTO dto = message.getDataAs(DeleteQuestionDTO.class);
-                    boolean ok = tInfo.getQuestionService().deleteQuestion(dto);
-                    connection.sendMessage(new Message<>(
+                    DeleteQuestionDTO dto = tcpMessage.getDataAs(DeleteQuestionDTO.class);
+                    boolean ok = threadInfo.getQuestionService().deleteQuestion(dto);
+                    connection.sendMessage(new TcpMessage<>(
                             ok ? MessageType.ACK : MessageType.NACK,
                             ok ? "delete-ok" : "delete-fail",
                             String.class
                     ));
                 } catch (Exception e) {
-                    connection.sendMessage(new Message<>(MessageType.ERROR, e.getMessage(), String.class));
+                    connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
                 }
             }
 
             case LIST_QUESTIONS -> {
                 try {
-                    ListQuestionsDTO dto = message.getDataAs(ListQuestionsDTO.class);
-                    List<?> list = tInfo.getQuestionService().listQuestions(dto);
+                    ListQuestionsDTO dto = tcpMessage.getDataAs(ListQuestionsDTO.class);
+                    List<?> list = threadInfo.getQuestionService().listQuestions(dto);
                     ArrayList<?> payload = new ArrayList<>(list);
-                    Message<ArrayList<?>> out = new Message<>(
+                    TcpMessage<ArrayList<?>> out = new TcpMessage<>(
                             MessageType.LIST_QUESTIONS_RESPONSE,
                             payload,
                             (Class) ArrayList.class
                     );
                     connection.sendMessage(out);
                 } catch (Exception e) {
-                    connection.sendMessage(new Message<>(MessageType.ERROR, e.getMessage(), String.class));
+                    connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
                 }
             }
 
@@ -167,14 +167,14 @@ public class ClientHandlerThread implements Runnable {
 
             case JOIN_QUESTION -> {
                 try {
-                    JoinQuestionDTO dto = message.getDataAs(JoinQuestionDTO.class);
-                    Question q = tInfo.getQuestionService().joinQuestion(dto);
+                    JoinQuestionDTO dto = tcpMessage.getDataAs(JoinQuestionDTO.class);
+                    Question q = threadInfo.getQuestionService().joinQuestion(dto);
                     if (q == null)
-                        connection.sendMessage(new Message<>(MessageType.NACK, "invalid-code", String.class));
+                        connection.sendMessage(new TcpMessage<>(MessageType.NACK, "invalid-code", String.class));
                     else
-                        connection.sendMessage(new Message<>(MessageType.QUESTION_DETAILS, q, Question.class));
+                        connection.sendMessage(new TcpMessage<>(MessageType.QUESTION_DETAILS, q, Question.class));
                 } catch (Exception e) {
-                    connection.sendMessage(new Message<>(MessageType.ERROR, e.getMessage(), String.class));
+                    connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
                 }
             }
 
@@ -182,54 +182,54 @@ public class ClientHandlerThread implements Runnable {
 
             case SUBMIT_ANSWER -> {
                 try {
-                    SubmitAnswerDTO dto = message.getDataAs(SubmitAnswerDTO.class);
-                    boolean ok = tInfo.getAnswerService().submitAnswer(dto);
-                    connection.sendMessage(new Message<>(
+                    SubmitAnswerDTO dto = tcpMessage.getDataAs(SubmitAnswerDTO.class);
+                    boolean ok = threadInfo.getAnswerService().submitAnswer(dto);
+                    connection.sendMessage(new TcpMessage<>(
                             ok ? MessageType.SUBMIT_OK : MessageType.SUBMIT_FAIL,
                             ok ? "answer-ok" : "answer-fail",
                             String.class
                     ));
                 } catch (Exception e) {
-                    connection.sendMessage(new Message<>(MessageType.ERROR, e.getMessage(), String.class));
+                    connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
                 }
             }
 
             case VIEW_ANSWERS -> {
                 try {
-                    ViewAnswersDTO dto = message.getDataAs(ViewAnswersDTO.class);
-                    List<?> list = tInfo.getAnswerService().viewAnswers(dto);
+                    ViewAnswersDTO dto = tcpMessage.getDataAs(ViewAnswersDTO.class);
+                    List<?> list = threadInfo.getAnswerService().viewAnswers(dto);
                     ArrayList<?> payload = new ArrayList<>(list);
-                    Message<ArrayList<?>> out = new Message<>(
+                    TcpMessage<ArrayList<?>> out = new TcpMessage<>(
                             MessageType.VIEW_ANSWERS_RESPONSE,
                             payload,
                             (Class) ArrayList.class
                     );
                     connection.sendMessage(out);
                 } catch (Exception e) {
-                    connection.sendMessage(new Message<>(MessageType.ERROR, e.getMessage(), String.class));
+                    connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
                 }
             }
 
             case LIST_ANSWERED_QUESTIONS -> {
                 try {
-                    Integer studentId = message.getDataAs(Integer.class);
-                    List<?> list = tInfo.getAnswerService().getStudentHistory(studentId);
+                    Integer studentId = tcpMessage.getDataAs(Integer.class);
+                    List<?> list = threadInfo.getAnswerService().getStudentHistory(studentId);
                     ArrayList<?> payload = new ArrayList<>(list);
-                    Message<ArrayList<?>> out = new Message<>(
+                    TcpMessage<ArrayList<?>> out = new TcpMessage<>(
                             MessageType.LIST_ANSWERED_RESPONSE,
                             payload,
                             (Class) ArrayList.class
                     );
                     connection.sendMessage(out);
                 } catch (Exception e) {
-                    connection.sendMessage(new Message<>(MessageType.ERROR, e.getMessage(), String.class));
+                    connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
                 }
             }
 
             /* ========= DEFAULT ========= */
 
             default -> connection.sendMessage(
-                    new Message<>(MessageType.ERROR, "Tipo de mensagem não suportado", String.class)
+                    new TcpMessage<>(MessageType.ERROR, "Tipo de mensagem não suportado", String.class)
             );
         }
     }

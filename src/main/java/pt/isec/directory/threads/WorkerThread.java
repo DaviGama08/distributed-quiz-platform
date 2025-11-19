@@ -1,7 +1,7 @@
 package pt.isec.directory.threads;
 
 import pt.isec.common.messages.UdpMessage;
-import pt.isec.directory.IDirectoryService;
+import pt.isec.directory.IDirectoryManager;
 import pt.isec.directory.ServerInfo;
 
 import java.io.IOException;
@@ -11,9 +11,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class WorkerThread implements Runnable{
-    private final IDirectoryService tInfo;
+    private final IDirectoryManager tInfo;
 
-    public WorkerThread(IDirectoryService tInfo){this.tInfo = tInfo;}
+    public WorkerThread(IDirectoryManager tInfo){this.tInfo = tInfo;}
 
     @Override
     public void run() {

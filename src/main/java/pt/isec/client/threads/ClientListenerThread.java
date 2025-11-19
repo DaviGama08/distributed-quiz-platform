@@ -1,7 +1,7 @@
 package pt.isec.client.threads;
 
 import pt.isec.client.services.IClientService;
-import pt.isec.common.messages.Message;
+import pt.isec.common.messages.TcpMessage;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -26,7 +26,7 @@ public class ClientListenerThread implements Runnable{
 
         while(service.isRunning()) {
             try {
-                Message<? extends Serializable> response = (Message<? extends Serializable>) in.readObject();
+                TcpMessage<? extends Serializable> response = (TcpMessage<? extends Serializable>) in.readObject();
 
                 if(response != null) {
                     System.out.println("[ClientListener] Received: " + response.getType());

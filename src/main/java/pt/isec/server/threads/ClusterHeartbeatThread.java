@@ -1,10 +1,10 @@
 package pt.isec.server.threads;
 
-import pt.isec.common.messages.Message;
+import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;
-import pt.isec.server.IQuizServer;
-import pt.isec.server.NetworkConnection;
-import pt.isec.server.QuizServer;
+import pt.isec.server.IServerManager;
+import pt.isec.server.NetworkTcpConnection;
+import pt.isec.server.ServerManagerManager;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -31,11 +31,11 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
     private static final int ACCEPT_TIMEOUT_MS = 500;
     private static final int BUFFER_SIZE = 4096;
 
-    private final IQuizServer tInfo;
+    private final IServerManager tInfo;
     private MulticastSocket ms;
     private ServerSocket dbCopyServerSocket;
 
-    public ClusterHeartbeatThread(IQuizServer tInfo) { this.tInfo = tInfo; }
+    public ClusterHeartbeatThread(IServerManager tInfo) { this.tInfo = tInfo; }
 
     @Override
     public void run() {
@@ -66,7 +66,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                 // PRIMÁRIO: envia heartbeat
                 if (tInfo.isPrimary() && now - lastSent >= HEARTBEAT_INTERVAL_MS) {
                     List<String> sqlUpdates = new ArrayList<>();
-                    if (tInfo instanceof QuizServer qs) {
+                    if (tInfo instanceof ServerManagerManager qs) {
                         sqlUpdates = qs.pollPendingSqlUpdates();
                     }
                     String encodedSql = "";
@@ -120,7 +120,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                                             Instant.now(), missingDb, tInfo.dbVersion(), rxVersion, senderIp, rxDbPort);
 
                                     if (rxDbPort > 0) {
-                                        if (tInfo instanceof QuizServer sn) {
+                                        if (tInfo instanceof ServerManagerManager sn) {
                                             if (!sn.tryLockCopy()) continue;
                                             try {
                                                 requestDbCopyFromPrimary(senderIp, rxDbPort, rxVersion);
@@ -189,11 +189,11 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
         Path target = tInfo.dbPath();
         Path tmp    = target.resolveSibling(target.getFileName().toString() + ".tmp");
 
-        try (NetworkConnection conn = NetworkConnection.connect(
+        try (NetworkTcpConnection conn = NetworkTcpConnection.connect(
                 primaryIp, primaryPort, Duration.ofSeconds(5))) {
 
             conn.setReadTimeout(Duration.ofSeconds(30));
-            conn.sendMessage(new Message<>(MessageType.DB_REQUEST_COPY, "please"));
+            conn.sendMessage(new TcpMessage<>(MessageType.DB_REQUEST_COPY, "please"));
 
             var resp = conn.receiveMessage();
             if (resp == null || resp.getType() != MessageType.ACK) {
@@ -246,20 +246,20 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
 
     // Lado PRIMÁRIO: atende pedidos DB_REQUEST_COPY
     private void handleDbCopySession(Socket s) {
-        try (NetworkConnection connection = new NetworkConnection(s)) {
+        try (NetworkTcpConnection connection = new NetworkTcpConnection(s)) {
 
-            Message<?> req = connection.receiveMessage();
+            TcpMessage<?> req = connection.receiveMessage();
             if (req == null || req.getType() != MessageType.DB_REQUEST_COPY) {
-                connection.sendMessage(new Message<>(MessageType.NACK, "bad-request", String.class));
+                connection.sendMessage(new TcpMessage<>(MessageType.NACK, "bad-request", String.class));
                 return;
             }
 
             if (!tInfo.isPrimary()) {
-                connection.sendMessage(new Message<>(MessageType.NACK, "not-primary", String.class));
+                connection.sendMessage(new TcpMessage<>(MessageType.NACK, "not-primary", String.class));
                 return;
             }
 
-            connection.sendMessage(new Message<>(MessageType.ACK, "copy-start"));
+            connection.sendMessage(new TcpMessage<>(MessageType.ACK, "copy-start"));
 
             Path dbFile = tInfo.dbPath();
             long size   = Files.size(dbFile);

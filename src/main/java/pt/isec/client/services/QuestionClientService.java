@@ -1,7 +1,7 @@
 package pt.isec.client.services;
 
 import pt.isec.common.dto.question.*;
-import pt.isec.common.messages.Message;
+import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;
 
 /**
@@ -22,7 +22,7 @@ public class QuestionClientService {
     /** Envia um pedido para criar uma nova pergunta. */
     public void createQuestion(CreateQuestionDTO dto) {
         try {
-            service.getRequestQueue().put(new Message<>(MessageType.CREATE_QUESTION, dto));
+            service.getRequestQueue().put(new TcpMessage<>(MessageType.CREATE_QUESTION, dto));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -31,7 +31,7 @@ public class QuestionClientService {
     /** Envia um pedido para editar uma pergunta. */
     public void editQuestion(EditQuestionDTO dto) {
         try {
-            service.getRequestQueue().put(new Message<>(MessageType.EDIT_QUESTION, dto));
+            service.getRequestQueue().put(new TcpMessage<>(MessageType.EDIT_QUESTION, dto));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -40,7 +40,7 @@ public class QuestionClientService {
     /** Envia um pedido para eliminar uma pergunta. */
     public void deleteQuestion(DeleteQuestionDTO dto) {
         try {
-            service.getRequestQueue().put(new Message<>(MessageType.DELETE_QUESTION, dto));
+            service.getRequestQueue().put(new TcpMessage<>(MessageType.DELETE_QUESTION, dto));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -49,7 +49,7 @@ public class QuestionClientService {
     /** Envia um pedido para listar as perguntas de um docente. */
     public void listQuestions(ListQuestionsDTO dto) {
         try {
-            service.getRequestQueue().put(new Message<>(MessageType.LIST_QUESTIONS, dto));
+            service.getRequestQueue().put(new TcpMessage<>(MessageType.LIST_QUESTIONS, dto));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -58,7 +58,7 @@ public class QuestionClientService {
     /** Envia um pedido para um estudante aderir a uma pergunta através de código. */
     public void joinQuestion(JoinQuestionDTO dto) {
         try {
-            service.getRequestQueue().put(new Message<>(MessageType.JOIN_QUESTION, dto));
+            service.getRequestQueue().put(new TcpMessage<>(MessageType.JOIN_QUESTION, dto));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }

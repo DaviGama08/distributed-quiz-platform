@@ -157,16 +157,16 @@ public class QuizServer implements IQuizServer, Runnable, AutoCloseable {
     }
 
     @Override public String id() { return id; }
-    @Override public String ip() { return ip; }
-    @Override public int clientPort() { return clientPort; }
+    @Override public String serverTcpIp() { return ip; }
+    @Override public int serverTcpPort() { return clientPort; }
     @Override public int dbCopyPort() { return dbCopyPort; }
 
     @Override public String directoryHost() { return dirHost; }
     @Override public int directoryPort() { return dirPort; }
 
-    @Override public String mcGroup() { return mcGroup; }
-    @Override public int mcPort() { return mcPort; }
-    @Override public NetworkInterface mcIf() { return mcIf; }
+    @Override public String multicastGroup() { return mcGroup; }
+    @Override public int multicastPort() { return mcPort; }
+    @Override public NetworkInterface multicastInterface() { return mcIf; }
 
     @Override public void setRunning(boolean v) throws Exception {
         running = v;

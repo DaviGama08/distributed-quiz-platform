@@ -197,7 +197,7 @@ public class QuestionService {
 
     /** Edita pergunta se não existirem respostas. */
     public boolean editQuestion(EditQuestionDTO dto) throws Exception {
-        Integer qId = dto.questionId();
+        Integer quizId = dto.questionId();
         Integer teacherId = dto.teacherId();
         String statement  = dto.statement();
         List<Option> options = dto.options();
@@ -207,7 +207,7 @@ public class QuestionService {
 
         Map<String,Object> ans = db.selectOne(
                 "SELECT 1 as one FROM answer WHERE question_id = ? LIMIT 1",
-                qId
+                quizId
         );
         if (ans != null) {
             throw new IllegalStateException("Não é possível editar pergunta com respostas registadas");
@@ -217,26 +217,26 @@ public class QuestionService {
             tx.executeUpdate(
                     "UPDATE question SET statement = ?, correct_option = ?, start_at = ?, end_at = ? " +
                             "WHERE id = ? AND teacher_id = ?",
-                    statement, correct.name(), startAt.toString(), endAt.toString(), qId, teacherId
+                    statement, correct.name(), startAt.toString(), endAt.toString(), quizId, teacherId
             );
-            tx.executeUpdate("DELETE FROM option WHERE question_id = ?", qId);
+            tx.executeUpdate("DELETE FROM option WHERE question_id = ?", quizId);
             for (Option o : options) {
                 tx.executeUpdate(
                         "INSERT INTO option (question_id, letter, text) VALUES (?, ?, ?)",
-                        qId, o.getLetter().name(), o.getText()
+                        quizId, o.getLetter().name(), o.getText()
                 );
             }
         });
 
         server.recordSqlUpdate(
                 "UPDATE question SET statement='" + escape(statement) + "', correct_option='" + correct.name() +
-                        "', start_at='" + startAt + "', end_at='" + endAt + "' WHERE id=" + qId + " AND teacher_id=" + teacherId + ";"
+                        "', start_at='" + startAt + "', end_at='" + endAt + "' WHERE id=" + quizId + " AND teacher_id=" + teacherId + ";"
         );
-        server.recordSqlUpdate("DELETE FROM option WHERE question_id=" + qId + ";");
+        server.recordSqlUpdate("DELETE FROM option WHERE question_id=" + quizId + ";");
         for (Option o : options) {
             server.recordSqlUpdate(
                     "INSERT INTO option (question_id, letter, text) VALUES (" +
-                            qId + ", '" + o.getLetter().name() + "', '" + escape(o.getText()) + "');"
+                            quizId + ", '" + o.getLetter().name() + "', '" + escape(o.getText()) + "');"
             );
         }
         server.setDbVersion(server.dbVersion() + 1);

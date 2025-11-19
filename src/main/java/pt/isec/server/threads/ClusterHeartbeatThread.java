@@ -39,7 +39,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
 
     @Override
     public void run() {
-        try (MulticastSocket _ms = new MulticastSocket(tInfo.mcPort());
+        try (MulticastSocket _ms = new MulticastSocket(tInfo.multicastPort());
              ServerSocket _ss = new ServerSocket(tInfo.dbCopyPort())) {
 
             this.ms = _ms;
@@ -48,11 +48,11 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
             _ms.setReuseAddress(true);
             _ms.setSoTimeout(RX_TIMEOUT_MS);
             _ms.setTimeToLive(MULTICAST_TTL);
-            _ms.setNetworkInterface(tInfo.mcIf());
+            _ms.setNetworkInterface(tInfo.multicastInterface());
             try { _ms.setLoopbackMode(false); } catch (Throwable ignore) {}
 
-            InetAddress grp = InetAddress.getByName(tInfo.mcGroup());
-            _ms.joinGroup(new InetSocketAddress(grp, tInfo.mcPort()), tInfo.mcIf());
+            InetAddress grp = InetAddress.getByName(tInfo.multicastGroup());
+            _ms.joinGroup(new InetSocketAddress(grp, tInfo.multicastPort()), tInfo.multicastInterface());
 
             _ss.setSoTimeout(ACCEPT_TIMEOUT_MS);
 
@@ -74,14 +74,14 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                         String joined = String.join(";;", sqlUpdates);
                         encodedSql = Base64.getEncoder().encodeToString(joined.getBytes(StandardCharsets.UTF_8));
                     }
-                    String beat = "MC_HB;id=servidor" + tInfo.clientPort() +
+                    String beat = "MC_HB;id=servidor" + tInfo.serverTcpPort() +
                             ";role=MASTER" +
                             ";version=" + tInfo.dbVersion() +
                             ";dbPort=" + tInfo.dbCopyPort() +
-                            ";clientPort=" + tInfo.clientPort() +
+                            ";clientPort=" + tInfo.serverTcpPort() +
                             ";sql=" + encodedSql;
                     byte[] data = beat.getBytes(StandardCharsets.UTF_8);
-                    _ms.send(new DatagramPacket(data, data.length, grp, tInfo.mcPort()));
+                    _ms.send(new DatagramPacket(data, data.length, grp, tInfo.multicastPort()));
                     lastSent = now;
                 }
 
@@ -95,7 +95,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                         if (msg.startsWith("MC_HB;")) {
                             long rxClientPort = extractLong(msg, "clientPort");
                             // ignora batimentos que o próprio servidor enviou
-                            boolean fromMe = senderIp.equals(tInfo.ip()) && rxClientPort == tInfo.clientPort();
+                            boolean fromMe = senderIp.equals(tInfo.serverTcpIp()) && rxClientPort == tInfo.serverTcpPort();
                             if (!fromMe) {
                                 // Aplica SQL updates codificados em base64
                                 String sqlEncoded = extractString(msg, "sql");

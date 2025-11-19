@@ -23,7 +23,8 @@ public class LauncherServer {
         Path dataDir;
         if ("PROJECT".equalsIgnoreCase(dataArg)) {
             // coloca a pasta "data" no MESMO nível de "batchFiles"
-            Path here    = Paths.get(System.getProperty("user.dir")).toAbsolutePath(); // .../batchFiles
+            // user.dir: é a pasta onde o comando Java foi executado, neste caso na pasta batchFiles
+            Path here    = Paths.get(System.getProperty("user.dir")).toAbsolutePath();
             Path project = here.getParent(); // uma pasta antes
             if (project == null) project = here; // fallback
             dataDir = project.resolve("data").toAbsolutePath();
@@ -32,7 +33,7 @@ public class LauncherServer {
         } else {
             dataDir = Paths.get(dataArg).toAbsolutePath();
         }
-        Files.createDirectories(dataDir);
+        Files.createDirectories(dataDir); //Cria a pasta com o nome definido e no local definido
 
         // ficheiro distinto por servidor (evita colisões)
         Path dbFile = dataDir.resolve("quiz-" + clientPort + ".db");

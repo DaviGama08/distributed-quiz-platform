@@ -25,9 +25,9 @@ public class ClientListenerThread implements Runnable, AutoCloseable {
     public void run() {
         try {
             // cria o socket tcp que aceita conexões de clientes
-            serverSocket = new ServerSocket(tInfo.clientPort());
+            serverSocket = new ServerSocket(tInfo.serverTcpPort());
             serverSocket.setSoTimeout(1000); // 1 segundo
-            System.out.println("[ACCEPT] a escutar clientes em " + tInfo.clientPort());
+            System.out.println("[ACCEPT] a escutar clientes em " + tInfo.serverTcpPort());
 
             // loop principal — aceita clientes enquanto o servidor estiver a correr
             while (tInfo.isRunning()) {

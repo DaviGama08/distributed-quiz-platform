@@ -32,9 +32,9 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             String registerMsg = kv(
                     "VER","1","TYPE","REGISTER",
                     "ID", tInfo.id(),
-                    "TCP", tInfo.ip() + ":" + tInfo.clientPort(),
-                    "DBV", String.valueOf(tInfo.dbVersion()),
-                    "DBP", String.valueOf(tInfo.dbCopyPort())
+                    "TCP", tInfo.serverTcpIp() + ":" + tInfo.serverTcpPort(), //ip e porto do servidor para o cliente saber
+                    "DBV", String.valueOf(tInfo.dbVersion()), //versão da base de dados
+                    "DBP", String.valueOf(tInfo.dbCopyPort()) //porto da base de dados
             );
             send(s, dirAddr, dirPort, registerMsg);
 
@@ -47,7 +47,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             }
 
             tInfo.setPrimary(reply.ip, reply.port);
-            boolean iAmPrimary = Objects.equals(reply.ip, tInfo.ip()) && reply.port == tInfo.clientPort();
+            boolean iAmPrimary = Objects.equals(reply.ip, tInfo.serverTcpIp()) && reply.port == tInfo.serverTcpPort();
 
             // versão enviada pela diretoria: -1 = primeira vez
             if (reply.dbv != null) {
@@ -98,7 +98,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                 Endpoint cur = tryReceivePrincipal(s);
                 if (cur != null) {
                     tInfo.setPrimary(cur.ip, cur.port);
-                    boolean prim = Objects.equals(cur.ip, tInfo.ip()) && cur.port == tInfo.clientPort();
+                    boolean prim = Objects.equals(cur.ip, tInfo.serverTcpIp()) && cur.port == tInfo.serverTcpPort();
                     System.out.printf("[DIR] principal %s:%d | souPrimario=%s%n", cur.ip, cur.port, prim);
                 }
                 Thread.sleep(SLEEP_INTERVAL_MS);

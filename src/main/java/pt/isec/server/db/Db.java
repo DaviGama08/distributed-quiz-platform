@@ -30,8 +30,10 @@ public final class Db {
 
     /** Executa INSERT/UPDATE/DELETE/DDL usando ligação própria. */
     public int executeUpdate(String sql, Object... args) {
+        //Connection é a class para fazer a ligação à base de dados
+        //PreparedStatement serve para executar comandos sql
         try (Connection c = openConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
-            bind(ps, args);
+            bind(ps, args); //bind está a
             return ps.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);

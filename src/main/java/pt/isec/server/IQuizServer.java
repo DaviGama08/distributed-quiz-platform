@@ -7,21 +7,20 @@ import pt.isec.server.services.question.QuestionService;
 
 import java.net.NetworkInterface;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 
 public interface IQuizServer {
     String id();
-    String ip();
-    int clientPort();
+    String serverTcpIp();
+    int serverTcpPort();
     int dbCopyPort();
 
     String directoryHost();
     int directoryPort();
 
-    String mcGroup();
-    int mcPort();
-    NetworkInterface mcIf();
+    String multicastGroup();
+    int multicastPort();
+    NetworkInterface multicastInterface();
 
     boolean isRunning();
     void setRunning(boolean v) throws Exception;

@@ -20,7 +20,6 @@ public interface IDirectoryManager {
     int serversCount();
     String masterServerUuid();
     int serverTcpPort(String uuid);
-    int serverVersion(String uuid);
     void removeServersFromList(long currTime);
 
     long ttlMillis();

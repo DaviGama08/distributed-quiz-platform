@@ -137,7 +137,7 @@ public class WorkerThread implements Runnable{
      * Trata pedido de heartbeat (manter servidor ativo).
      *
      * Protocolo esperado:
-     * REQUEST:  VER=1|TYPE=HEARTBEAT|ID=<uuid>|DBV=<versão_bd>
+     * REQUEST:  VER=1|TYPE=HEARTBEAT|ID=<uuid>
      * RESPONSE: 200 OK (heartbeat recebido, timestamp atualizado)
      *           400 BAD_REQUEST ID (ID ausente ou vazio)
      *           409 CONFLICT UNKNOWN_ID (ID desconhecido)
@@ -151,17 +151,6 @@ public class WorkerThread implements Runnable{
 
         long now = System.currentTimeMillis();
         si.setLastSeenMillis(now);
-
-        String dbv = kv.get("DBV");
-        if (dbv != null && !dbv.isBlank()) {
-            try {
-                int newVer = Integer.parseInt(dbv.trim());
-                if(newVer != si.getVersion()) {
-                    System.out.printf("[HB] %s: version %d -> %d%n", si.displayName(), si.getVersion(), newVer);
-                    si.setVersion(newVer); // atualiza valor guardado
-                }
-            } catch (NumberFormatException ignore) {}
-        }
 
         return "200 OK";
     }
@@ -216,7 +205,6 @@ public class WorkerThread implements Runnable{
         } else {
             // mesmo ID a voltar: atualiza dados
             si.setLastSeenMillis(System.currentTimeMillis());
-            si.setVersion(version);
         }
 
         ServerInfo principal;
@@ -231,43 +219,6 @@ public class WorkerThread implements Runnable{
     }
 
 
-    // === auxiliar: versão global = max(versões dos servidores, versões vistas na pasta "data")
-    private int calcGlobalDbVersion() {
-        int maxFromServers = 0;
-        for (ServerInfo s : tInfo.servers().values()) {
-            if (s.getVersion() > maxFromServers) maxFromServers = s.getVersion();
-        }
-
-        int maxFromDisk = scanMaxVersionFromDataFolder();
-        int max = Math.max(maxFromServers, maxFromDisk);
-
-        // se nada encontrado, devolve -1 (sinaliza "primeira vez de todas")
-        return (max <= 0) ? -1 : max;
-    }
-
-    // procura ficheiros quiz-<NNN>.db e quiz-<NNN>.backup.db em ./data (ou diretoria configurada)
-    private int scanMaxVersionFromDataFolder() {
-        try {
-            java.nio.file.Path base = java.nio.file.Paths.get("data").toAbsolutePath();
-            if (!java.nio.file.Files.isDirectory(base)) return 0;
-
-            java.util.regex.Pattern p = java.util.regex.Pattern.compile("^quiz-(\\d+)\\.(?:backup\\.)?db$", java.util.regex.Pattern.CASE_INSENSITIVE);
-            int max = 0;
-            try (java.nio.file.DirectoryStream<java.nio.file.Path> ds = java.nio.file.Files.newDirectoryStream(base, "quiz-*")) {
-                for (var f : ds) {
-                    String name = f.getFileName().toString();
-                    var m = p.matcher(name);
-                    if (m.matches()) {
-                        int v = Integer.parseInt(m.group(1));
-                        if (v > max) max = v;
-                    }
-                }
-            }
-            return max;
-        } catch (Exception ignore) {
-            return 0;
-        }
-    }
     /**
      * Envia resposta UDP de volta ao remetente.
      *

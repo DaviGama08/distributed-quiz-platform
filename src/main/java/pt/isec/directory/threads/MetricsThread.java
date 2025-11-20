@@ -19,13 +19,12 @@ public class MetricsThread implements Runnable{
                 String master = tInfo.masterServerUuid();
                 int total = tInfo.serversCount();
                 int port = (master != null) ? tInfo.serverTcpPort(master) : -1;
-                int ver  = (master != null) ? tInfo.serverVersion(master) : -1;
 
                 String masterName = (master == null || port <= 0) ? "NONE" : ("servidor" + port);
 
                 System.out.printf(
-                        "[Diretoria][Metrics] servers=%d, master=%s, tcpPort=%d, version=%d%n",
-                        total, masterName, port, ver
+                        "[Diretoria][Metrics] servers=%d, master=%s, tcpPort=%d",
+                        total, masterName, port
                 );
 
                 Thread.sleep(periodMs);

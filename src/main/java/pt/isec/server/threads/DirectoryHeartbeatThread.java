@@ -1,6 +1,6 @@
 package pt.isec.server.threads;
 import pt.isec.server.IServerManager;
-import pt.isec.server.ServerManagerManager;
+import pt.isec.server.ServerManager;
 import java.io.IOException;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
@@ -61,7 +61,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             if (iAmPrimary) {
                 try {
                     // garantir que estamos a usar o ServerNode concreto
-                    if (tInfo instanceof ServerManagerManager node) {
+                    if (tInfo instanceof ServerManager node) {
                         node.initDatabaseLayerIfNeeded();
                     } else {
                         System.err.println("[DB] tInfo não é ServerNode — não consigo inicializar BD/Auth.");
@@ -87,9 +87,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                 if (now - last >= HEARTBEAT_INTERVAL_MS) {
                     String hb = kv(
                             "VER","1","TYPE","HEARTBEAT",
-                            "ID", tInfo.id(),
-                            "DBV", String.valueOf(tInfo.dbVersion()),
-                            "DBP", String.valueOf(tInfo.dbCopyPort())
+                            "ID", tInfo.id()
                     );
                     send(s, dirAddr, dirPort, hb);
                     last = now;

@@ -64,9 +64,10 @@ public class AuthService implements IAuthService {
                     name, email, hashPw
             );
         });
-        Map<String,Object> row = dbCommands.selectOne("SELECT last_insert_rowid() AS id");
+        Map<String,Object> row = dbCommands.selectOne("SELECT id FROM teacher where email = ?", email);
         newId = row == null ? -1L : ((Number) row.get("id")).longValue();
 
+        System.out.println("[AUTH SERVICE] newID: " + newId);
         String session = newSessionId();
         return new AuthResponseDTO(session, String.valueOf(newId), "TEACHER", name, email);
     }
@@ -107,7 +108,7 @@ public class AuthService implements IAuthService {
                         name, email, hashPw
                 );
             });
-            Map<String,Object> r = dbCommands.selectOne("SELECT last_insert_rowid() AS id");
+            Map<String,Object> r = dbCommands.selectOne("SELECT id FROM student where email = ?", email);
             newId = r == null ? -1L : ((Number) r.get("id")).longValue();
         }
 

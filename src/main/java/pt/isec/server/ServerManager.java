@@ -16,7 +16,7 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class ServerManagerManager implements IServerManager, Runnable, AutoCloseable {
+public class ServerManager implements IServerManager, Runnable, AutoCloseable {
     private volatile boolean dbInitialised = false;
     private DbCommands dbCommands;
     private AuthService authService;
@@ -50,8 +50,8 @@ public class ServerManagerManager implements IServerManager, Runnable, AutoClose
 
     private Thread tClusterHeartbeat, tDirectoryHeartbeat, tClientListener;
 
-    public ServerManagerManager(String dirHost, int dirPort, String mcIfIp,
-                                int clientPort, int dbCopyPort, Path initialDbPath) throws Exception {
+    public ServerManager(String dirHost, int dirPort, String mcIfIp,
+                         int clientPort, int dbCopyPort, Path initialDbPath) throws Exception {
         this.id = UUID.randomUUID().toString();
         this.ip = InetAddress.getLocalHost().getHostAddress();
         this.clientPort = clientPort;

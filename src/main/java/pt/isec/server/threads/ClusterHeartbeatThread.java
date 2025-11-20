@@ -4,7 +4,7 @@ import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;
 import pt.isec.server.IServerManager;
 import pt.isec.server.NetworkTcpConnection;
-import pt.isec.server.ServerManagerManager;
+import pt.isec.server.ServerManager;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -66,7 +66,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                 // PRIMÁRIO: envia heartbeat
                 if (tInfo.isPrimary() && now - lastSent >= HEARTBEAT_INTERVAL_MS) {
                     List<String> sqlUpdates = new ArrayList<>();
-                    if (tInfo instanceof ServerManagerManager qs) {
+                    if (tInfo instanceof ServerManager qs) {
                         sqlUpdates = qs.pollPendingSqlUpdates();
                     }
                     String encodedSql = "";
@@ -120,7 +120,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                                             Instant.now(), missingDb, tInfo.dbVersion(), rxVersion, senderIp, rxDbPort);
 
                                     if (rxDbPort > 0) {
-                                        if (tInfo instanceof ServerManagerManager sn) {
+                                        if (tInfo instanceof ServerManager sn) {
                                             if (!sn.tryLockCopy()) continue;
                                             try {
                                                 requestDbCopyFromPrimary(senderIp, rxDbPort, rxVersion);

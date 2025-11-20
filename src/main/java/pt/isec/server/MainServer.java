@@ -42,7 +42,7 @@ public class MainServer {
         System.out.println("[DB] file: " + dbFile + " (exists=" + Files.exists(dbFile) + ")");
 
         // NÃO usar try-with-resources aqui, para o servidor não fechar logo
-        ServerManagerManager serverManager = new ServerManagerManager(dirHost, dirPort, mcIfIp, clientPort, dbCopyPort, dbFile);
+        ServerManager serverManager = new ServerManager(dirHost, dirPort, mcIfIp, clientPort, dbCopyPort, dbFile);
         serverManager.run();
 
         System.out.println("[LauncherServer] Servidor iniciado. Ctrl+C para terminar.");

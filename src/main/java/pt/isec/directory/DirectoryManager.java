@@ -123,12 +123,6 @@ public class DirectoryManager implements IDirectoryManager {
         return info == null ? -1 : info.getTcpPort();
     }
 
-    @Override
-    public int serverVersion(String uuid) {
-        if (uuid == null) return -1;
-        ServerInfo info = servers.get(uuid);
-        return info == null ? -1 : info.getVersion();
-    }
 
     @Override public long ttlMillis() { return ttlMs; }
 

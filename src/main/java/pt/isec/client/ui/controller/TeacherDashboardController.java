@@ -257,6 +257,7 @@ public class TeacherDashboardController {
                     return;
                 }
                 awaitingCreateQuestion = true;
+                System.out.println("ID: " + teacherId);
                 clientManager.getQuestionService().createQuestion(new CreateQuestionDTO(
                         statement, teacherId, options, correctOption, startAt, endAt));
             } catch (Exception e) {

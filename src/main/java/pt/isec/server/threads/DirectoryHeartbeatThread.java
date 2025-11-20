@@ -153,9 +153,13 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                 return null;    // unreachable
             }
 
-            if (!resp.startsWith("200 PRINCIPAL ")) return null;
+            if (resp.startsWith("SHUTDOWN") || resp.startsWith("404 NO_PRINCIPAL")){
+                tInfo.setRunning(false);
+                System.out.println("ENCERREI");
+                return null;
+            }
 
-            String body = resp.substring("200 PRINCIPAL ".length());
+            String body = resp.substring("200 OK ".length());
             String[] mainAndRest = body.split("\\|", 2);
             String[] ipPort = mainAndRest[0].split(":");
             if (ipPort.length != 2) return null;
@@ -164,19 +168,6 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             int port = Integer.parseInt(ipPort[1]);
             Integer dbv = null;
 
-            if (mainAndRest.length == 2) {
-                for (String tok : mainAndRest[1].split("\\|")) {
-                    String t = tok.trim();
-                    int eq = t.indexOf('=');
-                    if (eq > 0) {
-                        String k = t.substring(0, eq).trim();
-                        String v = t.substring(eq + 1).trim();
-                        if ("DBV".equalsIgnoreCase(k)) {
-                            try { dbv = Integer.parseInt(v); } catch (Exception ignore) {}
-                        }
-                    }
-                }
-            }
             return new Endpoint(ip, port, dbv);
         } catch (SocketTimeoutException e) {
             return null;

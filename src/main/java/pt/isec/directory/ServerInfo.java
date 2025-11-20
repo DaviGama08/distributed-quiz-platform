@@ -2,14 +2,16 @@ package pt.isec.directory;
 
 public class ServerInfo{
     private final int tcpPort;
+    private final int udpPort;
     private final String id;
     private final String ip;
     private long lastSeenMillis;
 
-    public ServerInfo(String id, String ip, int tcpPort, int version) {
+    public ServerInfo(String id, String ip, int tcpPort, int udpPort) {
         this.tcpPort = tcpPort;
         this.id = id;
         this.ip = ip;
+        this.udpPort = udpPort;
     }
 
     /** Nome humano: "servidor<porto>" (ex.: 5002 → "servidor5002"). */
@@ -23,5 +25,6 @@ public class ServerInfo{
     public int getTcpPort() {return tcpPort;}
     public String getId() {return id;}
     public String getIp() {return ip;}
+    public int getUdpPort(){ return udpPort;}
 
 }

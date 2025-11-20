@@ -56,7 +56,7 @@ public class WorkerThread implements Runnable{
                         reply = switch (type) {
                             case "REGISTER" -> {
                                 System.out.println("[Worker] → Servidor pede registo");
-                                yield handleRegister(kv);
+                                yield handleRegister(kv, msg.port());
                             }
                             case "HEARTBEAT" -> {
                                 System.out.println("[Worker] → Servidor envia heartbeat");
@@ -130,6 +130,7 @@ public class WorkerThread implements Runnable{
             tInfo.serversOrdered().remove(id);
         }
 
+
         return "200 OK";
     }
 
@@ -152,7 +153,14 @@ public class WorkerThread implements Runnable{
         long now = System.currentTimeMillis();
         si.setLastSeenMillis(now);
 
-        return "200 OK";
+        ServerInfo principal;
+        synchronized (tInfo.serversLock()) {
+            var iterator = tInfo.serversOrdered().values().iterator();
+            principal = iterator.hasNext() ? iterator.next() : null;
+        }
+
+        if (principal == null) return "404 NO_PRINCIPAL";
+        return "200 OK " + principal.tcpEndpoint();
     }
 
     /**
@@ -164,7 +172,7 @@ public class WorkerThread implements Runnable{
      *           404 NO_PRINCIPAL
      */
     // WorkerThread.java
-    private String handleRegister(Map<String, String> kv) {
+    private String handleRegister(Map<String, String> kv, int udpPort) {
         String id  = kv.get("ID");
         String tcp = kv.get("TCP");
         String dbv = kv.get("DBV"); // opcional
@@ -196,7 +204,7 @@ public class WorkerThread implements Runnable{
 
         ServerInfo si = tInfo.servers().get(id);
         if (si == null) {
-            si = new ServerInfo(id, ip, port, version);
+            si = new ServerInfo(id, ip, port, udpPort);
             si.setLastSeenMillis(System.currentTimeMillis());
             tInfo.servers().put(id, si);
             synchronized (tInfo.serversLock()) {
@@ -215,7 +223,7 @@ public class WorkerThread implements Runnable{
         if (principal == null) return "404 NO_PRINCIPAL";
 
         // devolve também a versão global se quiseres (opcional). Se não usas, podes remover "|DBV=..."
-        return "200 PRINCIPAL " + principal.tcpEndpoint();
+        return "200 OK " + principal.tcpEndpoint();
     }
 
 

@@ -5,8 +5,8 @@ import pt.isec.common.dto.auth.AuthResponseDTO;
 import pt.isec.common.dto.question.CreateQuestionResponseDTO;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;
-import pt.isec.server.model.question.Answer;
-import pt.isec.server.model.question.Question;
+import pt.isec.common.model.question.Answer;
+import pt.isec.common.model.question.Question;
 
 import java.io.Serializable;
 import java.util.ArrayList;

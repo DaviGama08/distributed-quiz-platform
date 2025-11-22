@@ -8,7 +8,7 @@ import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;
 import pt.isec.server.IServerManager;
 import pt.isec.server.NetworkTcpConnection;
-import pt.isec.server.model.question.Question;
+import pt.isec.common.model.question.Question;
 
 import java.io.IOException;
 import java.time.Duration;

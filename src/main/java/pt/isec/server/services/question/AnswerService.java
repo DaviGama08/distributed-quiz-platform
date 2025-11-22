@@ -4,8 +4,8 @@ import pt.isec.common.dto.answer.SubmitAnswerDTO;
 import pt.isec.common.dto.answer.ViewAnswersDTO;
 import pt.isec.server.IServerManager;
 import pt.isec.server.db.DbCommands;
-import pt.isec.server.model.question.Answer;
-import pt.isec.server.model.question.OptionLetter;
+import pt.isec.common.model.question.Answer;
+import pt.isec.common.model.question.OptionLetter;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;

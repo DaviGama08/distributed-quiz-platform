@@ -3,9 +3,9 @@ package pt.isec.server.services.question;
 import pt.isec.common.dto.question.*;
 import pt.isec.server.IServerManager;
 import pt.isec.server.db.DbCommands;
-import pt.isec.server.model.question.Option;
-import pt.isec.server.model.question.OptionLetter;
-import pt.isec.server.model.question.Question;
+import pt.isec.common.model.question.Option;
+import pt.isec.common.model.question.OptionLetter;
+import pt.isec.common.model.question.Question;
 
 import java.time.LocalDateTime;
 import java.util.*;

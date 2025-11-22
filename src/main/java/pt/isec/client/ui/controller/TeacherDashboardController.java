@@ -19,10 +19,10 @@ import pt.isec.common.dto.question.CreateQuestionDTO;
 import pt.isec.common.dto.question.CreateQuestionResponseDTO;
 import pt.isec.common.dto.question.DeleteQuestionDTO;
 import pt.isec.common.dto.question.ListQuestionsDTO;
-import pt.isec.server.model.question.Answer;
-import pt.isec.server.model.question.Option;
-import pt.isec.server.model.question.OptionLetter;
-import pt.isec.server.model.question.Question;
+import pt.isec.common.model.question.Answer;
+import pt.isec.common.model.question.Option;
+import pt.isec.common.model.question.OptionLetter;
+import pt.isec.common.model.question.Question;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;

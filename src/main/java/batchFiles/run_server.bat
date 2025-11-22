@@ -4,8 +4,8 @@ javac -d ..\bin\server.pt.isec ^
   ..\pt\isec\server\db\*.java ^
   ..\pt\isec\server\services\auth\*.java ^
   ..\pt\isec\server\services\question\*.java ^
-  ..\pt\isec\server\model\user\*.java ^
-  ..\pt\isec\server\model\question\*.java ^
+  ..\pt\isec\common\model\user\*.java ^
+  ..\pt\isec\common\model\question\*.java ^
   ..\pt\isec\common\messages\*.java ^
   ..\pt\isec\common\dto\auth\*.java ^
   ..\pt\isec\common\dto\question\*.java ^

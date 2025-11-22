@@ -34,7 +34,10 @@ public class ClientApplication extends Application {
         this.authController = new AuthenticationController(primaryStage, clientManager, this);
 
         stage.getIcons().clear();
-        stage.getIcons().add(new Image(Objects.requireNonNull(getClass().getResourceAsStream("/imgs/app-icon.png"))));
+        var iconStream = getClass().getResourceAsStream("/imgs/app-icon.png");
+        if (iconStream != null) {
+            stage.getIcons().add(new Image(iconStream));
+        }
 
         primaryStage.setTitle("Sistema de Gestão de Perguntas");
         showAuthentication();

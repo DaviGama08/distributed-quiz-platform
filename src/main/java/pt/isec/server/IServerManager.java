@@ -43,5 +43,9 @@ public interface IServerManager {
     void recordSqlUpdate(String sql);
     List<String> pollPendingSqlUpdates();
 
+    boolean isUserLogged(long userId);
+    void registerLogin(long userId, String sessionId);
+    void unregisterLogin(long userId);
+
     AuthService getAuthService();
 }

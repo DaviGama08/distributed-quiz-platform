@@ -26,6 +26,9 @@ public class ClientHandlerThread implements Runnable {
     private final IServerManager threadInfo;
     private final NetworkTcpConnection connection;
 
+    private Long loggerUserId = null;
+    private String sessionId  = null;
+
     public ClientHandlerThread(IServerManager threadInfo, NetworkTcpConnection connection) {
         this.threadInfo = threadInfo;
         this.connection = connection;
@@ -54,13 +57,12 @@ public class ClientHandlerThread implements Runnable {
             }
         } catch (Exception e) {
             System.err.println("Client connection closed with exception: " + e.getMessage());
-            e.printStackTrace(); // <-- Adicione isto para ver a stack trace completa
+            e.printStackTrace();
         }finally{
-            try {
-                connection.close();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
+            if(loggerUserId != null){
+                threadInfo.unregisterLogin(loggerUserId);
             }
+            try { connection.close(); } catch (IOException ignored) {}
         }
     }
 
@@ -95,7 +97,18 @@ public class ClientHandlerThread implements Runnable {
                 try {
                     LoginRequestDTO dto = tcpMessage.getDataAs(LoginRequestDTO.class);
                     AuthResponseDTO res = threadInfo.getAuthService().login(dto);
-                    connection.sendMessage(new TcpMessage<>(MessageType.LOGIN_OK, res, AuthResponseDTO.class));
+
+                    long userId = Long.parseLong(res.userId());
+                    if(threadInfo.isUserLogged(userId)){
+                        connection.sendMessage(new TcpMessage<>(MessageType.LOGIN_FAIL,
+                                "Utilizador já autenticado noutra sessão",
+                                String.class));
+                    }else{
+                        threadInfo.registerLogin(userId, res.sessionId());
+                        this.loggerUserId = userId;
+                        this.sessionId    = res.sessionId();
+                        connection.sendMessage(new TcpMessage<>(MessageType.LOGIN_OK, res, AuthResponseDTO.class));
+                    }
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.LOGIN_FAIL, e.getMessage(), String.class));
                 }
@@ -103,6 +116,11 @@ public class ClientHandlerThread implements Runnable {
 
             case LOGOUT -> {
                 // sem gestão real de sessão para já
+                if(loggerUserId != null){
+                    threadInfo.unregisterLogin(loggerUserId);
+                    loggerUserId = null;
+                    sessionId    = null;
+                }
                 connection.sendMessage(new TcpMessage<>(MessageType.ACK, "logout-ok", String.class));
             }
 

@@ -13,23 +13,25 @@ import java.net.*;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class ServerManager implements IServerManager, Runnable, AutoCloseable {
     private volatile boolean dbInitialised = false;
     private DbCommands dbCommands;
+
     private AuthService authService;
+    private QuestionService questionService;
+    private AnswerService answerService;
+
+    private final List<String> pendingSqlUpdates = Collections.synchronizedList(new ArrayList<>());
+    private final Map<Long, String> activeSessions = new ConcurrentHashMap<>();
 
     private final String id;
     private final String ip;
     private final int clientPort;
     private final int dbCopyPort;
-
-    private QuestionService questionService;
-    private AnswerService answerService;
-    private final List<String> pendingSqlUpdates = Collections.synchronizedList(new ArrayList<>());
-
 
     private final String dirHost;
     private final int dirPort;
@@ -45,7 +47,6 @@ public class ServerManager implements IServerManager, Runnable, AutoCloseable {
     private volatile boolean isPrimary = false;
 
     private final AtomicLong dbVersion = new AtomicLong(0);
-
     private final AtomicBoolean copying = new AtomicBoolean(false);
 
     private Thread tClusterHeartbeat, tDirectoryHeartbeat, tClientListener;
@@ -155,6 +156,10 @@ public class ServerManager implements IServerManager, Runnable, AutoCloseable {
             return copy;
         }
     }
+
+    @Override public boolean isUserLogged(long id){return activeSessions.containsKey(id);}
+    @Override public void registerLogin(long id, String sessionId){activeSessions.put(id, sessionId);}
+    @Override public void unregisterLogin(long id){activeSessions.remove(id);}
 
     @Override public String id() { return id; }
     @Override public String serverTcpIp() { return ip; }

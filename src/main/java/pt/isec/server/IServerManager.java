@@ -1,5 +1,4 @@
 package pt.isec.server;
-
 import pt.isec.server.db.DbCommands;
 import pt.isec.server.services.auth.AuthService;
 import pt.isec.server.services.question.AnswerService;

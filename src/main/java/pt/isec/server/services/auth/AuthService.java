@@ -203,8 +203,6 @@ public class AuthService implements IAuthService {
             throw new RuntimeException(e);
         }
     }
-
-    /* ------------------------------------------------------------------ */
     /* --------------------- Métodos auxiliares ------------------------- */
 
     private String newSessionId() {

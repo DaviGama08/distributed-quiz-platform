@@ -20,7 +20,6 @@ public class AuthenticationController {
 
     private static final Color BLUE = Color.web("#3498db");
     private static final Color RED  = Color.web("#A01316");
-    private static final long TIMEOUT_MS = 10000;
 
     private final Stage stage;
     private final ClientManager clientManager;
@@ -55,6 +54,9 @@ public class AuthenticationController {
 
         // Sucesso no registo
         service.addPropertyChangeListener(ClientService.PROP_REGISTER_OK, this::handleRegisterOkResponse);
+
+        // Estados da ligação (diretoria / servidor)
+        service.addPropertyChangeListener(ClientService.PROP_CONNECTION_STATUS, this::handleConnectionStatusChange);
     }
 
     private void handleAuthenticationChange(PropertyChangeEvent evt) {
@@ -118,7 +120,6 @@ public class AuthenticationController {
         service.setUserEmail(data.email());
         service.setAuthenticated(true);
 
-        // TODO: toda a manipulação de UI tem de estar na FX thread
         Platform.runLater(() -> {
             view.setRegisterStatus("✔️ Registo OK! A carregar dashboard...", Color.GREEN, true);
 
@@ -131,6 +132,45 @@ public class AuthenticationController {
             authBusy = false;
             view.setAuthBusy(false);
         });
+    }
+
+    private void handleConnectionStatusChange(PropertyChangeEvent evt) {
+        String status = (String) evt.getNewValue();
+
+        switch (status) {
+            case "DIRECTORY_CONNECTING" -> {
+                // ecrã azul escuro, centrado
+                Platform.runLater(() -> view.showGlobalLoading("A contactar a diretoria..."));
+            }
+            case "SERVER_CONNECTING" -> {
+                Platform.runLater(() -> view.showGlobalLoading("A ligar ao servidor principal..."));
+            }
+            case "CONNECTED" -> {
+                Platform.runLater(() -> {
+                    view.hideGlobalLoading();
+                    if (!authBusy) {
+                        view.setLoginStatus(
+                                "Ligação estabelecida. Introduza as suas credenciais.",
+                                BLUE,
+                                false,
+                                true
+                        );
+                    }
+                });
+            }
+            case "DIRECTORY_ERROR" -> {
+                // mantém o overlay, apenas muda o texto para erro
+                Platform.runLater(() -> view.showGlobalError("Não foi possível contactar a diretoria/servidor. \nA aplicação vai encerrar..."));
+                try {
+                    Thread.sleep(3000); // dá tempo para o utilizador ler a mensagem
+                } catch (InterruptedException ignored) { }
+            }
+            case "SERVER_ERROR" -> {
+                Platform.runLater(() -> view.showGlobalError("Não foi possível ligar ao servidor principal.\nA aplicação vai encerrar..."));
+            }
+            default -> {
+            }
+        }
     }
 
     /** Alterna entre modos de autenticação */
@@ -162,8 +202,7 @@ public class AuthenticationController {
         }
 
         setAuthBusy(true);
-        view.setLoginStatus("A conectar ao servidor...", BLUE, true, false);
-        Platform.runLater(() -> view.setLoginStatus("A autenticar...", BLUE, true, false));
+        view.setLoginStatus("A autenticar...", BLUE, true, false);
 
         clientManager.getAuthService().login(email, password);
     }

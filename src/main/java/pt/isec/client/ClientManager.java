@@ -1,10 +1,10 @@
 package pt.isec.client;
 
+import javafx.application.Platform;
 import pt.isec.client.services.AnswerClientService;
 import pt.isec.client.services.AuthClientService;
 import pt.isec.client.services.QuestionClientService;
 import pt.isec.client.services.ClientService;
-
 /**
  * Classe que orquestra os serviços disponíveis para o cliente.
  */
@@ -21,7 +21,15 @@ public class ClientManager {
         this.answerService = new AnswerClientService(service);
     }
     /** Arranca o serviço de descoberta e conexão TCP */
-    public void start(){ service.run(); }
+    public void start(){
+        if (!service.run()) {
+            System.err.println("[ClientManager] Não foi possível contactar servidor/diretoria. A encerrar aplicação.");
+            stop(); // fecha recursos de rede
+            // sair da app JavaFX
+            Platform.exit();
+        }
+
+    }
     /** Pára o serviço e fecha conexões */
     public void stop(){ service.stop(); }
     public AuthClientService getAuthService() { return authService; }

@@ -28,9 +28,6 @@ public class ClientApplication extends Application {
         this.primaryStage = stage;
         this.clientManager = new ClientManager(DIRECTORY_IP, DIRECTORY_PORT);
 
-        new Thread(() -> clientManager.start()).start();
-
-        // Cria o controlador de autenticação
         this.authController = new AuthenticationController(primaryStage, clientManager, this);
 
         stage.getIcons().clear();
@@ -40,9 +37,13 @@ public class ClientApplication extends Application {
         }
 
         primaryStage.setTitle("Sistema de Gestão de Perguntas");
+
         showAuthentication();
         primaryStage.show();
+
+        new Thread(() -> clientManager.start()).start();
     }
+
 
     /** Mostra o ecrã de autenticação */
     public void showAuthentication() {

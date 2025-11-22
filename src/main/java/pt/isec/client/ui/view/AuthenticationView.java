@@ -8,6 +8,7 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
+import javafx.scene.text.TextAlignment;
 import pt.isec.client.ui.controller.AuthenticationController;
 
 import java.util.Objects;
@@ -47,8 +48,10 @@ public class AuthenticationView {
     private Button registerButton;
     private Label registerStatusLabel;
 
-    // overlay semi‑transparente para bloquear a interface
-    private Pane busyOverlay;
+    // overlay semi-transparente para bloquear a interface
+    private StackPane busyOverlay;
+    private Label busyLabel;
+    private ProgressIndicator busySpinner;
 
     public void createView() {
         BorderPane root = new BorderPane();
@@ -62,7 +65,6 @@ public class AuthenticationView {
         VBox leftInner = new VBox(20);
         leftInner.getStyleClass().add("left-inner");
 
-        // Logo da instituição
         ImageView logoView;
         try {
             Image logo = new Image(Objects.requireNonNull(
@@ -75,12 +77,12 @@ public class AuthenticationView {
             logoView = new ImageView();
         }
 
-        // Título e subtítulo centrados
-        Label welcomeTitle = new Label("Bem‑vindo!");
+        Label welcomeTitle = new Label("Bem-vindo!");
         welcomeTitle.getStyleClass().add("left-title");
 
-        Label welcomeText = new Label("Autentique‑se ou crie uma conta para continuar.");
+        Label welcomeText = new Label("Autentique-se ou crie uma conta para continuar.");
         welcomeText.getStyleClass().add("left-subtitle");
+        welcomeText.setWrapText(true);
 
         toggleModeButton = new Button("CRIAR CONTA");
         toggleModeButton.getStyleClass().add("toggle-mode-button");
@@ -99,7 +101,7 @@ public class AuthenticationView {
 
         rightSubtitleLabel = new Label("Use o seu email e password.");
         rightSubtitleLabel.getStyleClass().add("right-subtitle");
-        rightSubtitleLabel.setWrapText(true); // permite quebra de linha
+        rightSubtitleLabel.setWrapText(true);
 
         VBox header = new VBox(5, rightTitleLabel, rightSubtitleLabel);
         header.setAlignment(Pos.CENTER);
@@ -119,27 +121,59 @@ public class AuthenticationView {
         root.setLeft(leftPane);
         root.setCenter(rightPane);
 
-        // Overlay transparente sem spinner
+        // ====== STACK ROOT + OVERLAY =======
         StackPane stack = new StackPane();
         stack.getChildren().add(root);
 
-        Pane overlay = new Pane();
-        overlay.getStyleClass().add("busy-overlay");
-        overlay.setVisible(false);
-        overlay.setMouseTransparent(false);
-        this.busyOverlay = overlay;
+        // === OVERLAY DE LOADING ===
+        busyOverlay = new StackPane();
+        busyOverlay.setVisible(false);
+        busyOverlay.setPickOnBounds(true);
+        busyOverlay.setMouseTransparent(false);
+        busyOverlay.setStyle("-fx-background-color: rgba(0,0,0,0.55);");
 
-        stack.getChildren().add(overlay);
+        VBox loadingBox = new VBox(12);
+        loadingBox.setAlignment(Pos.CENTER);
+        loadingBox.setStyle(
+                "-fx-background-color: #1b2a3a;" +
+                        "-fx-padding: 32;" +
+                        "-fx-background-radius: 20;"
+        );
+
+
+        busySpinner = new ProgressIndicator();
+        busySpinner.setMaxSize(60, 60);
+
+        busyLabel = new Label("Aguarde...");
+        busyLabel.getStyleClass().add("status-label");
+
+        busyLabel.setWrapText(true);
+        busyLabel.setMaxWidth(420);
+        busyLabel.setMinWidth(350);
+        busyLabel.setPrefWidth(380);
+
+        busyLabel.setAlignment(Pos.CENTER);
+
+        busyLabel.setTextFill(Color.web("#e0e6f0"));
+
+        loadingBox.getChildren().addAll(busySpinner, busyLabel);
+
+        // garantir que a caixa fica MESMO centrada
+        busyOverlay.getChildren().add(loadingBox);
+        StackPane.setAlignment(loadingBox, Pos.CENTER);
+
+        busyOverlay.prefWidthProperty().bind(stack.widthProperty());
+        busyOverlay.prefHeightProperty().bind(stack.heightProperty());
+
+        stack.getChildren().add(busyOverlay);
 
         scene = new Scene(stack, 900, 600);
-        // Carrega CSS
+
         try {
             var cssUrl = getClass().getResource("/styles/authentication.css");
-            if (cssUrl != null) {
+            if (cssUrl != null)
                 scene.getStylesheets().add(cssUrl.toExternalForm());
-            }
-        } catch (Exception ignored) {
-        }
+        } catch (Exception ignored) {}
 
         showLoginMode();
     }
@@ -182,6 +216,37 @@ public class AuthenticationView {
                 loginStatusLabel
         );
         return form;
+    }
+
+    /** Mostra overlay em modo "normal" (info) */
+    public void showGlobalLoading(String message) {
+        if (busyOverlay == null)
+            return;
+
+        busySpinner.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
+        busyLabel.setText(message != null ? message : "Aguarde...");
+        busyLabel.setTextFill(Color.web("#e0e6f0")); // texto claro
+        busyOverlay.setVisible(true);
+        busyOverlay.toFront();
+    }
+
+    /** Mostra overlay em modo erro (texto a vermelho) */
+    public void showGlobalError(String message) {
+        if (busyOverlay == null)
+            return;
+
+        busySpinner.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
+        busyLabel.setText(message != null ? message : "Ocorreu um erro.");
+        busyLabel.setTextFill(Color.web("#e74c3c")); // vermelho
+        busyLabel.setTextAlignment(TextAlignment.CENTER);
+        busyOverlay.setVisible(true);
+        busyOverlay.toFront();
+    }
+
+    public void hideGlobalLoading() {
+        if (busyOverlay != null) {
+            busyOverlay.setVisible(false);
+        }
     }
 
     /** Cria o formulário de registo */
@@ -284,9 +349,11 @@ public class AuthenticationView {
     public String getRegisterEmail() { return registerEmailField.getText().trim(); }
     public String getRegisterPassword() { return registerPasswordField.getText(); }
     public String getRegisterExtra() { return registerExtraField.getText().trim(); }
+
     public String getSelectedRegisterType() {
         return rbStudent.isSelected() ? "STUDENT" : "TEACHER";
     }
+
     public void setRegisterExtraLabel(String text) {
         registerExtraLabel.setText(text);
         if ("Número de Estudante".equalsIgnoreCase(text)) {
@@ -333,7 +400,10 @@ public class AuthenticationView {
     }
 
     public void showBusy(boolean busy) {
-        if (busyOverlay != null) busyOverlay.setVisible(busy);
+        if (busy)
+            showGlobalLoading("Aguarde...");
+        else
+            hideGlobalLoading();
     }
 
     public void clearLoginFields() {
@@ -355,6 +425,7 @@ public class AuthenticationView {
 
     public void registerHandlers(AuthenticationController controller) {
         toggleModeButton.setOnAction(e -> controller.onToggleMode());
+
         loginPasswordField.setOnAction(e -> {
             try {
                 controller.onLogin();

@@ -1,5 +1,6 @@
 package pt.isec.client.services;
 
+import javafx.application.Platform;
 import pt.isec.client.ClientManager;
 import pt.isec.client.threads.ClientListenerThread;
 import pt.isec.client.threads.RequestSenderThread;
@@ -136,27 +137,34 @@ public class ClientService implements IClientService {
 
     /* ==================== Ciclo de Vida ==================== */
 
-    public void run(){
-        pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "CONNECTING");
-
+    public boolean run(){
+        pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "DIRECTORY_CONNECTING");
         boolean discovered = false;
         for (int i = 0; i < 3 && !discovered; i++)
             discovered = discoverServer();
 
         if (!discovered){
-            pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "DISCONNECTED");
-            return;
+            // erro de diretoria
+            pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "DIRECTORY_ERROR");
+            return false;
         }
 
+        pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "SERVER_CONNECTING");
         if (!connectToServer()){
-            pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "DISCONNECTED");
-            return;
+            pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "SERVER_ERROR");
+            try {
+                Thread.sleep(3000);
+            } catch (InterruptedException ignored) { }
+            return false;
         }
 
         pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "CONNECTED");
+
         running = true;
         startThreads();
+        return true;
     }
+
 
     public void stop(){
         running = false;

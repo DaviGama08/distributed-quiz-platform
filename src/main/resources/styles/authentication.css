@@ -41,6 +41,7 @@
     -fx-font-size: 16px;
     -fx-letter-spacing: 0.5px;
     -fx-alignment: center;
+    -fx-text-alignment: center;
     -fx-wrap-text: true;
 }
 

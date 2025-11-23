@@ -87,6 +87,8 @@ public class StudentDashboardController implements IDisposableProp {
             awaitingJoinQuestion = false;
             Question q = (Question) evt.getNewValue();
             Platform.runLater(() -> {
+                // esconder loading visual no view
+                try { view.hideLoading(); } catch (Exception ignored) {}
                 if (q == null) {
                     showErrorAlert("Código inválido ou pergunta não existente.");
                 } else {
@@ -158,6 +160,9 @@ public class StudentDashboardController implements IDisposableProp {
         service.removePropertyChangeListener(ClientService.PROP_SUBMIT_ANSWER_OK, submitAnswerOkListener);
         service.removePropertyChangeListener(ClientService.PROP_SUBMIT_ANSWER_FAIL, submitAnswerFailListener);
         service.removePropertyChangeListener(ClientService.PROP_LIST_ANSWERED_RESPONSE, listAnsweredListener);
+
+        // garantir que o indicador de loading do view fica escondido (caso o controller seja descartado enquanto aguardava)
+        try { view.hideLoading(); } catch (Exception ignored) {}
     }
 
 
@@ -236,9 +241,12 @@ public class StudentDashboardController implements IDisposableProp {
                     }
                     awaitingJoinQuestion = true;
                     try {
+                        // mostra loading na view (não-modal)
+                        view.showLoading("A carregar pergunta...");
                         clientManager.getQuestionService()
                                 .joinQuestion(new JoinQuestionDTO(code, studentId));
                     } catch (Exception e) {
+                        try { view.hideLoading(); } catch (Exception ignored) {}
                         showErrorAlert("Erro ao procurar pergunta: " + e.getMessage());
                         awaitingJoinQuestion = false;
                     }

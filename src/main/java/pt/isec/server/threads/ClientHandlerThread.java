@@ -60,10 +60,11 @@ public class ClientHandlerThread implements Runnable {
             e.printStackTrace();
         }finally{
             if(loggerUserId != null){
+                try { threadInfo.unregisterClientConnection(loggerUserId); } catch (Exception ignored) {}
                 threadInfo.unregisterLogin(loggerUserId);
-            }
-            try { connection.close(); } catch (IOException ignored) {}
-        }
+             }
+             try { connection.close(); } catch (IOException ignored) {}
+         }
     }
 
     private void processMessage(TcpMessage<?> tcpMessage) throws Exception {
@@ -107,6 +108,8 @@ public class ClientHandlerThread implements Runnable {
                         threadInfo.registerLogin(userId, res.sessionId());
                         this.loggerUserId = userId;
                         this.sessionId    = res.sessionId();
+                        // regista também a conexão activa para permitir notificações do servidor a este cliente
+                        try { threadInfo.registerClientConnection(userId, connection); } catch (Exception ignored) {}
                         connection.sendMessage(new TcpMessage<>(MessageType.LOGIN_OK, res, AuthResponseDTO.class));
                     }
                 } catch (Exception e) {
@@ -117,6 +120,7 @@ public class ClientHandlerThread implements Runnable {
             case LOGOUT -> {
                 // sem gestão real de sessão para já
                 if(loggerUserId != null){
+                    try { threadInfo.unregisterClientConnection(loggerUserId); } catch (Exception ignored) {}
                     threadInfo.unregisterLogin(loggerUserId);
                     loggerUserId = null;
                     sessionId    = null;
@@ -204,7 +208,7 @@ public class ClientHandlerThread implements Runnable {
                     boolean ok = threadInfo.getAnswerService().submitAnswer(dto);
                     connection.sendMessage(new TcpMessage<>(
                             ok ? MessageType.SUBMIT_OK : MessageType.SUBMIT_FAIL,
-                            ok ? "answer-ok" : "answer-fail",
+                            ok ? "Respondido com sucesso!" : "Submissão da resposta sem sucesso!",
                             String.class
                     ));
                 } catch (Exception e) {

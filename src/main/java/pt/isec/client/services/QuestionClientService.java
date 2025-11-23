@@ -28,8 +28,22 @@ public class QuestionClientService {
         }
     }
 
-    /** Envia um pedido para editar uma pergunta. */
+    /** Backwards-compatible overload: accept UpdateQuestionDTO and convert to EditQuestionDTO. */
+    public void updateQuestion(UpdateQuestionDTO dto) {
+        if (dto == null) return;
+        EditQuestionDTO edit = new EditQuestionDTO(
+                dto.questionId(), dto.teacherId(), dto.statement(), dto.options(), dto.correctOption(), dto.startAt(), dto.endAt()
+        );
+        updateQuestion(edit);
+    }
+
+    /** Convenience method named editQuestion to match server semantics. */
     public void editQuestion(EditQuestionDTO dto) {
+        updateQuestion(dto);
+    }
+
+    /** Envia um pedido para editar uma pergunta. */
+    public void updateQuestion(EditQuestionDTO dto) {
         try {
             service.getRequestQueue().put(new TcpMessage<>(MessageType.EDIT_QUESTION, dto));
         } catch (InterruptedException e) {

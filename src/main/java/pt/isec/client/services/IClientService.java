@@ -54,10 +54,15 @@ public interface IClientService {
 
     // Eventos para perguntas e respostas
     void setPropCreateQuestionResponse(CreateQuestionResponseDTO dto);
+    void setPropEditQuestionResponse(String message);
     void setPropListQuestionsResponse(List<Question> questions);
     void setPropJoinQuestionResponse(Question question);
     void setPropSubmitAnswerOk(String message);
     void setPropSubmitAnswerFail(String message);
     void setPropViewAnswersResponse(List<Answer> answers);
     void setPropListAnsweredResponse(List<Answer> answers);
+    // Notificação ao docente de que uma resposta foi submetida (payload: questionId Integer)
+    void setPropAnswerSubmitted(Integer questionId);
+    // Resposta à eliminação de pergunta (ack/nack) - payload: String message
+    void setPropDeleteQuestionResponse(String message);
 }

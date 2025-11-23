@@ -51,6 +51,8 @@ public class ServerManager implements IServerManager, Runnable, AutoCloseable {
 
     private Thread tClusterHeartbeat, tDirectoryHeartbeat, tClientListener;
 
+    private final Map<Long, NetworkTcpConnection> activeClientConnections = new ConcurrentHashMap<>();
+
     public ServerManager(String dirHost, int dirPort, String mcIfIp,
                          int clientPort, int dbCopyPort, Path initialDbPath) throws Exception {
         this.id = UUID.randomUUID().toString();
@@ -140,14 +142,23 @@ public class ServerManager implements IServerManager, Runnable, AutoCloseable {
 
     // IQUIZSERVER INTERFACE
     @Override
-    public QuestionService getQuestionService() { initDatabaseLayerIfNeeded(); return questionService; }
+    public QuestionService getQuestionService() {
+        initDatabaseLayerIfNeeded();
+        return questionService;
+    }
+
     @Override
-    public AnswerService getAnswerService() { initDatabaseLayerIfNeeded(); return answerService; }
+    public AnswerService getAnswerService() {
+        initDatabaseLayerIfNeeded();
+        return answerService;
+    }
+
     @Override
     public void recordSqlUpdate(String sql) {
         if (sql != null && !sql.isBlank())
             pendingSqlUpdates.add(sql);
     }
+
     @Override
     public List<String> pollPendingSqlUpdates() {
         synchronized (pendingSqlUpdates) {
@@ -157,23 +168,68 @@ public class ServerManager implements IServerManager, Runnable, AutoCloseable {
         }
     }
 
-    @Override public boolean isUserLogged(long id){return activeSessions.containsKey(id);}
-    @Override public void registerLogin(long id, String sessionId){activeSessions.put(id, sessionId);}
-    @Override public void unregisterLogin(long id){activeSessions.remove(id);}
+    @Override
+    public boolean isUserLogged(long id) {
+        return activeSessions.containsKey(id);
+    }
 
-    @Override public String id() { return id; }
-    @Override public String serverTcpIp() { return ip; }
-    @Override public int serverTcpPort() { return clientPort; }
-    @Override public int dbCopyPort() { return dbCopyPort; }
+    @Override
+    public void registerLogin(long id, String sessionId) {
+        activeSessions.put(id, sessionId);
+    }
 
-    @Override public String directoryHost() { return dirHost; }
-    @Override public int directoryPort() { return dirPort; }
+    @Override
+    public void unregisterLogin(long id) {
+        activeSessions.remove(id);
+    }
 
-    @Override public String multicastGroup() { return multicastGroup; }
-    @Override public int multicastPort() { return multicastPort; }
-    @Override public NetworkInterface multicastInterface() { return multicastInterface; }
+    @Override
+    public String id() {
+        return id;
+    }
 
-    @Override public void setRunning(boolean v) throws Exception {
+    @Override
+    public String serverTcpIp() {
+        return ip;
+    }
+
+    @Override
+    public int serverTcpPort() {
+        return clientPort;
+    }
+
+    @Override
+    public int dbCopyPort() {
+        return dbCopyPort;
+    }
+
+    @Override
+    public String directoryHost() {
+        return dirHost;
+    }
+
+    @Override
+    public int directoryPort() {
+        return dirPort;
+    }
+
+    @Override
+    public String multicastGroup() {
+        return multicastGroup;
+    }
+
+    @Override
+    public int multicastPort() {
+        return multicastPort;
+    }
+
+    @Override
+    public NetworkInterface multicastInterface() {
+        return multicastInterface;
+    }
+
+    @Override
+    public void setRunning(boolean v) throws Exception {
         running = v;
         tClientListener.join();
         System.out.println("[QuizServer] tClientListener encerrada");
@@ -182,18 +238,73 @@ public class ServerManager implements IServerManager, Runnable, AutoCloseable {
         System.out.println("[QuizServer] tDirectoryHeartbeat encerrada");
         close();
     }
-    @Override public boolean isRunning() { return running; }
 
-    @Override public AuthService getAuthService() {initDatabaseLayerIfNeeded(); return authService;}
-    @Override public long dbVersion() { return dbVersion.get(); }
-    @Override public Path dbPath() { return dbPath; }
-    @Override public DbCommands getDb() {initDatabaseLayerIfNeeded(); return dbCommands;}
+    @Override
+    public boolean isRunning() {
+        return running;
+    }
 
-    @Override public boolean tryLockCopy() { return copying.compareAndSet(false, true); }
-    @Override public void unlockCopy() { copying.set(false); }
+    @Override
+    public AuthService getAuthService() {
+        initDatabaseLayerIfNeeded();
+        return authService;
+    }
 
-    @Override public boolean isPrimary() { return isPrimary; }
-    @Override public void setPrimary(String ip, int port) {
+    @Override
+    public long dbVersion() {
+        return dbVersion.get();
+    }
+
+    @Override
+    public Path dbPath() {
+        return dbPath;
+    }
+
+    @Override
+    public DbCommands getDb() {
+        initDatabaseLayerIfNeeded();
+        return dbCommands;
+    }
+
+    @Override
+    public void registerClientConnection(long userId, NetworkTcpConnection conn) {
+        if (conn == null) return;
+        activeClientConnections.put(userId, conn);
+    }
+
+    @Override
+    public void unregisterClientConnection(long userId) {
+        activeClientConnections.remove(userId);
+    }
+
+    @Override
+    public void sendToUser(long userId, pt.isec.common.messages.TcpMessage<?> msg) {
+        NetworkTcpConnection c = activeClientConnections.get(userId);
+        if (c == null) return;
+        try {
+            c.sendMessage(msg);
+        } catch (Exception e) {
+            System.err.println("[ServerManager] Failed to send message to user " + userId + ": " + e.getMessage());
+        }
+    }
+
+    @Override
+    public boolean tryLockCopy() {
+        return copying.compareAndSet(false, true);
+    }
+
+    @Override
+    public void unlockCopy() {
+        copying.set(false);
+    }
+
+    @Override
+    public boolean isPrimary() {
+        return isPrimary;
+    }
+
+    @Override
+    public void setPrimary(String ip, int port) {
         boolean newIsPrimary = this.ip.equals(ip) && this.clientPort == port;
         if (this.isPrimary != newIsPrimary) {
             this.isPrimary = newIsPrimary;
@@ -203,7 +314,8 @@ public class ServerManager implements IServerManager, Runnable, AutoCloseable {
         }
     }
 
-    @Override public void setDbVersion(long v) {
+    @Override
+    public void setDbVersion(long v) {
         if (v < 0) v = 0;
         long old = dbVersion.getAndSet(v);
         if (old != v) refreshDbPath();
@@ -218,7 +330,10 @@ public class ServerManager implements IServerManager, Runnable, AutoCloseable {
     }
 
     // RUNNABLE INTERFACE
-    @Override public void run() { start(); }
+    @Override
+    public void run() {
+        start();
+    }
 
     private void start() {
         tDirectoryHeartbeat = new Thread(new DirectoryHeartbeatThread(this), "directory-heartbeat");

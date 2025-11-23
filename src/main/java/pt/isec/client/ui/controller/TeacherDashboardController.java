@@ -2,25 +2,24 @@ package pt.isec.client.ui.controller;
 
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
-import javafx.fxml.Initializable;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
+import javafx.scene.input.MouseButton;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import javafx.stage.Modality;
+import javafx.stage.Window;
 import pt.isec.client.ClientApplication;
 import pt.isec.client.ClientManager;
 import pt.isec.client.services.ClientService;
 import pt.isec.client.ui.view.TeacherDashboardView;
 import pt.isec.common.dto.answer.ViewAnswersDTO;
-import pt.isec.common.dto.question.CreateQuestionDTO;
-import pt.isec.common.dto.question.CreateQuestionResponseDTO;
-import pt.isec.common.dto.question.DeleteQuestionDTO;
-import pt.isec.common.dto.question.ListQuestionsDTO;
+import pt.isec.common.dto.question.*;
 import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.Option;
 import pt.isec.common.model.question.OptionLetter;
@@ -28,7 +27,6 @@ import pt.isec.common.model.question.Question;
 
 import java.beans.PropertyChangeListener;
 import java.io.*;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.LocalDate;
@@ -43,7 +41,7 @@ import java.util.*;
  * Todos os pedidos ao servidor são enfileirados; as respostas são tratadas
  * por eventos (property changes) de ClientService.
  *
- * Esta classe implementa IDisposableProps para garantir que os listeners
+ * Esta classe implementa IDisposableProp para garantir que os listeners
  * são removidos em dispose() e evitar memory‑leaks.
  */
 public class TeacherDashboardController implements IDisposableProp {
@@ -60,9 +58,15 @@ public class TeacherDashboardController implements IDisposableProp {
     private final PropertyChangeListener createQuestionListener;
     private final PropertyChangeListener listQuestionsListener;
     private final PropertyChangeListener viewAnswersListener;
+    private final PropertyChangeListener answerSubmittedListener;
+    private final PropertyChangeListener joinQuestionListener;
+    private final PropertyChangeListener updateQuestionListener;
+    private volatile boolean awaitingJoinQuestion = false;
+    private volatile boolean awaitingUpdateQuestion = false;
 
     // Guarda a última lista de perguntas (actualizada ao receber LIST_QUESTIONS_RESPONSE)
     private final List<Question> lastQuestions = new ArrayList<>();
+    //Map com o numero de respostas por perguntas registadas
     private final Map<Integer, Integer> answersCountByQuestion = new HashMap<>();
 
     // Tabela actualmente aberta no diálogo de listagem (pode ser null)
@@ -78,9 +82,24 @@ public class TeacherDashboardController implements IDisposableProp {
 
     // Guarda a pergunta seleccionada para visualização de respostas
     private volatile Question pendingViewQuestion = null;
+    private enum PendingAction { NONE, EDIT, DELETE }
+    private volatile PendingAction pendingAction = PendingAction.NONE;
+    private volatile Question pendingActionQuestion = null;
+
+    // Referência ao diálogo de detalhes atualmente aberto (se houver).
+    // Usada para fechar automaticamente após uma edição bem-sucedida.
+    private volatile Dialog<?> currentDetailsDialog = null;
 
     // Nome que aparece no header (perfil do docente)
     private String teacherDisplayName = "Docente";
+
+    // indicador na janela de listagem
+    private volatile HBox listLoadingBox = null;
+    // indicador na janela de edição
+    private volatile HBox dialogLoadingBox = null;
+
+    //flag para indicar carregamento em massa de contagens de respostas
+    private volatile boolean bulkLoadingAnswers = false;
 
     public TeacherDashboardController(Stage stage, ClientManager clientManager,
                                       ClientApplication application, String userName, String userEmail) {
@@ -130,6 +149,8 @@ public class TeacherDashboardController implements IDisposableProp {
                 refreshQuestionsTableView();
                 // actualiza métricas do dashboard SEM depender do filtro
                 updateDashboardStats();
+
+                fetchAnswerCountsSequentially();
             });
         };
 
@@ -143,8 +164,54 @@ public class TeacherDashboardController implements IDisposableProp {
             Platform.runLater(() -> {
                 if (q != null) {
                     // guarda nº respostas desta pergunta
-                    answersCountByQuestion.put(q.getId(), answers == null ? 0 : answers.size());
+                    int count = answers == null ? 0 : answers.size();
+                    answersCountByQuestion.put(q.getId(), count);
                     updateDashboardStats();
+
+                    // Se estamos a fazer bulk load, não abrir diálogos nem processar ações pendentes
+                    if (bulkLoadingAnswers) {
+                        return;
+                    }
+
+                    // Se havia uma acção pendente (editar/eliminar), processa-a
+                    if (pendingAction != null && pendingAction != PendingAction.NONE && pendingActionQuestion != null
+                            && pendingActionQuestion.getId().equals(q.getId())) {
+                        PendingAction action = pendingAction;
+                        // reset antes de processar para evitar loops
+                        pendingAction = PendingAction.NONE;
+                        Question target = pendingActionQuestion;
+                        pendingActionQuestion = null;
+                        try { if (listLoadingBox != null) listLoadingBox.setVisible(false); } catch (Exception ignored) {}
+
+                        if (action == PendingAction.EDIT) {
+                            if (count > 0) {
+                                showErrorAlert("Editar Indisponível", "A pergunta já tem respostas e não pode ser editada.");
+                                return;
+                            }
+                            // sem respostas -> pedir detalhes para editar
+                            Integer teacherId = clientManager.getUserId();
+                            if (teacherId == null) { showErrorAlert("Erro", "Sessão inválida. Faça login novamente."); return; }
+                            awaitingJoinQuestion = true;
+                            try { if (listLoadingBox != null) listLoadingBox.setVisible(true); } catch (Exception ignored) {}
+                            clientManager.getQuestionService().joinQuestion(new JoinQuestionDTO(target.getAccessCode(), teacherId));
+                            return;
+                        } else if (action == PendingAction.DELETE) {
+                            if (count > 0) {
+                                showErrorAlert("Eliminar Indisponível", "A pergunta já tem respostas e não pode ser eliminada.");
+                                return;
+                            }
+                            // sem respostas -> enviar pedido de delete
+                            Integer teacherId = clientManager.getUserId();
+                            if (teacherId == null) { showErrorAlert("Erro", "Sessão inválida. Faça login novamente."); return; }
+                            clientManager.getQuestionService().deleteQuestion(new DeleteQuestionDTO(target.getId(), teacherId));
+                            showSuccessAlert("Pedido de eliminação enviado",
+                                    "A pergunta " + target.getAccessCode() + " será eliminada (caso não tenha respostas).");
+                            refreshQuestions();
+                            return;
+                        }
+                    }
+
+                    // Normal flow: mostrar detalhes das respostas
                     showAnswersDetails(q, answers);
                 } else {
                     showErrorAlert("Erro", "Pergunta não encontrada.");
@@ -152,14 +219,94 @@ public class TeacherDashboardController implements IDisposableProp {
             });
         };
 
+        // Listener para notificações de respostas submetidas por estudantes (payload: questionId Integer)
+        this.answerSubmittedListener = evt -> {
+            Integer qid = null;
+            Object v = evt.getNewValue();
+            if (v instanceof Integer) qid = (Integer) v;
+            else if (v instanceof String) {
+                try { qid = Integer.parseInt((String) v); } catch (Exception ignored) {}
+            }
+            if (qid == null) return;
+            final Integer finalQid = qid;
+            Platform.runLater(() -> {
+                // incrementa contador local conhecido
+                answersCountByQuestion.merge(finalQid, 1, Integer::sum);
+                updateDashboardStats();
+                // se a tabela de listagem estiver aberta, refresca para mostrar o novo contador se aplicável
+                try { refreshQuestionsTableView(); } catch (Exception ignored) {}
+            });
+        };
+
+        this.joinQuestionListener = evt -> {
+            // trata resposta do servidor com QUESTION_DETAILS -> prop JOIN_QUESTION_RESPONSE
+            Question q = (Question) evt.getNewValue();
+            awaitingJoinQuestion = false;
+            Platform.runLater(() -> {
+                // esconder indicador de loading da listagem se existir
+                try { if (listLoadingBox != null) listLoadingBox.setVisible(false); } catch (Exception ignored) {}
+                if (q != null) {
+                    // mostra directamente o diálogo de edição com os dados vindos do servidor
+                    openEditDialogForQuestion(q, null);
+                } else {
+                    showErrorAlert("Erro", "Pergunta não encontrada no servidor.");
+                }
+            });
+        };
+
+        this.updateQuestionListener = evt -> {
+            if (!awaitingUpdateQuestion) return;
+            awaitingUpdateQuestion = false;
+            Object payload = evt.getNewValue();
+            String result = payload instanceof String s ? s : null;
+            Platform.runLater(() -> {
+                // esconder indicators caso estejam visíveis
+                try { if (dialogLoadingBox != null) dialogLoadingBox.setVisible(false); } catch (Exception ignored) {}
+                try { if (listLoadingBox != null) listLoadingBox.setVisible(false); } catch (Exception ignored) {}
+                if ("edit-ok".equalsIgnoreCase(result)) {
+                    showSuccessAlert("Pergunta Atualizada", "A pergunta foi atualizada com sucesso.");
+                    refreshQuestions();
+                    // fecha a janela de detalhes se estiver aberta (feedback visual e limpeza)
+                    if (currentDetailsDialog != null) {
+                        try { currentDetailsDialog.close(); } catch (Exception ignored) {}
+                        currentDetailsDialog = null;
+                    }
+                } else {
+                    String msg = result != null ? result : "Falha ao actualizar a pergunta.";
+                    // mostra erro e tenta reactivar o botão OK do diálogo de edição caso esteja presente
+                    showErrorAlert("Erro ao Actualizar", msg);
+                    if (currentDetailsDialog != null) {
+                        try {
+                            Button ok = (Button) currentDetailsDialog.getDialogPane().lookupButton(ButtonType.OK);
+                            if (ok != null) ok.setDisable(false);
+                        } catch (Exception ignored) {}
+                    }
+                }
+            });
+        };
 
         setupPropertyChangeListeners();
+
+        // Pedir imediatamente a lista de perguntas para popular métricas ao abrir o dashboard
+        // e actualizar os valores do dashboard com o estado actual (mesmo que seja vazio).
+        // `refreshQuestions()` fará um pedido assíncrono ao servidor; quando chegar a resposta,
+        // o listener `listQuestionsListener` atualizará `lastQuestions` e chamará `updateDashboardStats()`.
+        updateDashboardStats();
+        refreshQuestions();
+
     }
+
 
     /** Exibe o dashboard */
     public void show() {
         stage.setScene(view.getScene());
         stage.setMaximized(true);
+        // Garantir que, quando a cena for mostrada, solicitamos atualização das métricas
+        Platform.runLater(() -> {
+            try { updateDashboardStats(); } catch (Exception ignored) {}
+            try { refreshQuestions(); } catch (Exception ignored) {}
+        });
+
     }
 
     /** Regista listeners para eventos do ClientService */
@@ -175,8 +322,37 @@ public class TeacherDashboardController implements IDisposableProp {
         // Lista de perguntas devolvida
         service.addPropertyChangeListener(ClientService.PROP_LIST_QUESTIONS_RESPONSE, listQuestionsListener);
 
+        // Resposta ao pedido de detalhes de pergunta (JOIN/QUESTION_DETAILS)
+        service.addPropertyChangeListener(ClientService.PROP_JOIN_QUESTION_RESPONSE, joinQuestionListener);
+
         // Respostas de uma pergunta (vista do docente) devolvidas
         service.addPropertyChangeListener(ClientService.PROP_VIEW_ANSWERS_RESPONSE, viewAnswersListener);
+
+        // Notificação quando um estudante submete uma resposta — actualiza contadores
+        service.addPropertyChangeListener(ClientService.PROP_ANSWER_SUBMITTED, answerSubmittedListener);
+
+        //Resposta à edição de pergunta
+        service.addPropertyChangeListener(ClientService.PROP_UPDATE_QUESTION_RESPONSE, updateQuestionListener);
+
+        // Se o serviço ainda não estiver ligado quando o controller é criado, garante que
+        // pedimos a lista de perguntas assim que ficar CONNECTED. Regista um listener
+        // temporário que se auto-remove após disparar uma única vez.
+        PropertyChangeListener connectListener = new PropertyChangeListener() {
+            @Override
+            public void propertyChange(java.beans.PropertyChangeEvent evt) {
+                Object val = evt.getNewValue();
+                if (val instanceof String s && "CONNECTED".equalsIgnoreCase(s)) {
+                    // chama refreshQuestions na UI thread
+                    Platform.runLater(() -> {
+                        try { refreshQuestions(); } catch (Exception ignored) {}
+                    });
+                    // remove-se a si próprio
+                    try { clientManager.getService().removePropertyChangeListener(ClientService.PROP_CONNECTION_STATUS, this); } catch (Exception ignored) {}
+                }
+            }
+        };
+        service.addPropertyChangeListener(ClientService.PROP_CONNECTION_STATUS, connectListener);
+
     }
 
     /** Remove listeners do ClientService para evitar memory‑leaks.
@@ -188,13 +364,20 @@ public class TeacherDashboardController implements IDisposableProp {
         try {
             service.removePropertyChangeListener(ClientService.PROP_NOTIFICATION, notificationListener);
             service.removePropertyChangeListener(ClientService.PROP_CREATE_QUESTION_RESPONSE, createQuestionListener);
+            service.removePropertyChangeListener(ClientService.PROP_JOIN_QUESTION_RESPONSE, joinQuestionListener);
+            service.removePropertyChangeListener(ClientService.PROP_ANSWER_SUBMITTED, answerSubmittedListener);
+            service.removePropertyChangeListener(ClientService.PROP_UPDATE_QUESTION_RESPONSE, updateQuestionListener);
             service.removePropertyChangeListener(ClientService.PROP_LIST_QUESTIONS_RESPONSE, listQuestionsListener);
             service.removePropertyChangeListener(ClientService.PROP_VIEW_ANSWERS_RESPONSE, viewAnswersListener);
         } catch (Exception ignored) {
             // garantir que dispose é robusto mesmo que o serviço já tenha sido fechado
         }
+        // garantir que quaisquer indicadores de loading ficam escondidos
+        try { if (listLoadingBox != null) listLoadingBox.setVisible(false); } catch (Exception ignored) {}
+        try { if (dialogLoadingBox != null) dialogLoadingBox.setVisible(false); } catch (Exception ignored) {}
     }
 
+    //Métricas do dashboard
     private void updateDashboardStats() {
         int total = lastQuestions.size();
         int active = (int) lastQuestions.stream()
@@ -226,7 +409,7 @@ public class TeacherDashboardController implements IDisposableProp {
         TextArea statementField = new TextArea();
         statementField.setPrefRowCount(3);
         statementField.setPrefWidth(500);
-        statementField.setPromptText("Digite o enunciado da pergunta...");
+        statementField.setPromptText("Escreva o enunciado da pergunta...");
 
         Label numOptionsLabel = new Label("Número de Opções:");
         numOptionsLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
@@ -268,14 +451,21 @@ public class TeacherDashboardController implements IDisposableProp {
 
         Label periodLabel = new Label("Período de Disponibilidade:");
         periodLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
-        HBox periodBox = new HBox(10);
+        HBox periodBox = new HBox(8);
         DatePicker startDate = new DatePicker();
         startDate.setPromptText("Data início");
-        TextField startTime = new TextField(); startTime.setPromptText("HH:MM"); startTime.setPrefWidth(80);
+        // time picker: hour and minute spinners
+        Spinner<Integer> startHour = new Spinner<>(0, 23, 9);
+        startHour.setPrefWidth(70);
+        Spinner<Integer> startMinute = new Spinner<>(0, 59, 0);
+        startMinute.setPrefWidth(70);
         Label toLabel = new Label(" até ");
         DatePicker endDate = new DatePicker(); endDate.setPromptText("Data fim");
-        TextField endTime = new TextField(); endTime.setPromptText("HH:MM"); endTime.setPrefWidth(80);
-        periodBox.getChildren().addAll(startDate, startTime, toLabel, endDate, endTime);
+        Spinner<Integer> endHour = new Spinner<>(0, 23, 9);
+        endHour.setPrefWidth(70);
+        Spinner<Integer> endMinute = new Spinner<>(0, 59, 0);
+        endMinute.setPrefWidth(70);
+        periodBox.getChildren().addAll(startDate, startHour, new Label(":"), startMinute, toLabel, endDate, endHour, new Label(":"), endMinute);
 
         grid.add(statementLabel, 0, 0);
         grid.add(statementField, 0, 1, 2, 1);
@@ -291,7 +481,24 @@ public class TeacherDashboardController implements IDisposableProp {
         ScrollPane scrollPane = new ScrollPane(grid);
         scrollPane.setFitToWidth(true);
         scrollPane.setPrefHeight(500);
-        dialog.getDialogPane().setContent(scrollPane);
+
+        // (create dialog): as opções serão preenchidas pelo utilizador; não há 'Question' aqui
+
+        // Criar um HBox de loading não-modal que ficará visível apenas enquanto aguardamos a resposta do servidor
+        HBox loadingBox = new HBox(10);
+        loadingBox.setPadding(new Insets(10));
+        loadingBox.setAlignment(Pos.CENTER_LEFT);
+        ProgressIndicator pi = new ProgressIndicator();
+        pi.setPrefSize(20, 20);
+        Label loadingLabel = new Label("Aguarde... a actualizar a pergunta...");
+        loadingBox.getChildren().addAll(pi, loadingLabel);
+        loadingBox.setVisible(false);
+
+        VBox container = new VBox(10);
+        container.getChildren().addAll(scrollPane, loadingBox);
+        dialog.getDialogPane().setContent(container);
+        // Guarda referência para o listener poder manipular
+        this.dialogLoadingBox = loadingBox;
 
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
         Button okButton = (Button) dialog.getDialogPane().lookupButton(ButtonType.OK);
@@ -335,18 +542,16 @@ public class TeacherDashboardController implements IDisposableProp {
             // 3) datas obrigatórias
             LocalDate startD = startDate.getValue();
             LocalDate endD   = endDate.getValue();
-            String startT    = startTime.getText().trim();
-            String endT      = endTime.getText().trim();
-            if (startD == null || endD == null || startT.isEmpty() || endT.isEmpty()) {
-                showErrorAlert("Erro", "Datas e horas de início e fim são obrigatórias.");
+            if (startD == null || endD == null) {
+                showErrorAlert("Erro", "Datas de início e fim são obrigatórias.");
                 ev.consume();
                 return;
             }
 
             try {
-                DateTimeFormatter timeFormat = DateTimeFormatter.ofPattern("HH:mm");
-                LocalTime sTime = LocalTime.parse(startT, timeFormat);
-                LocalTime eTime = LocalTime.parse(endT, timeFormat);
+                // Ler horas a partir dos spinners (time picker)
+                LocalTime sTime = LocalTime.of(startHour.getValue(), startMinute.getValue());
+                LocalTime eTime = LocalTime.of(endHour.getValue(), endMinute.getValue());
                 LocalDateTime startAt = LocalDateTime.of(startD, sTime);
                 LocalDateTime endAt   = LocalDateTime.of(endD, eTime);
 
@@ -379,9 +584,12 @@ public class TeacherDashboardController implements IDisposableProp {
         dialog.showAndWait();
     }
 
+
     /** Handler para listar perguntas, usando filtros (filtro só no cliente). */
     public void onListQuestions() {
         Dialog<Void> dialog = new Dialog<>();
+        // assegurar que o diálogo de listagem pertence à janela principal para modalidade correta
+        try { dialog.initOwner(stage); dialog.initModality(Modality.WINDOW_MODAL); } catch (Exception ignored) {}
         dialog.setTitle("Listar Perguntas");
         dialog.setHeaderText("Suas perguntas criadas");
 
@@ -400,15 +608,110 @@ public class TeacherDashboardController implements IDisposableProp {
 
         TableView<Question> table = new TableView<>();
 
-        // abrir respostas ao fazer duplo clique numa linha
+        // abrir menu de ações (Editar / Eliminar / Cancelar) ao fazer duplo clique numa linha
+        // usamos ContextMenu para que um clique fora do menu feche-o automaticamente
         table.setRowFactory(tv -> {
             TableRow<Question> row = new TableRow<>();
             row.setOnMouseClicked(event -> {
-                if (!row.isEmpty() && event.getClickCount() == 2) {
+                if (!row.isEmpty() && event.getButton() == MouseButton.PRIMARY && event.getClickCount() == 2) {
                     Question selected = row.getItem();
-                    if (selected != null) {
+                    if (selected == null) return;
+
+                    // Se a pergunta estiver expirada, mostramos as respostas diretamente
+                    if ("EXPIRED".equalsIgnoreCase(selected.getState().name())) {
                         openAnswersForQuestion(selected);
+                        return;
                     }
+
+                    // criar menu contextual com as opções pedidas
+                    ContextMenu menu = new ContextMenu();
+                    MenuItem editItem = new MenuItem("Editar Pergunta");
+                    MenuItem deleteItem = new MenuItem("Eliminar Pergunta");
+
+                    // Editar: verifica se é permitido e pede detalhes ao servidor
+                    editItem.setOnAction(ae -> {
+                        Integer known = answersCountByQuestion.get(selected.getId());
+                        if (known != null) {
+                            if (known > 0) {
+                                showErrorAlert("Editar Indisponível", "A pergunta já tem respostas e não pode ser editada.");
+                                return;
+                            }
+                            // sem respostas conhecidas -> pedir detalhes para editar
+                            Integer teacherId = clientManager.getUserId();
+                            if (teacherId == null) { showErrorAlert("Erro", "Sessão inválida. Faça login novamente."); return; }
+                            awaitingJoinQuestion = true;
+                            try {
+                                if (listLoadingBox != null)
+                                    listLoadingBox.setVisible(true);
+                            } catch (Exception ignored) {}
+                            clientManager.getQuestionService().joinQuestion(new JoinQuestionDTO(selected.getAccessCode(), teacherId));
+                            return;
+                        }
+
+                        // Não sabemos o número de respostas -> pedimos as respostas para confirmar
+                        Integer teacherId = clientManager.getUserId();
+                        if (teacherId == null) {
+                            showErrorAlert("Erro", "Sessão inválida. Faça login novamente.");
+                            return;
+                        }
+                        // regista intenção e pede respostas (quando chegar, viewAnswersListener trata)
+                        pendingAction = PendingAction.EDIT;
+                        pendingActionQuestion = selected;
+                        pendingViewQuestion = selected;
+                        awaitingViewAnswers = true;
+                        try {
+                            if (listLoadingBox != null)
+                                listLoadingBox.setVisible(true);
+                        } catch (Exception ignored) {}
+                        clientManager.getAnswerService().viewAnswersForTeacher(new ViewAnswersDTO(selected.getId(), teacherId));
+                     });
+
+                    // Eliminar: confirmação e envio do pedido
+                    deleteItem.setOnAction(ae -> {
+                        // Se já sabemos que existem respostas bloqueamos imediatamente
+                        Integer knownDel = answersCountByQuestion.get(selected.getId());
+                        if (knownDel != null && knownDel > 0) {
+                            showErrorAlert("Eliminar Indisponível", "A pergunta já tem respostas e não pode ser eliminada.");
+                            return;
+                        }
+
+                        // pedir confirmaçao primeiro
+                        Alert confirmAlert = new Alert(Alert.AlertType.CONFIRMATION);
+                        confirmAlert.setTitle("Confirmar Eliminação");
+                        confirmAlert.setHeaderText("Tem certeza que deseja eliminar a pergunta " + selected.getAccessCode() + "?");
+                        confirmAlert.setContentText("Esta ação não pode ser desfeita.");
+                        confirmAlert.initOwner(table.getScene() != null ? table.getScene().getWindow() : stage);
+                        confirmAlert.showAndWait().ifPresent(resp -> {
+                            if (resp == ButtonType.OK) {
+                                Integer teacherId = clientManager.getUserId();
+                                if (teacherId == null) {
+                                    showErrorAlert("Erro", "Sessão inválida. Faça login novamente.");
+                                    return;
+                                }
+
+                                if (knownDel != null && knownDel == 0) {
+                                    // sem respostas, enviar pedido para eliminar
+                                    clientManager.getQuestionService().deleteQuestion(new DeleteQuestionDTO(selected.getId(), teacherId));
+                                    showSuccessAlert("Pedido de eliminação enviado",
+                                            "A pergunta " + selected.getAccessCode() + " será eliminada (caso não tenha respostas).");
+                                    refreshQuestions();
+                                    return;
+                                }
+
+                                // desconhecemos o número de respostas -> pedir as respostas e tratar a eliminação quando chegar
+                                pendingAction = PendingAction.DELETE;
+                                pendingActionQuestion = selected;
+                                pendingViewQuestion = selected;
+                                awaitingViewAnswers = true;
+                                try { if (listLoadingBox != null) listLoadingBox.setVisible(true); } catch (Exception ignored) {}
+                                clientManager.getAnswerService().viewAnswersForTeacher(new ViewAnswersDTO(selected.getId(), teacherId));
+                            }
+                        });
+                    });
+
+                    menu.getItems().addAll(editItem, deleteItem);
+                    // mostra o menu na posição do clique
+                    menu.show(row, event.getScreenX(), event.getScreenY());
                 }
             });
             return row;
@@ -580,11 +883,117 @@ public class TeacherDashboardController implements IDisposableProp {
         });
     }
 
+    // Helper: mostra detalhe da pergunta (sem lista de respostas) — usado para perguntas não expirada
+    private void showQuestionDetails(Question q) {
+        Dialog<Void> dialog = new Dialog<>();
+        // definir owner para que o diálogo de detalhe seja modal em relação ao diálogo de listagem
+        try {
+            if (questionsTable != null && questionsTable.getScene() != null) {
+                dialog.initOwner(questionsTable.getScene().getWindow());
+                dialog.initModality(Modality.WINDOW_MODAL);
+            } else if (stage != null) {
+                dialog.initOwner(stage);
+                dialog.initModality(Modality.WINDOW_MODAL);
+            }
+        } catch (Exception ignored) {}
+        // Guardar referência para permitir fecho por updateQuestionListener
+        this.currentDetailsDialog = dialog;
+
+        dialog.setTitle("Detalhe - " + q.getAccessCode());
+        dialog.setHeaderText("Detalhes da pergunta");
+
+        VBox content = new VBox(12);
+        content.setPadding(new Insets(20));
+        content.setPrefWidth(650);
+
+        VBox infoBox = new VBox(5);
+        infoBox.setStyle("-fx-background-color: #ecf0f1; -fx-padding: 15; -fx-border-radius: 5; -fx-background-radius: 5;");
+        Label questionLabel = new Label("Pergunta: " + q.getStatement());
+        questionLabel.setFont(Font.font("Arial", FontWeight.BOLD, 14));
+        Label correctLabel = new Label("Resposta correta: " + (q.getCorrectOption() != null ? q.getCorrectOption().name() : ""));
+        correctLabel.setFont(Font.font("Arial", 13));
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+        String periodStr = q.getStartAt().format(fmt) + " - " + q.getEndAt().format(fmt);
+        Label periodLabel = new Label("Período: " + periodStr);
+        periodLabel.setFont(Font.font("Arial", 13));
+        infoBox.getChildren().addAll(questionLabel, correctLabel, periodLabel);
+
+        // Estatísticas com base em answersCountByQuestion se disponível
+        int knownAnswers = answersCountByQuestion.getOrDefault(q.getId(), 0);
+        HBox statsBox = new HBox(20);
+        statsBox.setAlignment(Pos.CENTER);
+        statsBox.setPadding(new Insets(10));
+        statsBox.setStyle("-fx-background-color: white; -fx-border-color: #bdc3c7; -fx-border-radius: 5; -fx-background-radius: 5;");
+        Label answersKnown = new Label("Respostas conhecidas: " + knownAnswers);
+        answersKnown.setFont(Font.font("Arial", FontWeight.NORMAL, 13));
+        statsBox.getChildren().add(answersKnown);
+
+        content.getChildren().addAll(infoBox, statsBox);
+
+        dialog.getDialogPane().setContent(content);
+
+        ButtonType editButtonType = new ButtonType("Editar Pergunta", ButtonBar.ButtonData.OTHER);
+        ButtonType deleteButtonType = new ButtonType("Eliminar Pergunta", ButtonBar.ButtonData.LEFT);
+        dialog.getDialogPane().getButtonTypes().addAll(editButtonType, deleteButtonType, ButtonType.CLOSE);
+
+        Button editButton = (Button) dialog.getDialogPane().lookupButton(editButtonType);
+        editButton.setOnAction(ev -> {
+            // Verifica se já existem respostas conhecidas (não permite editar)
+            int cnt = answersCountByQuestion.getOrDefault(q.getId(), 0);
+            if (cnt > 0) {
+                showErrorAlert("Editar Indisponível", "A pergunta já tem respostas e não pode ser editada.");
+                return;
+            }
+            this.openEditDialogForQuestion(q, dialog);
+        });
+
+        Button deleteButton = (Button) dialog.getDialogPane().lookupButton(deleteButtonType);
+        deleteButton.setOnAction(ev -> {
+            Alert confirmAlert = new Alert(Alert.AlertType.CONFIRMATION);
+            confirmAlert.setTitle("Confirmar Eliminação");
+            confirmAlert.setHeaderText("Tem certeza que deseja eliminar a pergunta " + q.getAccessCode() + "?");
+            confirmAlert.setContentText("Esta ação não pode ser desfeita.");
+            confirmAlert.showAndWait().ifPresent(response -> {
+                if (response == ButtonType.OK) {
+                    Integer teacherId = clientManager.getUserId();
+                    if (teacherId == null) {
+                        showErrorAlert("Erro", "Sessão inválida. Faça login novamente.");
+                        return;
+                    }
+                    clientManager.getQuestionService()
+                            .deleteQuestion(new DeleteQuestionDTO(q.getId(), teacherId));
+                    showSuccessAlert("Pedido de eliminação enviado",
+                            "A pergunta " + q.getAccessCode() + " será eliminada (caso não tenha respostas).\n");
+
+                    refreshQuestions();
+                    dialog.close();
+                }
+            });
+        });
+
+        dialog.showAndWait();
+        if (this.currentDetailsDialog == dialog) this.currentDetailsDialog = null;
+    }
+
     /** Mostra as respostas da pergunta (chamado ao receber VIEW_ANSWERS_RESPONSE) */
     private void showAnswersDetails(Question q, List<Answer> answers) {
         String code = q.getAccessCode();
 
         Dialog<Void> dialog = new Dialog<>();
+        // definir owner/modalidade para manter foco correcto quando chamado a partir da lista
+        try {
+            if (questionsTable != null && questionsTable.getScene() != null) {
+                dialog.initOwner(questionsTable.getScene().getWindow());
+                dialog.initModality(Modality.WINDOW_MODAL);
+            } else if (stage != null) {
+                dialog.initOwner(stage);
+                dialog.initModality(Modality.WINDOW_MODAL);
+            }
+        } catch (Exception ignored) {}
+        // Guardar referência para que métodos auxiliares (ex.: export) possam usar
+        // este diálogo como owner e evitar alerts modais sem owner por cima de diálogos.
+        this.currentDetailsDialog = dialog;
+
         dialog.setTitle("Respostas - " + code);
         dialog.setHeaderText("Respostas submetidas pelos estudantes");
 
@@ -729,6 +1138,7 @@ public class TeacherDashboardController implements IDisposableProp {
         });
 
         dialog.showAndWait();
+        if (this.currentDetailsDialog == dialog) this.currentDetailsDialog = null;
     }
     /**
      * Exporta para CSV no formato pedido no enunciado, por ex.:
@@ -743,13 +1153,26 @@ public class TeacherDashboardController implements IDisposableProp {
      * "123456";"Nome";"email@exemplo.com";"a"
      */
     private void exportAnswersToCsv(Question q, List<Answer> answers) {
+        // escolher owner consistente: preferir stage principal
+        Window ownerWindow = (stage != null) ? stage : getCurrentOwnerWindow();
+
         if (q == null) {
-            showErrorAlert("Exportar CSV", "Pergunta inválida.");
+            Alert a = new Alert(Alert.AlertType.ERROR);
+            if (ownerWindow != null) a.initOwner(ownerWindow);
+            a.setTitle("Exportar CSV");
+            a.setHeaderText(null);
+            a.setContentText("Pergunta inválida.");
+            a.showAndWait();
             return;
         }
 
         if (answers == null || answers.isEmpty()) {
-            showErrorAlert("Exportar CSV", "Ainda não existem respostas para esta pergunta.");
+            Alert a = new Alert(Alert.AlertType.ERROR);
+            if (ownerWindow != null) a.initOwner(ownerWindow);
+            a.setTitle("Exportar CSV");
+            a.setHeaderText(null);
+            a.setContentText("Ainda não existem respostas para esta pergunta.");
+            a.showAndWait();
             return;
         }
 
@@ -764,7 +1187,7 @@ public class TeacherDashboardController implements IDisposableProp {
                 : "pergunta";
         fileChooser.setInitialFileName("pergunta_" + baseName + ".csv");
 
-        File file = fileChooser.showSaveDialog(stage);
+        File file = fileChooser.showSaveDialog(ownerWindow);
         if (file == null) {
             // utilizador cancelou
             return;
@@ -773,117 +1196,310 @@ public class TeacherDashboardController implements IDisposableProp {
         DateTimeFormatter dateFmt = DateTimeFormatter.ofPattern("dd-MM-yyyy");
         DateTimeFormatter timeFmt = DateTimeFormatter.ofPattern("HH:mm");
 
-        try (BufferedWriter writer = Files.newBufferedWriter(
-                file.toPath(), StandardCharsets.UTF_8)) {
+        // Escrever com BOM UTF-8 para melhorar compatibilidade com Excel no Windows
+        try (OutputStream fos = Files.newOutputStream(file.toPath())) {
+            // BOM
+            fos.write(new byte[]{(byte)0xEF, (byte)0xBB, (byte)0xBF});
+            try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(fos, StandardCharsets.UTF_8))) {
+                // ===== 1ª linha: cabeçalho da pergunta =====
+                writer.write("\"dia\";\"hora inicial\";\"hora final\";\"enunciado da pergunta\";\"opção certa\"");
+                writer.newLine();
 
-            // ===== 1ª linha: cabeçalho da pergunta =====
-            writer.write("\"dia\";\"hora inicial\";\"hora final\";\"enunciado da pergunta\";\"opção certa\"");
-            writer.newLine();
+                // ===== 2ª linha: dados da pergunta =====
+                String dia = q.getStartAt().toLocalDate().format(dateFmt);
+                String horaInicial = q.getStartAt().toLocalTime().format(timeFmt);
+                String horaFinal = q.getEndAt().toLocalTime().format(timeFmt);
+                String enunciado = escapeCsv(q.getStatement());
+                String opcaoCerta = q.getCorrectOption() != null
+                        ? q.getCorrectOption().name().toLowerCase()
+                        : "";
 
-            // ===== 2ª linha: dados da pergunta =====
-            String dia = q.getStartAt().toLocalDate().format(dateFmt);
-            String horaInicial = q.getStartAt().toLocalTime().format(timeFmt);
-            String horaFinal = q.getEndAt().toLocalTime().format(timeFmt);
-            String enunciado = escapeCsv(q.getStatement());
-            String opcaoCerta = q.getCorrectOption() != null
-                    ? q.getCorrectOption().name().toLowerCase()
-                    : "";
+                writer.write("\"" + dia + "\";\"" + horaInicial + "\";\"" + horaFinal + "\";\""
+                        + enunciado + "\";\"" + opcaoCerta + "\"");
+                writer.newLine();
+                writer.newLine();
 
-            writer.write("\"" + dia + "\";\"" + horaInicial + "\";\"" + horaFinal + "\";\""
-                    + enunciado + "\";\"" + opcaoCerta + "\"");
-            writer.newLine();
-            writer.newLine();
+                // ===== Bloco das opções =====
+                writer.write("\"opção\";\"texto da opção\"");
+                writer.newLine();
 
-            // ===== Bloco das opções =====
-            writer.write("\"opção\";\"texto da opção\"");
-            writer.newLine();
+                if (q.getOptions() != null) {
+                    for (Option opt : q.getOptions()) {
+                        if (opt == null) continue;
+                        String letra = opt.getLetter() != null
+                                ? opt.getLetter().name().toLowerCase()
+                                : "";
+                        String texto = escapeCsv(opt.getText());
+                        writer.write("\"" + letra + "\";\"" + texto + "\"");
+                        writer.newLine();
+                    }
+                }
+                writer.newLine();
 
-            if (q.getOptions() != null) {
-                for (Option opt : q.getOptions()) {
-                    if (opt == null) continue;
-                    String letra = opt.getLetter() != null
-                            ? opt.getLetter().name().toLowerCase()
+                // ===== Bloco das respostas =====
+                writer.write("\"número de estudante\";\"nome\";\"e-mail\";\"resposta\"");
+                writer.newLine();
+
+                for (Answer a : answers) {
+                    if (a == null) continue;
+
+                    String numero = a.getStudentId() == null
+                            ? ""
+                            : a.getStudentId().toString();
+                    String nome = escapeCsv(a.getStudentName());
+                    String email = escapeCsv(a.getStudentEmail());
+                    String resp = a.getSelectedOption() != null
+                            ? a.getSelectedOption().name().toLowerCase()
                             : "";
-                    String texto = escapeCsv(opt.getText());
-                    writer.write("\"" + letra + "\";\"" + texto + "\"");
+
+                    writer.write("\"" + numero + "\";\"" + nome + "\";\"" + email + "\";\"" + resp + "\"");
                     writer.newLine();
                 }
             }
-            writer.newLine();
-
-            // ===== Bloco das respostas =====
-            writer.write("\"número de estudante\";\"nome\";\"e-mail\";\"resposta\"");
-            writer.newLine();
-
-            for (Answer a : answers) {
-                if (a == null) continue;
-
-                String numero = a.getStudentId() == null
-                        ? ""
-                        : a.getStudentId().toString();
-                String nome = escapeCsv(a.getStudentName());
-                String email = escapeCsv(a.getStudentEmail());
-                String resp = a.getSelectedOption() != null
-                        ? a.getSelectedOption().name().toLowerCase()
-                        : "";
-
-                writer.write("\"" + numero + "\";\"" + nome + "\";\"" + email + "\";\"" + resp + "\"");
-                writer.newLine();
-            }
-
         } catch (IOException e) {
-            showErrorAlert("Exportar CSV", "Erro ao guardar o ficheiro: " + e.getMessage());
+            System.out.println("CSV não exportado");
+            Alert a = new Alert(Alert.AlertType.ERROR);
+            if (ownerWindow != null) a.initOwner(ownerWindow);
+            a.setTitle("Exportar CSV");
+            a.setHeaderText(null);
+            a.setContentText("Erro ao guardar o ficheiro!");
+            a.showAndWait();
             return;
         }
-
-        showSuccessAlert("Exportar CSV", "Ficheiro CSV gravado com sucesso.");
+        System.out.println("CSV exportado!");
+        Alert success = new Alert(Alert.AlertType.INFORMATION);
+        if (ownerWindow != null) success.initOwner(ownerWindow);
+        success.setTitle("Exportar CSV");
+        success.setHeaderText(null);
+        success.setContentText("Ficheiro CSV gravado com sucesso");
+        success.showAndWait();
     }
 
-    /** Escapa aspas dentro de campos CSV ( " -> "" ). */
-    private String escapeCsv(String s) {
-        if (s == null) return "";
-        return s.replace("\"", "\"\"");
+    // Procura uma pergunta pelo seu código na lista carregada
+    private Question findQuestionByCode(String accessCode) {
+        if (accessCode == null || accessCode.isBlank()) return null;
+        for (Question q : lastQuestions) {
+            if (accessCode.equalsIgnoreCase(q.getAccessCode())) {
+                return q;
+            }
+        }
+        return null;
     }
 
-    private String cleanCsvText(String s) {
-        if (s == null) return "";
-        return s.replace(";", ",");
-    }
+    private void openEditDialogForQuestion(Question q, Dialog<?> detailsDialog) {
+        Dialog<ButtonType> dialog = new Dialog<>();
+        // definir owner para evitar problemas de foco com diálogos aninhados
+        try {
+            if (detailsDialog != null && detailsDialog.getDialogPane() != null &&
+                    detailsDialog.getDialogPane().getScene() != null) {
+                dialog.initOwner(detailsDialog.getDialogPane().getScene().getWindow());
+                dialog.initModality(Modality.WINDOW_MODAL);
+            } else if (questionsTable != null && questionsTable.getScene() != null) {
+                dialog.initOwner(questionsTable.getScene().getWindow());
+                dialog.initModality(Modality.WINDOW_MODAL);
+            } else if (stage != null) {
+                dialog.initOwner(stage);
+                dialog.initModality(Modality.WINDOW_MODAL);
+            }
+        } catch (Exception ignored) {
+            // se não for possível definir o owner, continua sem owner
+        }
+        dialog.setTitle("Editar Pergunta - " + q.getAccessCode());
+        dialog.setHeaderText("Edite os dados da pergunta");
 
-    /** Handler para eliminar uma pergunta. Enfileira o pedido e refresca a lista. */
-    public void onDeleteQuestion() {
-        TextInputDialog dialog = new TextInputDialog();
-        dialog.setTitle("Eliminar Pergunta");
-        dialog.setHeaderText("⚠️ Atenção: Esta ação é irreversível!");
-        dialog.setContentText("Código da pergunta a eliminar:");
-        dialog.showAndWait().ifPresent(code -> {
-            if (!code.trim().isEmpty()) {
-                Alert confirmAlert = new Alert(Alert.AlertType.CONFIRMATION);
-                confirmAlert.setTitle("Confirmar Eliminação");
-                confirmAlert.setHeaderText("Tem certeza que deseja eliminar a pergunta " + code + "?");
-                confirmAlert.setContentText("Esta ação não pode ser desfeita.");
-                confirmAlert.showAndWait().ifPresent(response -> {
-                    if (response == ButtonType.OK) {
-                        Integer teacherId = clientManager.getUserId();
-                        if (teacherId == null) {
-                            showErrorAlert("Erro", "Sessão inválida. Faça login novamente.");
-                            return;
-                        }
-                        Question q = findQuestionByCode(code.trim());
-                        if (q == null) {
-                            showErrorAlert("Erro", "Pergunta não encontrada ou não é sua.");
-                            return;
-                        }
-                        clientManager.getQuestionService().deleteQuestion(new DeleteQuestionDTO(q.getId(), teacherId));
-                        showSuccessAlert("Pedido de eliminação enviado",
-                                "A pergunta " + code + " será eliminada (caso não tenha respostas).");
-                        refreshQuestions();
-                    }
-                });
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(15);
+        grid.setPadding(new Insets(20));
+
+        Label statementLabel = new Label("Enunciado:");
+        statementLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
+        TextArea statementField = new TextArea(q.getStatement());
+        statementField.setPrefRowCount(3);
+        statementField.setPrefWidth(500);
+        statementField.setPromptText("Escreva o enunciado da pergunta...");
+
+        Label numOptionsLabel = new Label("Número de Opções:");
+        numOptionsLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
+        int initialOptionsCount = (q.getOptions() == null ? 4 : Math.max(2, Math.min(4, q.getOptions().size())));
+        Spinner<Integer> numOptionsSpinner = new Spinner<>(2, 4, initialOptionsCount);
+        numOptionsSpinner.setPrefWidth(100);
+
+        Label optionsLabel = new Label("Opções:");
+        optionsLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
+        VBox optionsBox = new VBox(10);
+        TextField optA = new TextField(); optA.setPromptText("Opção A");
+        TextField optB = new TextField(); optB.setPromptText("Opção B");
+        TextField optC = new TextField(); optC.setPromptText("Opção C");
+        TextField optD = new TextField(); optD.setPromptText("Opção D");
+        optionsBox.getChildren().addAll(optA, optB, optC, optD);
+
+        numOptionsSpinner.valueProperty().addListener((obs, oldVal, newVal) -> {
+            int n = newVal == null ? 2 : newVal;
+            optionsBox.getChildren().clear();
+            if (n >= 1) optionsBox.getChildren().add(optA);
+            if (n >= 2) optionsBox.getChildren().add(optB);
+            if (n >= 3) optionsBox.getChildren().add(optC);
+            if (n >= 4) optionsBox.getChildren().add(optD);
+        });
+
+        int init = numOptionsSpinner.getValue();
+        optionsBox.getChildren().clear();
+        if (init >= 1) optionsBox.getChildren().add(optA);
+        if (init >= 2) optionsBox.getChildren().add(optB);
+        if (init >= 3) optionsBox.getChildren().add(optC);
+        if (init >= 4) optionsBox.getChildren().add(optD);
+
+        Label correctLabel = new Label("Resposta Correta:");
+        correctLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
+        ComboBox<String> correctCombo = new ComboBox<>();
+        correctCombo.getItems().addAll("A", "B", "C", "D");
+        correctCombo.setValue(q.getCorrectOption() != null ? q.getCorrectOption().name() : "A");
+
+        Label periodLabel = new Label("Período de Disponibilidade:");
+        periodLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
+        HBox periodBox = new HBox(8);
+        DatePicker startDate = new DatePicker(q.getStartAt().toLocalDate());
+        startDate.setPromptText("Data início");
+        int qStartHour = q.getStartAt().getHour();
+        int qStartMinute = q.getStartAt().getMinute();
+        Spinner<Integer> startHour = new Spinner<>(0, 23, qStartHour);
+        startHour.setPrefWidth(70);
+        Spinner<Integer> startMinute = new Spinner<>(0, 59, qStartMinute);
+        startMinute.setPrefWidth(70);
+        Label toLabel = new Label(" até ");
+        DatePicker endDate = new DatePicker(q.getEndAt().toLocalDate()); endDate.setPromptText("Data fim");
+        int qEndHour = q.getEndAt().getHour();
+        int qEndMinute = q.getEndAt().getMinute();
+        Spinner<Integer> endHour = new Spinner<>(0, 23, qEndHour);
+        endHour.setPrefWidth(70);
+        Spinner<Integer> endMinute = new Spinner<>(0, 59, qEndMinute);
+        endMinute.setPrefWidth(70);
+        periodBox.getChildren().addAll(startDate, startHour, new Label(":"), startMinute, toLabel, endDate, endHour, new Label(":"), endMinute);
+
+        grid.add(statementLabel, 0, 0);
+        grid.add(statementField, 0, 1, 2, 1);
+        grid.add(numOptionsLabel, 0, 2);
+        grid.add(numOptionsSpinner, 1, 2);
+        grid.add(optionsLabel, 0, 3);
+        grid.add(optionsBox, 0, 4, 2, 1);
+        grid.add(correctLabel, 0, 5);
+        grid.add(correctCombo, 1, 5);
+        grid.add(periodLabel, 0, 6);
+        grid.add(periodBox, 0, 7, 2, 1);
+
+        ScrollPane scrollPane = new ScrollPane(grid);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setPrefHeight(500);
+
+        // preenche opções existentes
+        List<Option> existingOptions = q.getOptions();
+        if (existingOptions != null) {
+            int i = 0;
+            for (Option opt : existingOptions) {
+                if (i >= optionsBox.getChildren().size()) break;
+                TextField tf = (TextField) optionsBox.getChildren().get(i);
+                tf.setText(opt.getText());
+                i++;
+            }
+        }
+
+        HBox loadingBox = new HBox(10);
+        loadingBox.setPadding(new Insets(10));
+        loadingBox.setAlignment(Pos.CENTER_LEFT);
+        ProgressIndicator pi = new ProgressIndicator();
+        pi.setPrefSize(20, 20);
+        Label loadingLabel = new Label("Aguarde... a actualizar a pergunta...");
+        loadingBox.getChildren().addAll(pi, loadingLabel);
+        loadingBox.setVisible(false);
+
+        VBox container = new VBox(10);
+        container.getChildren().addAll(scrollPane, loadingBox);
+        dialog.getDialogPane().setContent(container);
+        this.dialogLoadingBox = loadingBox;
+
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        Button okButton = (Button) dialog.getDialogPane().lookupButton(ButtonType.OK);
+        okButton.setText("Atualizar Pergunta");
+        okButton.setOnAction(ev -> {
+            String statement = statementField.getText().trim();
+            if (statement.isEmpty()) {
+                showErrorAlert("Erro", "O enunciado não pode estar vazio.");
+                ev.consume();
+                return;
+            }
+
+            int numOptions = numOptionsSpinner.getValue();
+            List<Option> options = new ArrayList<>();
+            TextField[] allOptions = {optA, optB, optC, optD};
+            OptionLetter[] letters = OptionLetter.values();
+
+            int filledCount = 0;
+            for (int i = 0; i < numOptions; i++) {
+                if (!allOptions[i].getText().trim().isEmpty()) filledCount++;
+            }
+            if (filledCount < 2) {
+                showErrorAlert("Erro", "A pergunta deve ter pelo menos duas respostas possíveis.");
+                ev.consume();
+                return;
+            }
+
+            for (int i = 0; i < numOptions; i++) {
+                String optText = allOptions[i].getText().trim();
+                if (optText.isEmpty()) {
+                    showErrorAlert("Erro", "Preencha todas as respostas até ao número escolhido.");
+                    ev.consume();
+                    return;
+                }
+                options.add(new Option(letters[i], optText));
+            }
+
+            LocalDate startD = startDate.getValue();
+            LocalDate endD = endDate.getValue();
+            if (startD == null || endD == null) {
+                showErrorAlert("Erro", "Datas de início e fim são obrigatórias.");
+                ev.consume();
+                return;
+            }
+
+            try {
+                LocalTime sTime = LocalTime.of(startHour.getValue(), startMinute.getValue());
+                LocalTime eTime = LocalTime.of(endHour.getValue(), endMinute.getValue());
+                LocalDateTime startAt = LocalDateTime.of(startD, sTime);
+                LocalDateTime endAt = LocalDateTime.of(endD, eTime);
+
+                if (!endAt.isAfter(startAt)) {
+                    showErrorAlert("Erro", "A data/hora de fim deve ser posterior à data/hora de início.");
+                    ev.consume();
+                    return;
+                }
+
+                Integer teacherId = clientManager.getUserId();
+                if (teacherId == null) {
+                    showErrorAlert("Erro", "Sessão inválida. Faça login novamente.");
+                    ev.consume();
+                    return;
+                }
+
+                awaitingUpdateQuestion = true;
+                try { if (dialogLoadingBox != null) dialogLoadingBox.setVisible(true); okButton.setDisable(true);} catch (Exception ignored) {}
+
+                clientManager.getQuestionService().editQuestion(new EditQuestionDTO(
+                        q.getId(), teacherId, statement, options, OptionLetter.valueOf(correctCombo.getValue()), startAt, endAt));
+
+                ev.consume();
+            } catch (Exception e) {
+                showErrorAlert("Erro", "Formato de hora inválido (utilize HH:MM)." );
+                ev.consume();
             }
         });
+
+        dialog.showAndWait();
+        try { if (this.dialogLoadingBox == loadingBox) this.dialogLoadingBox = null; } catch (Exception ignored) {}
+        if (this.currentDetailsDialog == dialog) this.currentDetailsDialog = null;
     }
 
+    /** Mostra o perfil do docente (handler invocado pela view) */
     public void onOpenProfile() {
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Perfil do Docente");
@@ -928,20 +1544,14 @@ public class TeacherDashboardController implements IDisposableProp {
         dialog.showAndWait();
     }
 
-    private String getInitials(String text) {
-        if (text == null || text.isBlank()) return "?";
-        String[] parts = text.trim().split("\\s+");
-        if (parts.length == 1)
-            return parts[0].substring(0, 1).toUpperCase();
-        return ("" + parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
-    }
-
-    /** Handler de logout */
+    /** Handler de logout (invocado pela view) */
     public void onLogout() {
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle("Confirmar Logout");
         alert.setHeaderText("Deseja realmente sair?");
         alert.setContentText("Será necessário fazer login novamente.");
+        // garantir owner quando possível
+        try { if (view != null && view.getScene() != null) alert.initOwner(view.getScene().getWindow()); } catch (Exception ignored) {}
         alert.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
                 try {
@@ -950,38 +1560,106 @@ public class TeacherDashboardController implements IDisposableProp {
                     Thread.currentThread().interrupt();
                 }
                 clientManager.getService().logout();          // limpa estado local
-                application.showAuthentication();             // volta ao ecrã de login
+                try { application.showAuthentication(); } catch (Exception ignored) {}
             }
         });
     }
 
-    /** Mostra alerta de sucesso */
+    /** Mostra alerta de sucesso com owner adequado */
     private void showSuccessAlert(String title, String message) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle(title);
+        try {
+            Window owner = getCurrentOwnerWindow();
+            if (owner != null) alert.initOwner(owner);
+        } catch (Exception ignored) {}
+        alert.setTitle(title != null ? title : "Sucesso");
         alert.setHeaderText(null);
-        alert.setContentText(message);
+        alert.setContentText(message != null ? message : "");
         alert.showAndWait();
     }
 
-    /** Mostra alerta de erro */
+    /** Mostra alerta de erro com owner adequado */
     private void showErrorAlert(String title, String message) {
         Alert alert = new Alert(Alert.AlertType.ERROR);
-        alert.setTitle(title);
+        try {
+            Window owner = getCurrentOwnerWindow();
+            if (owner != null) alert.initOwner(owner);
+        } catch (Exception ignored) {}
+        alert.setTitle(title != null ? title : "Erro");
         alert.setHeaderText(null);
-        alert.setContentText(message);
+        alert.setContentText(message != null ? message : "");
         alert.showAndWait();
     }
 
-    /** Procura uma pergunta pelo seu código na lista carregada */
-    private Question findQuestionByCode(String accessCode) {
-        if (accessCode == null || accessCode.isBlank()) return null;
-        for (Question q : lastQuestions) {
-            if (accessCode.equalsIgnoreCase(q.getAccessCode())) {
-                return q;
+    /** Retorna a Window adequada para usar como owner de dialogs/alerts */
+    private Window getCurrentOwnerWindow() {
+        try {
+            if (this.currentDetailsDialog != null && this.currentDetailsDialog.getDialogPane() != null
+                    && this.currentDetailsDialog.getDialogPane().getScene() != null)
+                return this.currentDetailsDialog.getDialogPane().getScene().getWindow();
+        } catch (Exception ignored) {}
+        try {
+            if (questionsTable != null && questionsTable.getScene() != null)
+                return questionsTable.getScene().getWindow();
+        } catch (Exception ignored) {}
+        try {
+            if (view != null && view.getScene() != null)
+                return view.getScene().getWindow();
+        } catch (Exception ignored) {}
+        return stage;
+    }
+
+    /** Escapa aspas duplas para CSV */
+    private String escapeCsv(String s) {
+        if (s == null) return "";
+        return s.replace("\"", "\"\"");
+    }
+
+    /** Obtém iniciais a partir do nome (igual à implementação na view) */
+    private String getInitials(String name) {
+        if (name == null || name.isBlank()) return "?";
+        String[] parts = name.trim().split("\\s+");
+        if (parts.length == 1) return parts[0].substring(0, 1).toUpperCase();
+        return (parts[0].substring(0, 1) + parts[parts.length - 1].substring(0, 1)).toUpperCase();
+    }
+
+    //percorre as perguntas e solicita viewAnswers de forma sequencial para obter contagens
+    private void fetchAnswerCountsSequentially() {
+        Integer teacherId = clientManager.getUserId();
+        if (teacherId == null) return;
+
+        // Não reiniciar se já estiver em progresso
+        if (bulkLoadingAnswers) return;
+
+        new Thread(() -> {
+            bulkLoadingAnswers = true;
+            try {
+                // cópia segura da lista para evitar ConcurrentModification
+                List<Question> snapshot = List.copyOf(lastQuestions);
+                for (Question q : snapshot) {
+                    if (q == null) continue;
+                    if (answersCountByQuestion.containsKey(q.getId())) continue;
+
+                    pendingViewQuestion = q;
+                    awaitingViewAnswers = true;
+                    try {
+                        clientManager.getAnswerService().viewAnswersForTeacher(new ViewAnswersDTO(q.getId(), teacherId));
+                    } catch (Exception e) {
+                        awaitingViewAnswers = false;
+                        System.err.println("[TeacherController] falha a pedir respostas para q=" + q.getId() + ": " + e.getMessage());
+                        continue;
+                    }
+
+                    // espera até o listener processar esta resposta
+                    while (awaitingViewAnswers) {
+                        try { Thread.sleep(40); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
+                    }
+                }
+            } finally {
+                bulkLoadingAnswers = false;
+                Platform.runLater(this::updateDashboardStats);
             }
-        }
-        return null;
+        }, "FetchAnswerCounts").start();
     }
 
 }

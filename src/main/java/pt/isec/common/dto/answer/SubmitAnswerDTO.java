@@ -9,4 +9,3 @@ public record SubmitAnswerDTO(
         Integer studentId,
         OptionLetter selectedOption
 ) implements Serializable {}
-

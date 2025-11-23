@@ -6,4 +6,3 @@ public record ListQuestionsDTO(
         Integer teacherId,
         String filter  // "active" | "future" | "expired" | null
 ) implements Serializable {}
-

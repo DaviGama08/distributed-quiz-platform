@@ -72,7 +72,13 @@ public class ResponseHandlerThread implements Runnable{
                 System.out.println("[ResponseHandler] Operation acknowledged");
                 // ACK é genérico; em caso de logout a UI deve observar PROP_AUTHENTICATED
             }
-            case NACK -> System.err.println("[ResponseHandler] Operation failed");
+            case NACK -> {
+                System.err.println("[ResponseHandler] Operation failed: " + response.getData());
+                if (response.getData() instanceof String s && "invalid-code".equalsIgnoreCase(s)) {
+                    // notifica especificamente o join de pergunta falhado
+                    tInfo.setPropJoinQuestionResponse(null);
+                }
+            }
             case ERROR -> {
                 System.err.println("[ResponseHandler] Server error: " + response.getData());
                 if(response.getData() instanceof String s)

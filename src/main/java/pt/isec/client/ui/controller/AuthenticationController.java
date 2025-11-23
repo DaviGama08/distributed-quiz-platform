@@ -291,6 +291,7 @@ public class AuthenticationController {
     /** Reinicia a vista de autenticação */
     public void show() {
         authBusy = false;
+        setAuthBusy(false);
         mode = Mode.LOGIN;
         view.showLoginMode();
         view.setLoginStatus("", BLUE, false, true);
@@ -300,4 +301,5 @@ public class AuthenticationController {
         view.showBusy(false);
         stage.setScene(view.getScene());
     }
+
 }

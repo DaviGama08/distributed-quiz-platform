@@ -16,4 +16,3 @@ public record EditQuestionDTO(
         LocalDateTime startAt,
         LocalDateTime endAt
 ) implements Serializable {}
-

@@ -1,7 +1,6 @@
 package pt.isec.client.ui.view;
 
 import javafx.geometry.Insets;
-import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
@@ -14,6 +13,10 @@ import pt.isec.client.ui.controller.TeacherDashboardController;
  */
 public class TeacherDashboardView {
     private final String userEmail;
+
+    private Label totalQuestionsValueLabel;
+    private Label activeQuestionsValueLabel;
+    private Label answersReceivedValueLabel;
 
     private Scene scene;
     private Label welcomeLabel;
@@ -96,9 +99,6 @@ public class TeacherDashboardView {
                 new Separator(),
                 createQuestionBtn,
                 listQuestionsBtn,
-                viewAnswersBtn,
-                exportBtn,
-                deleteBtn,
                 spacer,
                 logoutBtn
         );
@@ -132,11 +132,35 @@ public class TeacherDashboardView {
         notificationArea.setWrapText(true);
 
         HBox cards = new HBox(20);
-        cards.getChildren().addAll(
-                createInfoCard("Total de Perguntas", "0"),
-                createInfoCard("Perguntas Ativas", "0"),
-                createInfoCard("Respostas Recebidas", "0")
-        );
+
+        // Card Total de Perguntas
+        VBox totalCard = new VBox(8);
+        totalCard.getStyleClass().add("info-card-dark");
+        totalQuestionsValueLabel = new Label("0");
+        totalQuestionsValueLabel.getStyleClass().add("info-card-value-dark");
+        Label totalLabel = new Label("Total de Perguntas");
+        totalLabel.getStyleClass().add("info-card-title-dark");
+        totalCard.getChildren().addAll(totalQuestionsValueLabel, totalLabel);
+
+        // Card Perguntas Ativas
+        VBox activeCard = new VBox(8);
+        activeCard.getStyleClass().add("info-card-dark");
+        activeQuestionsValueLabel = new Label("0");
+        activeQuestionsValueLabel.getStyleClass().add("info-card-value-dark");
+        Label activeLabel = new Label("Perguntas Ativas");
+        activeLabel.getStyleClass().add("info-card-title-dark");
+        activeCard.getChildren().addAll(activeQuestionsValueLabel, activeLabel);
+
+        // Card Respostas Recebidas
+        VBox answersCard = new VBox(8);
+        answersCard.getStyleClass().add("info-card-dark");
+        answersReceivedValueLabel = new Label("0");
+        answersReceivedValueLabel.getStyleClass().add("info-card-value-dark");
+        Label answersLabel = new Label("Respostas Recebidas");
+        answersLabel.getStyleClass().add("info-card-title-dark");
+        answersCard.getChildren().addAll(answersReceivedValueLabel, answersLabel);
+
+        cards.getChildren().addAll(totalCard, activeCard, answersCard);
 
         mainContentArea.getChildren().addAll(
                 titleLabel,
@@ -161,15 +185,21 @@ public class TeacherDashboardView {
         card.getChildren().addAll(valueLabel, titleLabel);
         return card;
     }
+    
+    public void updateStats(int totalQuestions, int activeQuestions, int totalAnswers) {
+        if (totalQuestionsValueLabel != null)
+            totalQuestionsValueLabel.setText(String.valueOf(totalQuestions));
+        if (activeQuestionsValueLabel != null)
+            activeQuestionsValueLabel.setText(String.valueOf(activeQuestions));
+        if (answersReceivedValueLabel != null)
+            answersReceivedValueLabel.setText(String.valueOf(totalAnswers));
+    }
 
     public Scene getScene() { return scene; }
 
     public void registerHandlers(TeacherDashboardController controller) {
         createQuestionBtn.setOnAction(e -> controller.onCreateQuestion());
         listQuestionsBtn.setOnAction(e -> controller.onListQuestions());
-        viewAnswersBtn.setOnAction(e -> controller.onViewAnswers());
-        //exportBtn.setOnAction(e -> controller.onExport());
-        deleteBtn.setOnAction(e -> controller.onDeleteQuestion());
         logoutBtn.setOnAction(e -> controller.onLogout());
     }
 

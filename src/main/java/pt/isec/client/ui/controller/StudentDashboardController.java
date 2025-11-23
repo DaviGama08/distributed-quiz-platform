@@ -86,7 +86,7 @@ public class StudentDashboardController {
                     Question q = (Question) evt.getNewValue();
                     Platform.runLater(() -> {
                         if (q == null) {
-                            showErrorAlert("Pergunta não encontrada ou fora do período de resposta.");
+                            showErrorAlert("Código inválido ou pergunta não existente.");
                         } else {
                             openQuestionDialog(q);
                         }
@@ -257,7 +257,10 @@ public class StudentDashboardController {
                     data.getValue().getAnsweredAt().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"))));
             TableColumn<Answer, String> questionCol = new TableColumn<>("Pergunta");
             questionCol.setCellValueFactory(data -> new SimpleStringProperty(
-                    String.valueOf(data.getValue().getQuestionId())));
+                    data.getValue().getQuestionStatement() != null
+                            ? data.getValue().getQuestionStatement()
+                            : String.valueOf(data.getValue().getQuestionId())
+            ));
             TableColumn<Answer, String> answerCol = new TableColumn<>("Resposta");
             answerCol.setCellValueFactory(data -> new SimpleStringProperty(
                     data.getValue().getSelectedOption().name()));
@@ -281,6 +284,11 @@ public class StudentDashboardController {
         alert.setContentText("Será necessário fazer login novamente.");
         alert.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
+                try {
+                    clientManager.getAuthService().logout();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
                 clientManager.getService().logout();
                 application.showAuthentication();
             }

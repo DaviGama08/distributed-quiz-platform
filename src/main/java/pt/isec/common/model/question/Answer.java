@@ -15,28 +15,47 @@ public final class Answer implements Serializable {
     private OptionLetter selectedOption;
     private LocalDateTime answeredAt;
     private boolean isCorrect; // Se a resposta está correta
+    private String studentName;
+    private String studentEmail;
+    private String questionStatement;
 
     public Answer() {}
 
-    public Answer(Integer studentId, Integer questionId, OptionLetter selectedOption,
-                  LocalDateTime answeredAt) {
-        validate(studentId, questionId, selectedOption, answeredAt);
-        this.studentId = studentId;
-        this.questionId = questionId;
-        this.selectedOption = selectedOption;
-        this.answeredAt = answeredAt;
-        this.isCorrect = false; // Será definido pelo servidor
-    }
-
-    public Answer(Integer id, Integer studentId, Integer questionId,
-                  OptionLetter selectedOption, LocalDateTime answeredAt, boolean isCorrect) {
-        validate(studentId, questionId, selectedOption, answeredAt);
+    public Answer(Integer id,
+                  Integer studentId,
+                  Integer questionId,
+                  OptionLetter selectedOption,
+                  LocalDateTime answeredAt,
+                  boolean isCorrect) {
         this.id = id;
         this.studentId = studentId;
         this.questionId = questionId;
         this.selectedOption = selectedOption;
         this.answeredAt = answeredAt;
         this.isCorrect = isCorrect;
+        this.studentName = null;
+        this.studentEmail = null;
+        this.questionStatement = null;
+    }
+
+    public Answer(Integer id,
+                  Integer studentId,
+                  Integer questionId,
+                  OptionLetter selectedOption,
+                  LocalDateTime answeredAt,
+                  boolean isCorrect,
+                  String studentName,
+                  String studentEmail,
+                  String questionStatement) {
+        this.id = id;
+        this.studentId = studentId;
+        this.questionId = questionId;
+        this.selectedOption = selectedOption;
+        this.answeredAt = answeredAt;
+        this.isCorrect = isCorrect;
+        this.studentName = studentName;
+        this.studentEmail = studentEmail;
+        this.questionStatement = questionStatement;
     }
 
     //gets/sets
@@ -48,6 +67,18 @@ public final class Answer implements Serializable {
         if (studentId == null || studentId <= 0)
             throw new IllegalArgumentException("studentId must be positive");
         this.studentId = studentId;
+    }
+
+    public String getQuestionStatement() {
+        return questionStatement;
+    }
+
+    public String getStudentName() {
+        return studentName;
+    }
+
+    public String getStudentEmail() {
+        return studentEmail;
     }
 
     public Integer getQuestionId() {return questionId;}

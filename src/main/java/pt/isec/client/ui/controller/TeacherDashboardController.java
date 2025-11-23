@@ -28,9 +28,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 /**
  * Controlador do dashboard do docente. Lida com criação, listagem
@@ -47,6 +45,7 @@ public class TeacherDashboardController {
 
     // Guarda a última lista de perguntas (actualizada ao receber LIST_QUESTIONS_RESPONSE)
     private final List<Question> lastQuestions = new ArrayList<>();
+    private final Map<Integer, Integer> answersCountByQuestion = new HashMap<>();
 
     // Tabela actualmente aberta no diálogo de listagem (pode ser null)
     private TableView<Question> questionsTable = null;
@@ -120,7 +119,6 @@ public class TeacherDashboardController {
                 evt -> {
                     if (!awaitingListQuestions) return;
                     awaitingListQuestions = false;
-                    @SuppressWarnings("unchecked")
                     List<Question> list = (List<Question>) evt.getNewValue();
 
                     Platform.runLater(() -> {
@@ -128,9 +126,12 @@ public class TeacherDashboardController {
                         if (list != null) lastQuestions.addAll(list);
                         // actualiza a tabela do diálogo, se existir
                         refreshQuestionsTableView();
+                        // actualiza métricas do dashboard
+                        updateDashboardStats();
                     });
                 }
         );
+
 
         // Respostas de uma pergunta (vista do docente) devolvidas
         service.addPropertyChangeListener(
@@ -138,16 +139,37 @@ public class TeacherDashboardController {
                 evt -> {
                     if (!awaitingViewAnswers) return;
                     awaitingViewAnswers = false;
-                    @SuppressWarnings("unchecked")
                     List<Answer> answers = (List<Answer>) evt.getNewValue();
                     final Question q = pendingViewQuestion;
                     pendingViewQuestion = null;
                     Platform.runLater(() -> {
-                        if (q != null) showAnswersDetails(q, answers);
-                        else showErrorAlert("Erro", "Pergunta não encontrada.");
+                        if (q != null) {
+                            // guarda nº respostas desta pergunta
+                            answersCountByQuestion.put(q.getId(), answers == null ? 0 : answers.size());
+                            updateDashboardStats();
+                            showAnswersDetails(q, answers);
+                        } else {
+                            showErrorAlert("Erro", "Pergunta não encontrada.");
+                        }
                     });
                 }
         );
+
+    }
+
+    private void updateDashboardStats() {
+        int total = lastQuestions.size();
+        int active = (int) lastQuestions.stream()
+                .filter(q -> "ACTIVE".equalsIgnoreCase(q.getState().name()))
+                .count();
+
+        // soma total de respostas conhecidas (só para perguntas cujas respostas já foram consultadas)
+        int totalAnswers = answersCountByQuestion.values()
+                .stream()
+                .mapToInt(Integer::intValue)
+                .sum();
+
+        view.updateStats(total, active, totalAnswers);
     }
 
     /** Handler para criar nova pergunta; envia apenas o pedido ao serviço */
@@ -170,7 +192,7 @@ public class TeacherDashboardController {
 
         Label numOptionsLabel = new Label("Número de Opções:");
         numOptionsLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
-        Spinner<Integer> numOptionsSpinner = new Spinner<>(2, 6, 4);
+        Spinner<Integer> numOptionsSpinner = new Spinner<>(2, 4, 4);
         numOptionsSpinner.setPrefWidth(100);
 
         Label optionsLabel = new Label("Opções:");
@@ -181,6 +203,24 @@ public class TeacherDashboardController {
         TextField optC = new TextField(); optC.setPromptText("Opção C");
         TextField optD = new TextField(); optD.setPromptText("Opção D");
         optionsBox.getChildren().addAll(optA, optB, optC, optD);
+
+        numOptionsSpinner.valueProperty().addListener((obs, oldVal, newVal) -> {
+            int n = newVal == null ? 2 : newVal;
+            optionsBox.getChildren().clear();
+            if (n >= 1) optionsBox.getChildren().add(optA);
+            if (n >= 2) optionsBox.getChildren().add(optB);
+            if (n >= 3) optionsBox.getChildren().add(optC);
+            if (n >= 4) optionsBox.getChildren().add(optD);
+        });
+
+        // forçar layout inicial consistente com o valor inicial
+        int init = numOptionsSpinner.getValue();
+        optionsBox.getChildren().clear();
+        if (init >= 1) optionsBox.getChildren().add(optA);
+        if (init >= 2) optionsBox.getChildren().add(optB);
+        if (init >= 3) optionsBox.getChildren().add(optC);
+        if (init >= 4) optionsBox.getChildren().add(optD);
+
 
         Label correctLabel = new Label("Resposta Correta:");
         correctLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
@@ -222,48 +262,81 @@ public class TeacherDashboardController {
             String statement = statementField.getText().trim();
             if (statement.isEmpty()) {
                 showErrorAlert("Erro", "O enunciado não pode estar vazio.");
+                ev.consume(); // mantém a janela aberta
                 return;
             }
+
             int numOptions = numOptionsSpinner.getValue();
             List<Option> options = new ArrayList<>();
             TextField[] allOptions = {optA, optB, optC, optD};
             OptionLetter[] letters = OptionLetter.values();
+
+            // 1) contar respostas preenchidas
+            int filledCount = 0;
+            for (int i = 0; i < numOptions; i++) {
+                if (!allOptions[i].getText().trim().isEmpty())
+                    filledCount++;
+            }
+            if (filledCount < 2) {
+                showErrorAlert("Erro", "A pergunta deve ter pelo menos duas respostas possíveis.");
+                ev.consume();
+                return;
+            }
+
+            // 2) garantir que todas as respostas até ao nº escolhido estão preenchidas
             for (int i = 0; i < numOptions; i++) {
                 String optText = allOptions[i].getText().trim();
                 if (optText.isEmpty()) {
-                    showErrorAlert("Erro", "A opção " + letters[i] + " não pode estar vazia.");
+                    showErrorAlert("Erro", "Preencha todas as respostas até ao número escolhido.");
+                    ev.consume();
                     return;
                 }
                 options.add(new Option(letters[i], optText));
             }
-            OptionLetter correctOption = OptionLetter.valueOf(correctCombo.getValue());
+
+            // 3) datas obrigatórias
             LocalDate startD = startDate.getValue();
             LocalDate endD   = endDate.getValue();
             String startT    = startTime.getText().trim();
             String endT      = endTime.getText().trim();
             if (startD == null || endD == null || startT.isEmpty() || endT.isEmpty()) {
                 showErrorAlert("Erro", "Datas e horas de início e fim são obrigatórias.");
+                ev.consume();
                 return;
             }
+
             try {
                 DateTimeFormatter timeFormat = DateTimeFormatter.ofPattern("HH:mm");
                 LocalTime sTime = LocalTime.parse(startT, timeFormat);
                 LocalTime eTime = LocalTime.parse(endT, timeFormat);
                 LocalDateTime startAt = LocalDateTime.of(startD, sTime);
                 LocalDateTime endAt   = LocalDateTime.of(endD, eTime);
+
+                // 4) validar ordem das datas
+                if (!endAt.isAfter(startAt)) {
+                    showErrorAlert("Erro", "A data/hora de fim deve ser posterior à data/hora de início.");
+                    ev.consume();
+                    return;
+                }
+
                 Integer teacherId = clientManager.getUserId();
                 if (teacherId == null) {
                     showErrorAlert("Erro", "Sessão inválida. Faça login novamente.");
+                    ev.consume();
                     return;
                 }
+
                 awaitingCreateQuestion = true;
                 System.out.println("ID: " + teacherId);
                 clientManager.getQuestionService().createQuestion(new CreateQuestionDTO(
-                        statement, teacherId, options, correctOption, startAt, endAt));
+                        statement, teacherId, options, OptionLetter.valueOf(correctCombo.getValue()), startAt, endAt));
+
+                // sucesso: deixa o evento seguir e a dialog fecha normalmente
             } catch (Exception e) {
                 showErrorAlert("Erro", "Formato de hora inválido (utilize HH:MM).");
+                ev.consume(); // não fecha a janela
             }
-        });
+    });
 
         dialog.showAndWait();
     }
@@ -290,6 +363,21 @@ public class TeacherDashboardController {
         filters.getChildren().addAll(filterLabel, filterCombo, applyFilterBtn);
 
         TableView<Question> table = new TableView<>();
+
+        // abrir respostas ao fazer duplo clique numa linha
+        table.setRowFactory(tv -> {
+            TableRow<Question> row = new TableRow<>();
+            row.setOnMouseClicked(event -> {
+                if (!row.isEmpty() && event.getClickCount() == 2) {
+                    Question selected = row.getItem();
+                    if (selected != null) {
+                        openAnswersForQuestion(selected);
+                    }
+                }
+            });
+            return row;
+        });
+
         table.setPrefHeight(400);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
 
@@ -304,15 +392,27 @@ public class TeacherDashboardController {
         TableColumn<Question, String> periodCol = new TableColumn<>("Período");
         periodCol.setCellValueFactory(data -> {
             Question q = data.getValue();
-            LocalDateTime s = q.getStartAt();
-            LocalDateTime e = q.getEndAt();
+            java.time.format.DateTimeFormatter fmt =
+                    java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+            String s = q.getStartAt().format(fmt);
+            String e = q.getEndAt().format(fmt);
             String str = s + " - " + e;
             return new SimpleStringProperty(str);
         });
 
+
         TableColumn<Question, String> stateCol = new TableColumn<>("Estado");
-        stateCol.setCellValueFactory(data -> new SimpleStringProperty(
-                data.getValue().getState().name()));
+        stateCol.setCellValueFactory(data -> {
+            String internal = data.getValue().getState().name();
+            String label;
+            switch (internal) {
+                case "ACTIVE" -> label = "Ativo";
+                case "FUTURE" -> label = "Futura";
+                case "EXPIRED" -> label = "Expirada";
+                default -> label = internal;
+            }
+            return new SimpleStringProperty(label);
+        });
 
         table.getColumns().addAll(codeCol, stmtCol, periodCol, stateCol);
 
@@ -353,6 +453,18 @@ public class TeacherDashboardController {
 
         // diálogo fechado -> deixa de haver tabela activa
         this.questionsTable = null;
+    }
+
+    private void openAnswersForQuestion(Question q) {
+        Integer teacherId = clientManager.getUserId();
+        if (teacherId == null) {
+            showErrorAlert("Erro", "Sessão inválida. Faça login novamente.");
+            return;
+        }
+        pendingViewQuestion = q;
+        awaitingViewAnswers = true;
+        clientManager.getAnswerService()
+                .viewAnswersForTeacher(new ViewAnswersDTO(q.getId(), teacherId));
     }
 
     /** Actualiza a TableView com base em lastQuestions + currentFilter. */
@@ -435,8 +547,12 @@ public class TeacherDashboardController {
         questionLabel.setFont(Font.font("Arial", FontWeight.BOLD, 14));
         Label correctLabel = new Label("Resposta correta: " + q.getCorrectOption().name());
         correctLabel.setFont(Font.font("Arial", 13));
-        Label periodLabel = new Label("Período: " + q.getStartAt() + " - " + q.getEndAt());
+
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+        String periodStr = q.getStartAt().format(fmt) + " - " + q.getEndAt().format(fmt);
+        Label periodLabel = new Label("Período: " + periodStr);
         periodLabel.setFont(Font.font("Arial", 13));
+
         infoBox.getChildren().addAll(questionLabel, correctLabel, periodLabel);
 
         HBox statsBox = new HBox(20);
@@ -480,18 +596,68 @@ public class TeacherDashboardController {
         TableView<Answer> table = new TableView<>();
         table.setPrefHeight(250);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
-        TableColumn<Answer, String> studCol = new TableColumn<>("Estudante");
-        studCol.setCellValueFactory(data -> new SimpleStringProperty(String.valueOf(data.getValue().getStudentId())));
+
+        // Nº aluno
+        TableColumn<Answer, String> studCol = new TableColumn<>("Nº Aluno");
+        studCol.setCellValueFactory(data ->
+                new SimpleStringProperty(String.valueOf(data.getValue().getStudentId())));
+
+        // Nome do aluno
+        TableColumn<Answer, String> nameCol = new TableColumn<>("Nome");
+        nameCol.setCellValueFactory(data ->
+                new SimpleStringProperty(
+                        data.getValue().getStudentName() == null
+                                ? ""
+                                : data.getValue().getStudentName()
+                ));
+
+        // Email do aluno
+        TableColumn<Answer, String> emailCol = new TableColumn<>("Email");
+        emailCol.setCellValueFactory(data ->
+                new SimpleStringProperty(
+                        data.getValue().getStudentEmail() == null
+                                ? ""
+                                : data.getValue().getStudentEmail()
+                ));
+
+        // Resposta
         TableColumn<Answer, String> answerCol = new TableColumn<>("Resposta");
-        answerCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().getSelectedOption().name()));
-        TableColumn<Answer, String> correctAnsCol = new TableColumn<>("Correta?");
-        correctAnsCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().isCorrect() ? "Sim" : "Não"));
-        table.getColumns().addAll(studCol, answerCol, correctAnsCol);
+        answerCol.setCellValueFactory(data ->
+                new SimpleStringProperty(data.getValue().getSelectedOption().name()));
+
+        table.getColumns().addAll(studCol, nameCol, emailCol, answerCol);
         if (answers != null) table.getItems().addAll(answers);
+
 
         content.getChildren().addAll(infoBox, statsBox, new Label("Respostas:"), table);
         dialog.getDialogPane().setContent(content);
-        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        ButtonType deleteButtonType = new ButtonType("Eliminar Pergunta", ButtonBar.ButtonData.LEFT);
+        dialog.getDialogPane().getButtonTypes().addAll(deleteButtonType, ButtonType.CLOSE);
+
+        Button deleteButton = (Button) dialog.getDialogPane().lookupButton(deleteButtonType);
+        deleteButton.setOnAction(ev -> {
+            Alert confirmAlert = new Alert(Alert.AlertType.CONFIRMATION);
+            confirmAlert.setTitle("Confirmar Eliminação");
+            confirmAlert.setHeaderText("Tem certeza que deseja eliminar a pergunta " + q.getAccessCode() + "?");
+            confirmAlert.setContentText("Esta ação não pode ser desfeita.");
+            confirmAlert.showAndWait().ifPresent(response -> {
+                if (response == ButtonType.OK) {
+                    Integer teacherId = clientManager.getUserId();
+                    if (teacherId == null) {
+                        showErrorAlert("Erro", "Sessão inválida. Faça login novamente.");
+                        return;
+                    }
+                    clientManager.getQuestionService()
+                            .deleteQuestion(new DeleteQuestionDTO(q.getId(), teacherId));
+                    showSuccessAlert("Pedido de eliminação enviado",
+                            "A pergunta " + q.getAccessCode() + " será eliminada (caso não tenha respostas).");
+
+                    refreshQuestions();
+                    dialog.close();
+                }
+            });
+        });
+
         dialog.showAndWait();
     }
 
@@ -537,8 +703,13 @@ public class TeacherDashboardController {
         alert.setContentText("Será necessário fazer login novamente.");
         alert.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
-                clientManager.getService().logout();
-                application.showAuthentication();
+                try {
+                    clientManager.getAuthService().logout();  // envia LOGOUT ao servidor
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                clientManager.getService().logout();          // limpa estado local
+                application.showAuthentication();             // volta ao ecrã de login
             }
         });
     }

@@ -54,6 +54,7 @@ public interface IClientService {
 
     // Eventos para perguntas e respostas
     void setPropCreateQuestionResponse(CreateQuestionResponseDTO dto);
+    void setPropEditQuestionResponse(String message);
     void setPropListQuestionsResponse(List<Question> questions);
     void setPropJoinQuestionResponse(Question question);
     void setPropSubmitAnswerOk(String message);

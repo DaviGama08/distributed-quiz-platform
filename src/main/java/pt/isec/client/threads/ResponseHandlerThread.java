@@ -70,13 +70,23 @@ public class ResponseHandlerThread implements Runnable{
             /* ===== ACK/NACK/ERROR genéricos ===== */
             case ACK -> {
                 System.out.println("[ResponseHandler] Operation acknowledged");
-                // ACK é genérico; em caso de logout a UI deve observar PROP_AUTHENTICATED
+                // detectar respostas específicas a operações (por convenção: edit-ok)
+                if (response.getData() instanceof String s) {
+                    if ("edit-ok".equalsIgnoreCase(s)) {
+                        tInfo.setPropEditQuestionResponse("edit-ok");
+                    }
+                }
             }
             case NACK -> {
                 System.err.println("[ResponseHandler] Operation failed: " + response.getData());
-                if (response.getData() instanceof String s && "invalid-code".equalsIgnoreCase(s)) {
-                    // notifica especificamente o join de pergunta falhado
-                    tInfo.setPropJoinQuestionResponse(null);
+                if (response.getData() instanceof String s) {
+                    if ("invalid-code".equalsIgnoreCase(s)) {
+                        // notifica especificamente o join de pergunta falhado
+                        tInfo.setPropJoinQuestionResponse(null);
+                    } else if ("edit-fail".equalsIgnoreCase(s)) {
+                        // notifica falha na edição
+                        tInfo.setPropEditQuestionResponse("edit-fail");
+                    }
                 }
             }
             case ERROR -> {

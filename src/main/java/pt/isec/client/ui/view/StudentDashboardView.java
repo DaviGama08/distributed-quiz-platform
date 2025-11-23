@@ -1,5 +1,6 @@
 package pt.isec.client.ui.view;
 
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -29,6 +30,8 @@ public class StudentDashboardView {
     private Button logoutBtn;
 
     private VBox profileCard;
+
+    private HBox loadingBox;
 
     public StudentDashboardView(String userName, String userEmail) {
         this.userName = userName;
@@ -64,8 +67,33 @@ public class StudentDashboardView {
         Label emailLabel = new Label(userEmail);
         emailLabel.getStyleClass().add("header-email-dark");
 
+        // loading box (invisível por defeito) para indicar operações assíncronas não-modais
+        loadingBox = new HBox(8);
+        loadingBox.setAlignment(Pos.CENTER_LEFT);
+        loadingBox.setPadding(new Insets(4,0,0,0));
+        ProgressIndicator pi = new ProgressIndicator();
+        pi.setPrefSize(16,16);
+        Label loadingLabel = new Label("");
+        loadingLabel.setStyle("-fx-text-fill: #7f8c8d;");
+        loadingBox.getChildren().addAll(pi, loadingLabel);
+        loadingBox.setVisible(false);
+
         header.getChildren().addAll(welcomeLabel, emailLabel);
+        header.getChildren().add(loadingBox);
         return header;
+    }
+
+    public void showLoading(String message) {
+        if (loadingBox == null) return;
+        Platform.runLater(() -> {
+            ((Label)loadingBox.getChildren().get(1)).setText(message);
+            loadingBox.setVisible(true);
+        });
+    }
+
+    public void hideLoading() {
+        if (loadingBox == null) return;
+        Platform.runLater(() -> loadingBox.setVisible(false));
     }
 
     private VBox createSidebar() {

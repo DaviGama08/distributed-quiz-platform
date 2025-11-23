@@ -48,6 +48,7 @@ public class ClientService implements IClientService {
 
     // Propriedades para operações de perguntas/respostas
     public static final String PROP_CREATE_QUESTION_RESPONSE = "createQuestionResponse";
+    public static final String PROP_UPDATE_QUESTION_RESPONSE = "editQuestionResponse";
     public static final String PROP_LIST_QUESTIONS_RESPONSE  = "listQuestionsResponse";
     public static final String PROP_JOIN_QUESTION_RESPONSE   = "joinQuestionResponse";
     public static final String PROP_SUBMIT_ANSWER_OK         = "submitAnswerOk";
@@ -377,6 +378,11 @@ public class ClientService implements IClientService {
     @Override
     public void setPropCreateQuestionResponse(CreateQuestionResponseDTO dto){
         pcs.firePropertyChange(PROP_CREATE_QUESTION_RESPONSE, null, dto);
+    }
+
+    @Override
+    public void setPropEditQuestionResponse(String message){
+        pcs.firePropertyChange(PROP_UPDATE_QUESTION_RESPONSE, null, message);
     }
 
     @Override

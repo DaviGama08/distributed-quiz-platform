@@ -13,6 +13,10 @@ import pt.isec.client.ui.controller.StudentDashboardController;
  * Dashboard do estudante com tema escuro. Usa dashboard.css para estilos.
  */
 public class StudentDashboardView {
+    private String userName;
+    private Label profileNameLabel;
+    private Button overviewBtn;
+
     private final String userEmail;
     private Scene scene;
 
@@ -24,7 +28,10 @@ public class StudentDashboardView {
     private Button historyBtn;
     private Button logoutBtn;
 
-    public StudentDashboardView(String userEmail) {
+    private VBox profileCard;
+
+    public StudentDashboardView(String userName, String userEmail) {
+        this.userName = userName;
         this.userEmail = userEmail;
     }
 
@@ -49,7 +56,8 @@ public class StudentDashboardView {
         VBox header = new VBox(10);
         header.getStyleClass().add("dashboard-header-dark");
 
-        welcomeLabel = new Label("Bem-vindo, Estudante!");
+        welcomeLabel = new Label("Bem-vindo, " +
+                (userName != null ? userName : "Estudante") + "!");
         welcomeLabel.setFont(Font.font("Arial", FontWeight.NORMAL, 24));
         welcomeLabel.getStyleClass().add("header-welcome");
 
@@ -61,12 +69,14 @@ public class StudentDashboardView {
     }
 
     private VBox createSidebar() {
-        VBox sidebar = new VBox(10);
+        VBox sidebar = new VBox(12);
         sidebar.getStyleClass().add("dashboard-sidebar-dark");
         sidebar.setPrefWidth(240);
 
         Label menuLabel = new Label("MENU");
         menuLabel.getStyleClass().add("sidebar-title-dark");
+
+        profileCard = createProfileCard();
 
         answerQuestionBtn = createMenuButton("Responder Pergunta");
         historyBtn = createMenuButton("Histórico");
@@ -78,6 +88,7 @@ public class StudentDashboardView {
         sidebar.getChildren().addAll(
                 menuLabel,
                 new Separator(),
+                profileCard,
                 answerQuestionBtn,
                 historyBtn,
                 spacer,
@@ -85,6 +96,50 @@ public class StudentDashboardView {
         );
 
         return sidebar;
+    }
+
+    private VBox createProfileCard() {
+        VBox card = new VBox(8);
+        card.getStyleClass().add("profile-card");
+        card.setAlignment(Pos.CENTER);
+
+        StackPane avatarCircle = new StackPane();
+        avatarCircle.getStyleClass().add("profile-avatar-circle");
+
+        Label initials = new Label(getInitials(userName != null ? userName : userEmail));
+        initials.getStyleClass().add("profile-avatar-initials");
+        avatarCircle.getChildren().add(initials);
+
+        Label nameLabel = new Label(userName != null ? userName : "Utilizador");
+        nameLabel.getStyleClass().add("profile-name-label");
+
+        Label roleLabel = new Label("Estudante");
+        roleLabel.getStyleClass().add("profile-role-label");
+
+        card.getChildren().addAll(avatarCircle, nameLabel, roleLabel);
+        return card;
+    }
+
+    private String getInitials(String text) {
+        if (text == null || text.isBlank()) return "?";
+        String[] parts = text.trim().split("\\s+");
+        if (parts.length == 1)
+            return parts[0].substring(0, 1).toUpperCase();
+        return ("" + parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+    }
+
+    public void setProfileName(String name) {
+        if (name == null || name.isBlank())
+            return;
+        this.userName = name;
+        if (profileNameLabel != null)
+            profileNameLabel.setText(name);
+        if (welcomeLabel != null)
+            welcomeLabel.setText("Bem-vindo, " + name + "!");
+    }
+
+    public String getProfileName() {
+        return profileNameLabel != null ? profileNameLabel.getText() : userName;
     }
 
     private VBox createMainArea() {
@@ -141,10 +196,32 @@ public class StudentDashboardView {
 
     public Scene getScene() { return scene; }
 
+    /** NOVO: actualizar texto de boas-vindas com o nome do aluno */
+    public void setWelcomeName(String name) {
+        if (name == null || name.trim().isEmpty()) {
+            welcomeLabel.setText("Bem-vindo, Estudante!");
+        } else {
+            welcomeLabel.setText("Bem-vindo, " + name + "!");
+        }
+    }
+
+
+    private String deriveNameFromEmail(String email) {
+        if (email == null || !email.contains("@"))
+            return "Estudante";
+        String part = email.substring(0, email.indexOf('@'));
+        if (part.isEmpty()) return "Estudante";
+        return Character.toUpperCase(part.charAt(0)) + part.substring(1);
+    }
+
     public void registerHandlers(StudentDashboardController controller) {
         answerQuestionBtn.setOnAction(e -> controller.onAnswerQuestion());
         historyBtn.setOnAction(e -> controller.onShowHistory());
         logoutBtn.setOnAction(e -> controller.onLogout());
+
+        if (profileCard != null) {
+            profileCard.setOnMouseClicked(e -> controller.onOpenProfile());
+        }
     }
 
     public void update() {

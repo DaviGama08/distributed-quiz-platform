@@ -9,6 +9,7 @@ import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import pt.isec.client.ClientApplication;
 import pt.isec.client.ClientManager;
@@ -24,6 +25,9 @@ import pt.isec.common.model.question.Option;
 import pt.isec.common.model.question.OptionLetter;
 import pt.isec.common.model.question.Question;
 
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -41,6 +45,7 @@ public class TeacherDashboardController {
     private final ClientManager clientManager;
     private final ClientApplication application;
     private final String userEmail;
+    private final String userName;
     private final TeacherDashboardView view;
 
     // Guarda a última lista de perguntas (actualizada ao receber LIST_QUESTIONS_RESPONSE)
@@ -55,19 +60,23 @@ public class TeacherDashboardController {
     private volatile boolean awaitingListQuestions  = false;
     private volatile boolean awaitingViewAnswers    = false;
 
-    // Filtro actual para listagem
+    // Filtro actual para listagem (apenas lado cliente, não envia mais para o servidor)
     private volatile String currentFilter = null;
 
     // Guarda a pergunta seleccionada para visualização de respostas
     private volatile Question pendingViewQuestion = null;
 
+    // Nome que aparece no header (perfil do docente)
+    private String teacherDisplayName = "Docente";
+
     public TeacherDashboardController(Stage stage, ClientManager clientManager,
-                                      ClientApplication application, String userEmail) {
+                                      ClientApplication application, String userName, String userEmail) {
         this.stage = stage;
         this.clientManager = clientManager;
         this.application   = application;
+        this.userName      = userName;
         this.userEmail     = userEmail;
-        this.view          = new TeacherDashboardView(userEmail);
+        this.view          = new TeacherDashboardView(userName, userEmail);
         view.createView();
         view.registerHandlers(this);
         setupPropertyChangeListeners();
@@ -108,7 +117,7 @@ public class TeacherDashboardController {
                         showSuccessAlert("Pergunta Criada",
                                 "A pergunta foi criada com sucesso!\nCódigo: " +
                                         (resp != null ? resp.accessCode() : ""));
-                        refreshQuestions();
+                        refreshQuestions(); // volta a pedir TODAS as perguntas
                     });
                 }
         );
@@ -124,9 +133,9 @@ public class TeacherDashboardController {
                     Platform.runLater(() -> {
                         lastQuestions.clear();
                         if (list != null) lastQuestions.addAll(list);
-                        // actualiza a tabela do diálogo, se existir
+                        // actualiza a tabela do diálogo, se existir, aplicando filtro apenas no cliente
                         refreshQuestionsTableView();
-                        // actualiza métricas do dashboard
+                        // actualiza métricas do dashboard SEM depender do filtro
                         updateDashboardStats();
                     });
                 }
@@ -336,12 +345,12 @@ public class TeacherDashboardController {
                 showErrorAlert("Erro", "Formato de hora inválido (utilize HH:MM).");
                 ev.consume(); // não fecha a janela
             }
-    });
+        });
 
         dialog.showAndWait();
     }
 
-    /** Handler para listar perguntas, usando filtros. */
+    /** Handler para listar perguntas, usando filtros (filtro só no cliente). */
     public void onListQuestions() {
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Listar Perguntas");
@@ -358,9 +367,7 @@ public class TeacherDashboardController {
         ComboBox<String> filterCombo = new ComboBox<>();
         filterCombo.getItems().addAll("Todas", "Ativas", "Futuras", "Expiradas");
         filterCombo.setValue("Todas");
-        Button applyFilterBtn = new Button("Aplicar");
-        applyFilterBtn.setStyle("-fx-background-color: #3498db; -fx-text-fill: white;");
-        filters.getChildren().addAll(filterLabel, filterCombo, applyFilterBtn);
+        filters.getChildren().addAll(filterLabel, filterCombo);
 
         TableView<Question> table = new TableView<>();
 
@@ -421,31 +428,27 @@ public class TeacherDashboardController {
         // guarda referência à tabela do diálogo
         this.questionsTable = table;
 
-        // handler do botão de filtro
-        applyFilterBtn.setOnAction(ev -> {
-            Integer teacherId = clientManager.getUserId();
-            if (teacherId == null) {
-                showErrorAlert("Erro", "Sessão inválida. Faça login novamente.");
-                return;
-            }
-
-            String sel = filterCombo.getValue();
+        // Filtro passa a ser reactivo: ao mudar o valor, actualiza a tabela localmente
+        filterCombo.valueProperty().addListener((obs, oldVal, newVal) -> {
+            String sel = newVal != null ? newVal : "Todas";
             if ("Ativas".equalsIgnoreCase(sel)) currentFilter = "active";
             else if ("Futuras".equalsIgnoreCase(sel)) currentFilter = "future";
             else if ("Expiradas".equalsIgnoreCase(sel)) currentFilter = "expired";
             else currentFilter = null;
 
-            // pede nova lista ao servidor
-            awaitingListQuestions = true;
-            clientManager.getQuestionService()
-                    .listQuestions(new ListQuestionsDTO(teacherId, currentFilter));
-
-            // enquanto a resposta não chega, mostra o que já temos em memória
+            // apenas filtra a tabela em memória; não volta a pedir ao servidor
             refreshQuestionsTableView();
         });
 
-        // Carrega perguntas inicialmente (usa filtro default "Todas")
-        applyFilterBtn.fire();
+        // Carrega perguntas inicialmente (SEM filtro no servidor)
+        Integer teacherId = clientManager.getUserId();
+        if (teacherId == null) {
+            showErrorAlert("Erro", "Sessão inválida. Faça login novamente.");
+        } else {
+            awaitingListQuestions = true;
+            clientManager.getQuestionService()
+                    .listQuestions(new ListQuestionsDTO(teacherId, null)); // null => todas
+        }
 
         dialog.getDialogPane().setContent(content);
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
@@ -455,7 +458,15 @@ public class TeacherDashboardController {
         this.questionsTable = null;
     }
 
+    private boolean isExpired(Question q) {
+        return q != null && "EXPIRED".equalsIgnoreCase(q.getState().name());
+    }
+
     private void openAnswersForQuestion(Question q) {
+        if (!isExpired(q)) {
+            showErrorAlert("Erro", "Só pode consultar respostas depois de a pergunta expirar.");
+            return;
+        }
         Integer teacherId = clientManager.getUserId();
         if (teacherId == null) {
             showErrorAlert("Erro", "Sessão inválida. Faça login novamente.");
@@ -466,6 +477,7 @@ public class TeacherDashboardController {
         clientManager.getAnswerService()
                 .viewAnswersForTeacher(new ViewAnswersDTO(q.getId(), teacherId));
     }
+
 
     /** Actualiza a TableView com base em lastQuestions + currentFilter. */
     private void refreshQuestionsTableView() {
@@ -502,7 +514,8 @@ public class TeacherDashboardController {
         Integer teacherId = clientManager.getUserId();
         if (teacherId == null) return;
         awaitingListQuestions = true;
-        clientManager.getQuestionService().listQuestions(new ListQuestionsDTO(teacherId, currentFilter));
+        // aqui também passa a pedir SEM filtro; filtro é só do lado do cliente
+        clientManager.getQuestionService().listQuestions(new ListQuestionsDTO(teacherId, null));
     }
 
     /** Handler para solicitar visualização de respostas de uma pergunta */
@@ -523,9 +536,17 @@ public class TeacherDashboardController {
                     showErrorAlert("Erro", "Pergunta não encontrada ou não é sua.");
                     return;
                 }
+
+                if (!"EXPIRED".equalsIgnoreCase(q.getState().name())) {
+                    showErrorAlert("Respostas indisponíveis",
+                            "As respostas só podem ser consultadas quando a pergunta estiver expirada.");
+                    return;
+                }
+
                 pendingViewQuestion = q;
                 awaitingViewAnswers = true;
-                clientManager.getAnswerService().viewAnswersForTeacher(new ViewAnswersDTO(q.getId(), teacherId));
+                clientManager.getAnswerService()
+                        .viewAnswersForTeacher(new ViewAnswersDTO(q.getId(), teacherId));
             }
         });
     }
@@ -533,6 +554,7 @@ public class TeacherDashboardController {
     /** Mostra as respostas da pergunta (chamado ao receber VIEW_ANSWERS_RESPONSE) */
     private void showAnswersDetails(Question q, List<Answer> answers) {
         String code = q.getAccessCode();
+
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Respostas - " + code);
         dialog.setHeaderText("Respostas submetidas pelos estudantes");
@@ -541,10 +563,18 @@ public class TeacherDashboardController {
         content.setPadding(new Insets(20));
         content.setPrefWidth(750);
 
+        // ========== Caixa de informação da pergunta ==========
         VBox infoBox = new VBox(5);
-        infoBox.setStyle("-fx-background-color: #ecf0f1; -fx-padding: 15; -fx-border-radius: 5; -fx-background-radius: 5;");
+        infoBox.setStyle(
+                "-fx-background-color: #ecf0f1;" +
+                        "-fx-padding: 15;" +
+                        "-fx-border-radius: 5;" +
+                        "-fx-background-radius: 5;"
+        );
+
         Label questionLabel = new Label("Pergunta: " + q.getStatement());
         questionLabel.setFont(Font.font("Arial", FontWeight.BOLD, 14));
+
         Label correctLabel = new Label("Resposta correta: " + q.getCorrectOption().name());
         correctLabel.setFont(Font.font("Arial", 13));
 
@@ -555,12 +585,19 @@ public class TeacherDashboardController {
 
         infoBox.getChildren().addAll(questionLabel, correctLabel, periodLabel);
 
+        // ========== Estatísticas rápidas ==========
         HBox statsBox = new HBox(20);
         statsBox.setAlignment(Pos.CENTER);
         statsBox.setPadding(new Insets(15));
-        statsBox.setStyle("-fx-background-color: white; -fx-border-color: #bdc3c7; -fx-border-radius: 5; -fx-background-radius: 5;");
-        int total = answers == null ? 0 : answers.size();
-        long correctCnt = answers == null ? 0 : answers.stream().filter(Answer::isCorrect).count();
+        statsBox.setStyle(
+                "-fx-background-color: white;" +
+                        "-fx-border-color: #bdc3c7;" +
+                        "-fx-border-radius: 5;" +
+                        "-fx-background-radius: 5;"
+        );
+
+        int total = (answers == null ? 0 : answers.size());
+        long correctCnt = (answers == null ? 0 : answers.stream().filter(Answer::isCorrect).count());
         int wrongCnt = total - (int) correctCnt;
         double correctPerc = total == 0 ? 0 : (100.0 * correctCnt / total);
         double wrongPerc   = total == 0 ? 0 : (100.0 * wrongCnt / total);
@@ -593,47 +630,51 @@ public class TeacherDashboardController {
 
         statsBox.getChildren().addAll(totalBox, correctBox, wrongBox);
 
+        // ========== Tabela de respostas ==========
         TableView<Answer> table = new TableView<>();
         table.setPrefHeight(250);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
 
-        // Nº aluno
         TableColumn<Answer, String> studCol = new TableColumn<>("Nº Aluno");
         studCol.setCellValueFactory(data ->
                 new SimpleStringProperty(String.valueOf(data.getValue().getStudentId())));
 
-        // Nome do aluno
         TableColumn<Answer, String> nameCol = new TableColumn<>("Nome");
         nameCol.setCellValueFactory(data ->
                 new SimpleStringProperty(
-                        data.getValue().getStudentName() == null
-                                ? ""
-                                : data.getValue().getStudentName()
+                        data.getValue().getStudentName() == null ? "" : data.getValue().getStudentName()
                 ));
 
-        // Email do aluno
         TableColumn<Answer, String> emailCol = new TableColumn<>("Email");
         emailCol.setCellValueFactory(data ->
                 new SimpleStringProperty(
-                        data.getValue().getStudentEmail() == null
-                                ? ""
-                                : data.getValue().getStudentEmail()
+                        data.getValue().getStudentEmail() == null ? "" : data.getValue().getStudentEmail()
                 ));
 
-        // Resposta
         TableColumn<Answer, String> answerCol = new TableColumn<>("Resposta");
         answerCol.setCellValueFactory(data ->
                 new SimpleStringProperty(data.getValue().getSelectedOption().name()));
 
         table.getColumns().addAll(studCol, nameCol, emailCol, answerCol);
-        if (answers != null) table.getItems().addAll(answers);
-
+        if (answers != null) {
+            table.getItems().addAll(answers);
+        }
 
         content.getChildren().addAll(infoBox, statsBox, new Label("Respostas:"), table);
         dialog.getDialogPane().setContent(content);
-        ButtonType deleteButtonType = new ButtonType("Eliminar Pergunta", ButtonBar.ButtonData.LEFT);
-        dialog.getDialogPane().getButtonTypes().addAll(deleteButtonType, ButtonType.CLOSE);
 
+        ButtonType exportButtonType = new ButtonType("Exportar CSV", ButtonBar.ButtonData.OK_DONE);
+        ButtonType deleteButtonType = new ButtonType("Eliminar Pergunta", ButtonBar.ButtonData.LEFT);
+        dialog.getDialogPane().getButtonTypes().addAll(exportButtonType, deleteButtonType, ButtonType.CLOSE);
+
+        // botão Exportar CSV
+        Button exportButton = (Button) dialog.getDialogPane().lookupButton(exportButtonType);
+        exportButton.setOnAction(ev -> {
+            exportAnswersToCsv(q, answers);
+            ev.consume(); // não fecha o diálogo automaticamente
+        });
+
+        // botão Eliminar Pergunta (continua igual ao que já tinhas)
         Button deleteButton = (Button) dialog.getDialogPane().lookupButton(deleteButtonType);
         deleteButton.setOnAction(ev -> {
             Alert confirmAlert = new Alert(Alert.AlertType.CONFIRMATION);
@@ -659,6 +700,125 @@ public class TeacherDashboardController {
         });
 
         dialog.showAndWait();
+    }
+    /**
+     * Exporta para CSV no formato pedido no enunciado, por ex.:
+     *
+     * "dia";"hora inicial";"hora final";"enunciado da pergunta";"opção certa"
+     * "06-10-2025";"10:10";"10:12";"Texto da pergunta";"a"
+     * "opção";"texto da opção"
+     * "a";"Socket"
+     * "b";"ServerSocket"
+     * ...
+     * "número de estudante";"nome";"e-mail";"resposta"
+     * "123456";"Nome";"email@exemplo.com";"a"
+     */
+    private void exportAnswersToCsv(Question q, List<Answer> answers) {
+        if (q == null) {
+            showErrorAlert("Exportar CSV", "Pergunta inválida.");
+            return;
+        }
+
+        if (answers == null || answers.isEmpty()) {
+            showErrorAlert("Exportar CSV", "Ainda não existem respostas para esta pergunta.");
+            return;
+        }
+
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Guardar ficheiro CSV");
+        fileChooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("Ficheiros CSV", "*.csv")
+        );
+
+        String baseName = (q.getAccessCode() != null && !q.getAccessCode().isBlank())
+                ? q.getAccessCode()
+                : "pergunta";
+        fileChooser.setInitialFileName("pergunta_" + baseName + ".csv");
+
+        File file = fileChooser.showSaveDialog(stage);
+        if (file == null) {
+            // utilizador cancelou
+            return;
+        }
+
+        DateTimeFormatter dateFmt = DateTimeFormatter.ofPattern("dd-MM-yyyy");
+        DateTimeFormatter timeFmt = DateTimeFormatter.ofPattern("HH:mm");
+
+        try (BufferedWriter writer = Files.newBufferedWriter(
+                file.toPath(), StandardCharsets.UTF_8)) {
+
+            // ===== 1ª linha: cabeçalho da pergunta =====
+            writer.write("\"dia\";\"hora inicial\";\"hora final\";\"enunciado da pergunta\";\"opção certa\"");
+            writer.newLine();
+
+            // ===== 2ª linha: dados da pergunta =====
+            String dia = q.getStartAt().toLocalDate().format(dateFmt);
+            String horaInicial = q.getStartAt().toLocalTime().format(timeFmt);
+            String horaFinal = q.getEndAt().toLocalTime().format(timeFmt);
+            String enunciado = escapeCsv(q.getStatement());
+            String opcaoCerta = q.getCorrectOption() != null
+                    ? q.getCorrectOption().name().toLowerCase()
+                    : "";
+
+            writer.write("\"" + dia + "\";\"" + horaInicial + "\";\"" + horaFinal + "\";\""
+                    + enunciado + "\";\"" + opcaoCerta + "\"");
+            writer.newLine();
+            writer.newLine();
+
+            // ===== Bloco das opções =====
+            writer.write("\"opção\";\"texto da opção\"");
+            writer.newLine();
+
+            if (q.getOptions() != null) {
+                for (Option opt : q.getOptions()) {
+                    if (opt == null) continue;
+                    String letra = opt.getLetter() != null
+                            ? opt.getLetter().name().toLowerCase()
+                            : "";
+                    String texto = escapeCsv(opt.getText());
+                    writer.write("\"" + letra + "\";\"" + texto + "\"");
+                    writer.newLine();
+                }
+            }
+            writer.newLine();
+
+            // ===== Bloco das respostas =====
+            writer.write("\"número de estudante\";\"nome\";\"e-mail\";\"resposta\"");
+            writer.newLine();
+
+            for (Answer a : answers) {
+                if (a == null) continue;
+
+                String numero = a.getStudentId() == null
+                        ? ""
+                        : a.getStudentId().toString();
+                String nome = escapeCsv(a.getStudentName());
+                String email = escapeCsv(a.getStudentEmail());
+                String resp = a.getSelectedOption() != null
+                        ? a.getSelectedOption().name().toLowerCase()
+                        : "";
+
+                writer.write("\"" + numero + "\";\"" + nome + "\";\"" + email + "\";\"" + resp + "\"");
+                writer.newLine();
+            }
+
+        } catch (IOException e) {
+            showErrorAlert("Exportar CSV", "Erro ao guardar o ficheiro: " + e.getMessage());
+            return;
+        }
+
+        showSuccessAlert("Exportar CSV", "Ficheiro CSV gravado com sucesso.");
+    }
+
+    /** Escapa aspas dentro de campos CSV ( " -> "" ). */
+    private String escapeCsv(String s) {
+        if (s == null) return "";
+        return s.replace("\"", "\"\"");
+    }
+
+    private String cleanCsvText(String s) {
+        if (s == null) return "";
+        return s.replace(";", ",");
     }
 
     /** Handler para eliminar uma pergunta. Enfileira o pedido e refresca a lista. */
@@ -693,6 +853,58 @@ public class TeacherDashboardController {
                 });
             }
         });
+    }
+
+    public void onOpenProfile() {
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Perfil do Docente");
+        dialog.setHeaderText(null);
+
+        VBox content = new VBox(15);
+        content.setPadding(new Insets(20));
+
+        // Avatar
+        StackPane avatarCircle = new StackPane();
+        avatarCircle.getStyleClass().add("profile-avatar-circle");
+
+        Label initials = new Label(getInitials(userName != null ? userName : userEmail));
+        initials.getStyleClass().add("profile-avatar-initials");
+        avatarCircle.getChildren().add(initials);
+
+        Label nameLabel = new Label(userName != null ? userName : userEmail);
+        nameLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
+
+        Label roleLabel = new Label("Docente");
+        roleLabel.setFont(Font.font("Arial", 12));
+
+        Label emailLabel = new Label(userEmail);
+        emailLabel.setFont(Font.font("Arial", 12));
+
+        VBox infoBox = new VBox(4, nameLabel, roleLabel, emailLabel);
+        infoBox.setAlignment(Pos.CENTER_LEFT);
+
+        HBox header = new HBox(20, avatarCircle, infoBox);
+        header.setAlignment(Pos.CENTER_LEFT);
+
+        Label hint = new Label(
+                "Os dados de perfil são geridos pela instituição.\n" +
+                        "Para alterar o seu nome ou email, contacte a secretaria."
+        );
+        hint.setWrapText(true);
+        hint.setStyle("-fx-text-fill: #7f8c8d;");
+
+        content.getChildren().addAll(header, new Separator(), hint);
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.showAndWait();
+    }
+
+    private String getInitials(String text) {
+        if (text == null || text.isBlank()) return "?";
+        String[] parts = text.trim().split("\\s+");
+        if (parts.length == 1)
+            return parts[0].substring(0, 1).toUpperCase();
+        return ("" + parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
     }
 
     /** Handler de logout */

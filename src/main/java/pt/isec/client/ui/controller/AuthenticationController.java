@@ -62,12 +62,23 @@ public class AuthenticationController {
     private void handleAuthenticationChange(PropertyChangeEvent evt) {
         boolean authenticated = (boolean) evt.getNewValue();
         if (authenticated) {
-            Platform.runLater(() -> {
-                ClientService service = clientManager.getService();
-                String userType = service.getUserType();
-                String email    = service.getUserEmail();
-                openDashboard(userType, email);
-            });
+            Platform.runLater(this::openDashboard);
+        }
+    }
+
+    private void openDashboard() {
+        view.clearLoginFields();
+        view.clearRegisterFields();
+
+        ClientService service = clientManager.getService();
+        String userType = service.getUserType();
+        String email    = service.getUserEmail();
+        String name     = service.getUserName();
+
+        if ("TEACHER".equalsIgnoreCase(userType)) {
+            application.showTeacherDashboard(name, email);
+        } else {
+            application.showStudentDashboard(name, email);
         }
     }
 
@@ -81,6 +92,7 @@ public class AuthenticationController {
         }
         service.setUserType(data.userType());
         service.setUserEmail(data.email());
+        service.setUserName(data.name());
         service.setAuthenticated(true);
 
         Platform.runLater(() ->
@@ -118,14 +130,25 @@ public class AuthenticationController {
         }
         service.setUserType(data.userType());
         service.setUserEmail(data.email());
+        service.setUserName(data.name());
         service.setAuthenticated(true);
 
         Platform.runLater(() -> {
-            view.setRegisterStatus("✔️ Registo OK! A carregar dashboard...", Color.GREEN, true);
+            view.setRegisterStatus(
+                    "✔️ Registo concluído! Já pode iniciar sessão com os seus dados.",
+                    Color.GREEN,
+                    true
+            );
 
-            // limpar formulários e voltar ao modo login
+            // Limpa campos de registo e volta ao ecrã de login
             view.clearRegisterFields();
             view.clearLoginFields();
+
+            // Pré-preenche o email de login com o email registado
+            if (data != null && data.email() != null) {
+                view.prefillLoginEmail(data.email());
+            }
+
             mode = Mode.LOGIN;
             view.showLoginMode();
 
@@ -139,7 +162,6 @@ public class AuthenticationController {
 
         switch (status) {
             case "DIRECTORY_CONNECTING" -> {
-                // ecrã azul escuro, centrado
                 Platform.runLater(() -> view.showGlobalLoading("A contactar a diretoria..."));
             }
             case "SERVER_CONNECTING" -> {
@@ -158,15 +180,24 @@ public class AuthenticationController {
                     }
                 });
             }
+            case "DISCONNECTED" -> {
+                // Aqui é onde caímos quando:
+                //  - o servidor fecha a ligação depois de 30s sem login
+                //  - ou fecha a ligação após falha de autenticação
+                Platform.runLater(() ->
+                        view.showGlobalLoading("Ligação ao servidor perdida. A tentar reconectar...")
+                );
+            }
             case "DIRECTORY_ERROR" -> {
-                // mantém o overlay, apenas muda o texto para erro
-                Platform.runLater(() -> view.showGlobalError("Não foi possível contactar a diretoria/servidor. \nA aplicação vai encerrar..."));
-                try {
-                    Thread.sleep(3000); // dá tempo para o utilizador ler a mensagem
-                } catch (InterruptedException ignored) { }
+                Platform.runLater(() -> view.showGlobalError(
+                        "Não foi possível contactar a diretoria/servidor. \nA aplicação vai encerrar..."
+                ));
+                try { Thread.sleep(3000); } catch (InterruptedException ignored) {}
             }
             case "SERVER_ERROR" -> {
-                Platform.runLater(() -> view.showGlobalError("Não foi possível ligar ao servidor principal.\nA aplicação vai encerrar..."));
+                Platform.runLater(() -> view.showGlobalError(
+                        "Não foi possível ligar ao servidor principal.\nA aplicação vai encerrar..."
+                ));
             }
             default -> {
             }
@@ -271,10 +302,14 @@ public class AuthenticationController {
     private void openDashboard(String userType, String email) {
         view.clearLoginFields();
         view.clearRegisterFields();
+
+        ClientService service = clientManager.getService();
+        String name     = service.getUserName();
+
         if ("TEACHER".equalsIgnoreCase(userType)) {
-            application.showTeacherDashboard(email);
+            application.showTeacherDashboard(name, email);
         } else {
-            application.showStudentDashboard(email);
+            application.showStudentDashboard(name, email);
         }
     }
 

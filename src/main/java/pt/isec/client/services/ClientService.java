@@ -1,6 +1,4 @@
 package pt.isec.client.services;
-
-import javafx.application.Platform;
 import pt.isec.client.ClientManager;
 import pt.isec.client.threads.ClientListenerThread;
 import pt.isec.client.threads.RequestSenderThread;
@@ -10,7 +8,6 @@ import pt.isec.common.dto.question.CreateQuestionResponseDTO;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.Question;
-
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 import java.io.IOException;
@@ -41,6 +38,7 @@ public class ClientService implements IClientService {
     public static final String PROP_NOTIFICATION      = "notification";
     public static final String PROP_USER_TYPE         = "userType";
     public static final String PROP_USER_EMAIL        = "userEmail";
+    public static final String PROP_USER_NAME         = "userName";
     public static final String PROP_CONNECTION_STATUS = "connectionStatus";
 
     // Propriedades específicas para eventos de autenticação
@@ -63,6 +61,7 @@ public class ClientService implements IClientService {
     private String userType;
     private String userEmail;
     private Integer userId;
+    private String userName;
 
     private final int directoryUdpPort;
     private final String directoryHost;
@@ -186,6 +185,7 @@ public class ClientService implements IClientService {
         setUserType(null);
         setUserEmail(null);
         setUserId(null);
+        setUserName(null);
     }
 
     /* ==================== Descoberta de Servidor via UDP ==================== */
@@ -325,6 +325,14 @@ public class ClientService implements IClientService {
     @Override public Integer getUserId() { return userId; }
     @Override public String  getUserType(){ return userType; }
     @Override public String  getUserEmail(){ return userEmail; }
+    @Override public String getUserName() {return userName;}
+
+    @Override
+    public void setUserName(String n) {
+        String old = this.userName;
+        this.userName = n;
+        pcs.firePropertyChange(PROP_USER_NAME, old, n);
+    }
 
     @Override public void setUserId(Integer id) { this.userId = id; }
 

@@ -52,15 +52,13 @@ public class ClientApplication extends Application {
         authController.show();
     }
 
-    /** Abre o dashboard do docente */
-    public void showTeacherDashboard(String email) {
-        teacherController = new TeacherDashboardController(primaryStage, clientManager, this, email);
+    public void showTeacherDashboard(String name, String email) {
+        teacherController = new TeacherDashboardController(primaryStage, clientManager, this, name, email);
         teacherController.show();
     }
 
-    /** Abre o dashboard do estudante */
-    public void showStudentDashboard(String email) {
-        studentController = new StudentDashboardController(primaryStage, clientManager, this, email);
+    public void showStudentDashboard(String name, String email) {
+        studentController = new StudentDashboardController(primaryStage, clientManager, this, name, email);
         studentController.show();
     }
 

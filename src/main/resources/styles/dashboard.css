@@ -128,3 +128,73 @@
     -fx-font-size: 13px;
     -fx-letter-spacing: 0.5px;
 }
+
+/* ===== PERFIL NO SIDEBAR (COM TEMA CINZA/PRETO/VERMELHO) ===== */
+
+.profile-card {
+    -fx-background-color: linear-gradient(to bottom, #19191f, #131318);
+    -fx-padding: 18;
+    -fx-background-radius: 20;
+    -fx-border-radius: 20;
+    -fx-border-color: #e74c3c66;
+    -fx-border-width: 1.2;
+    -fx-alignment: center;
+    -fx-spacing: 8;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.45), 12, 0.2, 0, 4);
+}
+
+.profile-avatar-circle {
+    -fx-background-color: radial-gradient(radius 120%, #2e2e3a, #15151d);
+    -fx-background-radius: 40;
+    -fx-min-width: 76;
+    -fx-min-height: 76;
+    -fx-max-width: 76;
+    -fx-max-height: 76;
+    -fx-alignment: center;
+    -fx-border-color: #e74c3c;
+    -fx-border-radius: 40;
+    -fx-border-width: 2;
+}
+
+.profile-avatar-initials {
+    -fx-text-fill: #f5f5f7;
+    -fx-font-size: 26px;
+    -fx-font-weight: bold;
+}
+
+.profile-name-label {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+.profile-role-label {
+    -fx-text-fill: #b0b0b7;
+    -fx-font-size: 11px;
+    -fx-opacity: 0.9;
+}
+
+/* Sidebar – pequenos ajustes para combinar melhor com o perfil */
+.dashboard-sidebar-dark {
+    -fx-background-color: #0c0c12;
+}
+
+.sidebar-button-dark {
+    -fx-background-color: transparent;
+    -fx-text-fill: #e0e0e0;
+    -fx-alignment: CENTER_LEFT;
+    -fx-padding: 8 14 8 18;
+    -fx-background-radius: 14;
+    -fx-font-size: 13px;
+}
+
+.sidebar-button-dark:hover {
+    -fx-background-color: #1d1d27;
+    -fx-text-fill: #ffffff;
+}
+
+.sidebar-button-dark:selected,
+.sidebar-button-dark:focused {
+    -fx-background-color: #e74c3c;
+    -fx-text-fill: #ffffff;
+}

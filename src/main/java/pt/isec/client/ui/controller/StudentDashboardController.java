@@ -3,10 +3,14 @@ package pt.isec.client.ui.controller;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.control.*;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 import pt.isec.client.ClientApplication;
 import pt.isec.client.ClientManager;
@@ -34,6 +38,7 @@ public class StudentDashboardController {
     private final ClientManager clientManager;
     private final ClientApplication application;
     private final String userEmail;
+    private final String userName;
     private final StudentDashboardView view;
 
     // Flags de espera
@@ -41,13 +46,17 @@ public class StudentDashboardController {
     private volatile boolean awaitingSubmitAnswer = false;
     private volatile boolean awaitingHistory      = false;
 
+    // Nome para o header (perfil do aluno)
+    private String studentDisplayName = "Estudante";
+
     public StudentDashboardController(Stage stage, ClientManager clientManager,
-                                      ClientApplication application, String userEmail) {
+                                      ClientApplication application, String userName, String userEmail) {
         this.stage = stage;
         this.clientManager = clientManager;
         this.application   = application;
+        this.userName      = userName;
         this.userEmail     = userEmail;
-        this.view          = new StudentDashboardView(userEmail);
+        this.view          = new StudentDashboardView(userName, userEmail);
         view.createView();
         view.registerHandlers(this);
         setupPropertyChangeListeners();
@@ -135,6 +144,55 @@ public class StudentDashboardController {
                     );
                 }
         );
+    }
+
+    public void onOpenProfile() {
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Perfil do Estudante");
+        dialog.setHeaderText(null);
+
+        VBox content = new VBox(15);
+        content.setPadding(new Insets(20));
+
+        StackPane avatarCircle = new StackPane();
+        avatarCircle.getStyleClass().add("profile-avatar-circle");
+
+        Label initials = new Label(getInitials(userName != null ? userName : userEmail));
+        initials.getStyleClass().add("profile-avatar-initials");
+        avatarCircle.getChildren().add(initials);
+
+        Label nameLabel = new Label(userName != null ? userName : userEmail);
+        nameLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
+
+        Label roleLabel = new Label("Estudante");
+        roleLabel.setFont(Font.font("Arial", 12));
+
+        Label emailLabel = new Label(userEmail);
+        emailLabel.setFont(Font.font("Arial", 12));
+
+        VBox infoBox = new VBox(4, nameLabel, roleLabel, emailLabel);
+        infoBox.setAlignment(Pos.CENTER_LEFT);
+
+        HBox header = new HBox(20, avatarCircle, infoBox);
+        header.setAlignment(Pos.CENTER_LEFT);
+
+        Label hint = new Label("O nome e o email são definidos pela instituição.\n" +
+                "Se precisar de alterar, contacte a secretaria.");
+        hint.setWrapText(true);
+        hint.setStyle("-fx-text-fill: #7f8c8d;");
+
+        content.getChildren().addAll(header, new Separator(), hint);
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.showAndWait();
+    }
+
+    private String getInitials(String text) {
+        if (text == null || text.isBlank()) return "?";
+        String[] parts = text.trim().split("\\s+");
+        if (parts.length == 1)
+            return parts[0].substring(0, 1).toUpperCase();
+        return ("" + parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
     }
 
     /** Handler para solicitar uma pergunta (insere código e envia JoinQuestion) */
@@ -274,6 +332,44 @@ public class StudentDashboardController {
         dialog.getDialogPane().setContent(content);
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
         dialog.showAndWait();
+    }
+
+    /** NOVO: perfil do estudante (edição local do nome) */
+    public void onProfile() {
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Perfil do Estudante");
+        dialog.setHeaderText("Editar dados de perfil");
+
+        VBox content = new VBox(10);
+        content.setPadding(new Insets(20));
+
+        Label emailLabel = new Label("Email: " + userEmail);
+
+        Label nameLabel = new Label("Nome a apresentar:");
+        TextField nameField = new TextField();
+        nameField.setPromptText("Ex: Ana Silva");
+        nameField.setText(studentDisplayName);
+
+        content.getChildren().addAll(emailLabel, nameLabel, nameField);
+
+        dialog.getDialogPane().setContent(content);
+
+        ButtonType saveButtonType = new ButtonType("Guardar", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CLOSE);
+
+        dialog.showAndWait().ifPresent(bt -> {
+            if (bt == saveButtonType) {
+                String newName = nameField.getText().trim();
+                if (newName.isEmpty()) {
+                    showErrorAlert("O nome não pode estar vazio.");
+                } else {
+                    studentDisplayName = newName;
+                    view.setWelcomeName(studentDisplayName);
+                    showSuccessAlert("Perfil atualizado",
+                            "Os dados de perfil foram actualizados para esta sessão.");
+                }
+            }
+        });
     }
 
     /** Handler de logout */

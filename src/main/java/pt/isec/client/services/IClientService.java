@@ -39,10 +39,12 @@ public interface IClientService {
     void setUserType(String t);
     void setUserEmail(String e);
     void setAuthenticated(boolean authenticated);
+    void setUserName(String name);
 
     Integer getUserId();
     String getUserType();
     String getUserEmail();
+    String getUserName();
     boolean isAuthenticated();
 
     // Eventos (property changes) para autenticação

@@ -104,8 +104,8 @@ public class ClientService implements IClientService {
         pcs.addPropertyChangeListener(prop, l);
     }
 
-    public void removePropertyChangeListener(PropertyChangeListener l){
-        pcs.removePropertyChangeListener(l);
+    public void removePropertyChangeListener(String prop, PropertyChangeListener l){
+        pcs.removePropertyChangeListener(prop, l);
     }
 
     public void pushNotification(String text){

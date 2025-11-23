@@ -23,6 +23,7 @@ import pt.isec.common.model.question.Option;
 import pt.isec.common.model.question.OptionLetter;
 import pt.isec.common.model.question.Question;
 
+import java.beans.PropertyChangeListener;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,7 +34,7 @@ import java.util.List;
  * Todos os pedidos são enfileirados e as respostas são tratadas via
  * propriedades do ClientService.
  */
-public class StudentDashboardController {
+public class StudentDashboardController implements IDisposableProp {
     private final Stage stage;
     private final ClientManager clientManager;
     private final ClientApplication application;
@@ -41,7 +42,17 @@ public class StudentDashboardController {
     private final String userName;
     private final StudentDashboardView view;
 
+    // listeners finais — inicializados no construtor para garantir que 'view' está pronto
+    // (mantém referências fortes para poder remover no dispose())
+    private final PropertyChangeListener notificationListener;
+    private final PropertyChangeListener joinQuestionListener;
+    private final PropertyChangeListener submitAnswerOkListener;
+    private final PropertyChangeListener submitAnswerFailListener;
+    private final PropertyChangeListener listAnsweredListener;
+
     // Flags de espera
+    // Estas flags sincronizam pedidos assíncronos com as respostas recebidas
+    // (evitam que respostas antigas/processadas afectem estados futuros)
     private volatile boolean awaitingJoinQuestion = false;
     private volatile boolean awaitingSubmitAnswer = false;
     private volatile boolean awaitingHistory      = false;
@@ -59,8 +70,64 @@ public class StudentDashboardController {
         this.view          = new StudentDashboardView(userName, userEmail);
         view.createView();
         view.registerHandlers(this);
+
+        // inicializar listeners depois de `view` existir
+        this.notificationListener = evt -> {
+            String notification = (String) evt.getNewValue();
+            if (notification != null) {
+                Platform.runLater(() -> {
+                    view.addNotification(notification);
+                    view.update();
+                });
+            }
+        };
+
+        this.joinQuestionListener = evt -> {
+            if (!awaitingJoinQuestion) return;
+            awaitingJoinQuestion = false;
+            Question q = (Question) evt.getNewValue();
+            Platform.runLater(() -> {
+                if (q == null) {
+                    showErrorAlert("Código inválido ou pergunta não existente.");
+                } else {
+                    openQuestionDialog(q);
+                }
+            });
+        };
+
+        this.submitAnswerOkListener = evt -> {
+            if (!awaitingSubmitAnswer) return;
+            awaitingSubmitAnswer = false;
+            String msg = (String) evt.getNewValue();
+            Platform.runLater(() ->
+                    showSuccessAlert("Resposta submetida com sucesso!",
+                            msg == null ? "" : msg)
+            );
+        };
+
+        this.submitAnswerFailListener = evt -> {
+            if (!awaitingSubmitAnswer) return;
+            awaitingSubmitAnswer = false;
+            String msg = (String) evt.getNewValue();
+            Platform.runLater(() ->
+                    showErrorAlert("Falha ao submeter a resposta: " +
+                            (msg == null ? "" : msg))
+            );
+        };
+
+        this.listAnsweredListener = evt -> {
+            if (!awaitingHistory) return;
+            awaitingHistory = false;
+            @SuppressWarnings("unchecked")
+            List<Answer> history = (List<Answer>) evt.getNewValue();
+            Platform.runLater(() ->
+                    showHistoryDialog(history)
+            );
+        };
+
         setupPropertyChangeListeners();
     }
+
 
     /** Exibe o dashboard do estudante */
     public void show() {
@@ -70,86 +137,34 @@ public class StudentDashboardController {
 
     /** Regista listeners para eventos do ClientService */
     private void setupPropertyChangeListeners() {
+        // Regista os listeners no serviço; chamado no construtor depois de 'view' existir
         ClientService service = clientManager.getService();
 
-        // Notificações genéricas
-        service.addPropertyChangeListener(
-                ClientService.PROP_NOTIFICATION,
-                evt -> {
-                    String notification = (String) evt.getNewValue();
-                    if (notification != null) {
-                        Platform.runLater(() -> {
-                            view.addNotification(notification);
-                            view.update();
-                        });
-                    }
-                }
-        );
+        service.addPropertyChangeListener(ClientService.PROP_NOTIFICATION, notificationListener);
+        service.addPropertyChangeListener(ClientService.PROP_JOIN_QUESTION_RESPONSE, joinQuestionListener);
+        service.addPropertyChangeListener(ClientService.PROP_SUBMIT_ANSWER_OK, submitAnswerOkListener);
+        service.addPropertyChangeListener(ClientService.PROP_SUBMIT_ANSWER_FAIL, submitAnswerFailListener);
+        service.addPropertyChangeListener(ClientService.PROP_LIST_ANSWERED_RESPONSE, listAnsweredListener);
 
-        // Resposta ao join numa pergunta
-        service.addPropertyChangeListener(
-                ClientService.PROP_JOIN_QUESTION_RESPONSE,
-                evt -> {
-                    if (!awaitingJoinQuestion) return;
-                    awaitingJoinQuestion = false;
-                    Question q = (Question) evt.getNewValue();
-                    Platform.runLater(() -> {
-                        if (q == null) {
-                            showErrorAlert("Código inválido ou pergunta não existente.");
-                        } else {
-                            openQuestionDialog(q);
-                        }
-                    });
-                }
-        );
-
-        // Submissão de resposta bem sucedida
-        service.addPropertyChangeListener(
-                ClientService.PROP_SUBMIT_ANSWER_OK,
-                evt -> {
-                    if (!awaitingSubmitAnswer) return;
-                    awaitingSubmitAnswer = false;
-                    String msg = (String) evt.getNewValue();
-                    Platform.runLater(() ->
-                            showSuccessAlert("Resposta submetida com sucesso!",
-                                    msg == null ? "" : msg)
-                    );
-                }
-        );
-
-        // Falha na submissão de resposta
-        service.addPropertyChangeListener(
-                ClientService.PROP_SUBMIT_ANSWER_FAIL,
-                evt -> {
-                    if (!awaitingSubmitAnswer) return;
-                    awaitingSubmitAnswer = false;
-                    String msg = (String) evt.getNewValue();
-                    Platform.runLater(() ->
-                            showErrorAlert("Falha ao submeter a resposta: " +
-                                    (msg == null ? "" : msg))
-                    );
-                }
-        );
-
-        // Histórico de respostas devolvido
-        service.addPropertyChangeListener(
-                ClientService.PROP_LIST_ANSWERED_RESPONSE,
-                evt -> {
-                    if (!awaitingHistory) return;
-                    awaitingHistory = false;
-                    @SuppressWarnings("unchecked")
-                    List<Answer> history = (List<Answer>) evt.getNewValue();
-                    Platform.runLater(() ->
-                            showHistoryDialog(history)
-                    );
-                }
-        );
     }
+
+    @Override
+    public void dispose() {
+        // Remove os listeners do serviço para evitar memory-leaks quando o controller for descartado
+        ClientService service = clientManager.getService();
+        if (service == null) return;
+        service.removePropertyChangeListener(ClientService.PROP_NOTIFICATION, notificationListener);
+        service.removePropertyChangeListener(ClientService.PROP_JOIN_QUESTION_RESPONSE, joinQuestionListener);
+        service.removePropertyChangeListener(ClientService.PROP_SUBMIT_ANSWER_OK, submitAnswerOkListener);
+        service.removePropertyChangeListener(ClientService.PROP_SUBMIT_ANSWER_FAIL, submitAnswerFailListener);
+        service.removePropertyChangeListener(ClientService.PROP_LIST_ANSWERED_RESPONSE, listAnsweredListener);
+    }
+
 
     public void onOpenProfile() {
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Perfil do Estudante");
-        dialog.setHeaderText(null);
+        dialog.setHeaderText("Editar dados de perfil");
 
         VBox content = new VBox(15);
         content.setPadding(new Insets(20));
@@ -197,6 +212,7 @@ public class StudentDashboardController {
 
     /** Handler para solicitar uma pergunta (insere código e envia JoinQuestion) */
     public void onAnswerQuestion() {
+        // Pede ao utilizador o código da pergunta e inicia um pedido assíncrono
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle("Responder Pergunta");
         dialog.setHeaderText("Insira o código da pergunta");
@@ -233,20 +249,28 @@ public class StudentDashboardController {
 
     /** Abre a janela com a pergunta e envia a resposta seleccionada */
     private void openQuestionDialog(Question question) {
+        // Constrói diálogo com as opções da pergunta e submete a resposta escolhida
+        // 1) Obter o id do estudante (necessário para enviar a resposta ao servidor)
         Integer studentId = clientManager.getUserId();
         if (studentId == null) {
+            // Se não houver sessão válida, avisar e abortar
             showErrorAlert("Sessão inválida. Faça login novamente.");
             return;
         }
+
+        // 2) Cria o diálogo e preenche com enunciado e opções
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle("Pergunta - " + question.getAccessCode());
         dialog.setHeaderText(question.getStatement());
         VBox content = new VBox(15);
         content.setPadding(new Insets(20));
+
+        // 3) Prepara grupo de opções (radio buttons) - apenas uma escolha permitida
         ToggleGroup group = new ToggleGroup();
         List<RadioButton> radioButtons = new ArrayList<>();
         List<Option> opts = question.getOptions();
         for (Option opt : opts) {
+            // Cada opção mostra a letra e o texto: "A) Texto da opção"
             RadioButton rb = new RadioButton(opt.getLetter().name() + ") " + opt.getText());
             rb.setToggleGroup(group);
             rb.setFont(Font.font("Arial", 13));
@@ -256,29 +280,42 @@ public class StudentDashboardController {
         optionsBox.getChildren().addAll(radioButtons);
         content.getChildren().add(optionsBox);
         dialog.getDialogPane().setContent(content);
+
+        // 4) Botões OK/Cancelar — OK envia a resposta selecionada
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
         Button okButton = (Button) dialog.getDialogPane().lookupButton(ButtonType.OK);
         okButton.setText("Submeter Resposta");
+
+        // 5) Ao clicar em OK: transformar a escolha do radio-button numa OptionLetter
+        //    e enviar o pedido ao serviço de respostas. O campo awaitingSubmitAnswer
+        //    evita que respostas concorrentes sejam tratadas indevidamente.
         okButton.setOnAction(ev -> {
             if (group.getSelectedToggle() != null) {
                 RadioButton selected = (RadioButton) group.getSelectedToggle();
+                // O texto do radio começa com a letra seguida de ") ", por isso substring(0,1)
                 String answerLetter = selected.getText().substring(0, 1);
                 OptionLetter selectedOption = OptionLetter.valueOf(answerLetter);
+
+                // Marca que estamos à espera da resposta do servidor para esta submissão
                 awaitingSubmitAnswer = true;
                 try {
+                    // Envia o DTO com id da pergunta, id do estudante e opção escolhida
                     clientManager.getAnswerService().submitAnswer(
                             new SubmitAnswerDTO(question.getId(), studentId, selectedOption));
                 } catch (Exception ex) {
+                    // Se ocorrer erro local na chamada, limpa a flag e informa o utilizador
                     showErrorAlert("Erro ao submeter resposta: " + ex.getMessage());
                     awaitingSubmitAnswer = false;
                 }
             }
         });
+        // 6) Mostra o diálogo de forma modal até o utilizador fechar
         dialog.showAndWait();
     }
 
     /** Handler para solicitar o histórico de respostas */
     public void onShowHistory() {
+        // Inicia pedido para obter histórico; resposta chega em listAnsweredListener
         Integer studentId = clientManager.getUserId();
         if (studentId == null) {
             showErrorAlert("Sessão inválida. Faça login novamente.");
@@ -295,6 +332,7 @@ public class StudentDashboardController {
 
     /** Exibe histórico de respostas numa janela (ao receber LIST_ANSWERED_RESPONSE) */
     private void showHistoryDialog(List<Answer> history) {
+        // Mostra tabela com o histórico recebido; chamada via Platform.runLater
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Histórico de Respostas");
         dialog.setHeaderText("Perguntas respondidas");
@@ -302,33 +340,47 @@ public class StudentDashboardController {
         content.setPadding(new Insets(20));
         content.setPrefWidth(600);
         if (history == null || history.isEmpty()) {
+            // Caso vazio: mostra mensagem de que não há respostas
             Label noDataLabel = new Label("Ainda não respondeu a nenhuma pergunta.");
             noDataLabel.setFont(Font.font("Arial", 14));
             noDataLabel.setTextFill(Color.web("#7f8c8d"));
             content.getChildren().add(noDataLabel);
         } else {
+            // 1) Cria a tabela que vai mostrar data, pergunta, resposta e se foi correta
             TableView<Answer> table = new TableView<>();
             table.setPrefHeight(300);
+            // Nota: CONSTRAINED_RESIZE_POLICY ajusta colunas ao espaço disponível
             table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+
+            // 2) Coluna Data/Hora: formata a data do Answer para uma string legível
             TableColumn<Answer, String> dateCol = new TableColumn<>("Data/Hora");
             dateCol.setCellValueFactory(data -> new SimpleStringProperty(
                     data.getValue().getAnsweredAt().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"))));
+
+            // 3) Coluna Pergunta: mostra o enunciado se disponível, senão o id
             TableColumn<Answer, String> questionCol = new TableColumn<>("Pergunta");
             questionCol.setCellValueFactory(data -> new SimpleStringProperty(
                     data.getValue().getQuestionStatement() != null
                             ? data.getValue().getQuestionStatement()
                             : String.valueOf(data.getValue().getQuestionId())
             ));
+
+            // 4) Coluna Resposta: mostra a letra seleccionada
             TableColumn<Answer, String> answerCol = new TableColumn<>("Resposta");
             answerCol.setCellValueFactory(data -> new SimpleStringProperty(
                     data.getValue().getSelectedOption().name()));
+
+            // 5) Coluna Correta?: converte boolean para "Sim"/"Não"
             TableColumn<Answer, String> resultCol = new TableColumn<>("Correta?");
             resultCol.setCellValueFactory(data -> new SimpleStringProperty(
                     data.getValue().isCorrect() ? "Sim" : "Não"));
+
+            // 6) Adiciona colunas e popula a tabela com os dados recebidos
             table.getColumns().addAll(dateCol, questionCol, answerCol, resultCol);
             table.getItems().addAll(history);
             content.getChildren().add(table);
         }
+        // 7) Mostra o diálogo com botão de fechar
         dialog.getDialogPane().setContent(content);
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
         dialog.showAndWait();

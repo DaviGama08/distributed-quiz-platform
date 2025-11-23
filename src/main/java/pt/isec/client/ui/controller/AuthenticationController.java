@@ -10,12 +10,14 @@ import pt.isec.client.ui.view.AuthenticationView;
 import pt.isec.common.dto.auth.AuthResponseDTO;
 
 import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
 
 /**
  * Controlador da interface de autenticação. Contém lógica de validação,
  * chamadas aos serviços de autenticação e navegação.
  */
-public class AuthenticationController {
+public class AuthenticationController implements IDisposableProp {
+
     private enum Mode { LOGIN, REGISTER }
 
     private static final Color BLUE = Color.web("#3498db");
@@ -28,6 +30,13 @@ public class AuthenticationController {
 
     private Mode mode = Mode.LOGIN;
     private volatile boolean authBusy = false;
+
+    // listeners guardados como campos para remoção posterior
+    private final PropertyChangeListener authListener = this::handleAuthenticationChange;
+    private final PropertyChangeListener loginOkListener = this::handleLoginSuccessResponse;
+    private final PropertyChangeListener loginFailListener = this::handleLoginFailResponse;
+    private final PropertyChangeListener registerOkListener = this::handleRegisterOkResponse;
+    private final PropertyChangeListener connectionStatusListener = this::handleConnectionStatusChange;
 
     public AuthenticationController(Stage stage, ClientManager clientManager, ClientApplication application) {
         this.stage = stage;
@@ -44,19 +53,19 @@ public class AuthenticationController {
         ClientService service = clientManager.getService();
 
         // Escuta do estado autenticado
-        service.addPropertyChangeListener(ClientService.PROP_AUTHENTICATED, this::handleAuthenticationChange);
+        service.addPropertyChangeListener(ClientService.PROP_AUTHENTICATED, authListener);
 
         // Sucesso no login
-        service.addPropertyChangeListener(ClientService.PROP_LOGIN_OK, this::handleLoginSuccessResponse);
+        service.addPropertyChangeListener(ClientService.PROP_LOGIN_OK, loginOkListener);
 
         // Falha no login OU erro genérico
-        service.addPropertyChangeListener(ClientService.PROP_LOGIN_FAIL, this::handleLoginFailResponse);
+        service.addPropertyChangeListener(ClientService.PROP_LOGIN_FAIL, loginFailListener);
 
         // Sucesso no registo
-        service.addPropertyChangeListener(ClientService.PROP_REGISTER_OK, this::handleRegisterOkResponse);
+        service.addPropertyChangeListener(ClientService.PROP_REGISTER_OK, registerOkListener);
 
         // Estados da ligação (diretoria / servidor)
-        service.addPropertyChangeListener(ClientService.PROP_CONNECTION_STATUS, this::handleConnectionStatusChange);
+        service.addPropertyChangeListener(ClientService.PROP_CONNECTION_STATUS, connectionStatusListener);
     }
 
     private void handleAuthenticationChange(PropertyChangeEvent evt) {
@@ -337,4 +346,14 @@ public class AuthenticationController {
         stage.setScene(view.getScene());
     }
 
+    @Override
+    public void dispose() {
+        ClientService service = clientManager.getService();
+        // remover os listeners adicionados, evitando memory leaks
+        service.removePropertyChangeListener(ClientService.PROP_AUTHENTICATED, authListener);
+        service.removePropertyChangeListener(ClientService.PROP_LOGIN_OK, loginOkListener);
+        service.removePropertyChangeListener(ClientService.PROP_LOGIN_FAIL, loginFailListener);
+        service.removePropertyChangeListener(ClientService.PROP_REGISTER_OK, registerOkListener);
+        service.removePropertyChangeListener(ClientService.PROP_CONNECTION_STATUS, connectionStatusListener);
+    }
 }

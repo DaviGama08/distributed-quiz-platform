@@ -2,6 +2,7 @@ package pt.isec.client.ui.controller;
 
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
+import javafx.fxml.Initializable;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
@@ -25,7 +26,9 @@ import pt.isec.common.model.question.Option;
 import pt.isec.common.model.question.OptionLetter;
 import pt.isec.common.model.question.Question;
 
+import java.beans.PropertyChangeListener;
 import java.io.*;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.LocalDate;
@@ -39,14 +42,24 @@ import java.util.*;
  * e visualização de respostas de perguntas em regime assíncrono.
  * Todos os pedidos ao servidor são enfileirados; as respostas são tratadas
  * por eventos (property changes) de ClientService.
+ *
+ * Esta classe implementa IDisposableProps para garantir que os listeners
+ * são removidos em dispose() e evitar memory‑leaks.
  */
-public class TeacherDashboardController {
+public class TeacherDashboardController implements IDisposableProp {
     private final Stage stage;
     private final ClientManager clientManager;
     private final ClientApplication application;
     private final String userEmail;
     private final String userName;
     private final TeacherDashboardView view;
+
+    // listeners finais — inicializados no construtor para garantir que 'view' está pronto
+    // (mantém referências fortes para poder remover no dispose())
+    private final PropertyChangeListener notificationListener;
+    private final PropertyChangeListener createQuestionListener;
+    private final PropertyChangeListener listQuestionsListener;
+    private final PropertyChangeListener viewAnswersListener;
 
     // Guarda a última lista de perguntas (actualizada ao receber LIST_QUESTIONS_RESPONSE)
     private final List<Question> lastQuestions = new ArrayList<>();
@@ -79,6 +92,67 @@ public class TeacherDashboardController {
         this.view          = new TeacherDashboardView(userName, userEmail);
         view.createView();
         view.registerHandlers(this);
+
+        // inicializa listeners depois de `view` existir
+
+        this.notificationListener = evt -> {
+            String notification = (String) evt.getNewValue();
+            if (notification != null) {
+                Platform.runLater(() -> {
+                    view.addNotification(notification);
+                    view.update();
+                });
+            }
+        };
+
+        this.createQuestionListener = evt -> {
+            if (!awaitingCreateQuestion) return;
+            awaitingCreateQuestion = false;
+            CreateQuestionResponseDTO resp = (CreateQuestionResponseDTO) evt.getNewValue();
+            Platform.runLater(() -> {
+                showSuccessAlert("Pergunta Criada",
+                        "A pergunta foi criada com sucesso!\nCódigo: " +
+                                (resp != null ? resp.accessCode() : ""));
+                refreshQuestions(); // volta a pedir TODAS as perguntas
+            });
+        };
+
+        this.listQuestionsListener = evt -> {
+            if (!awaitingListQuestions) return;
+            awaitingListQuestions = false;
+            @SuppressWarnings("unchecked")
+            List<Question> list = (List<Question>) evt.getNewValue();
+
+            Platform.runLater(() -> {
+                lastQuestions.clear();
+                if (list != null) lastQuestions.addAll(list);
+                // actualiza a tabela do diálogo, se existir, aplicando filtro apenas no cliente
+                refreshQuestionsTableView();
+                // actualiza métricas do dashboard SEM depender do filtro
+                updateDashboardStats();
+            });
+        };
+
+        this.viewAnswersListener = evt -> {
+            if (!awaitingViewAnswers) return;
+            awaitingViewAnswers = false;
+            @SuppressWarnings("unchecked")
+            List<Answer> answers = (List<Answer>) evt.getNewValue();
+            final Question q = pendingViewQuestion;
+            pendingViewQuestion = null;
+            Platform.runLater(() -> {
+                if (q != null) {
+                    // guarda nº respostas desta pergunta
+                    answersCountByQuestion.put(q.getId(), answers == null ? 0 : answers.size());
+                    updateDashboardStats();
+                    showAnswersDetails(q, answers);
+                } else {
+                    showErrorAlert("Erro", "Pergunta não encontrada.");
+                }
+            });
+        };
+
+
         setupPropertyChangeListeners();
     }
 
@@ -93,77 +167,32 @@ public class TeacherDashboardController {
         ClientService service = clientManager.getService();
 
         // Notificações genéricas do servidor
-        service.addPropertyChangeListener(
-                ClientService.PROP_NOTIFICATION,
-                evt -> {
-                    String notification = (String) evt.getNewValue();
-                    if (notification != null) {
-                        Platform.runLater(() -> {
-                            view.addNotification(notification);
-                            view.update();
-                        });
-                    }
-                }
-        );
+        service.addPropertyChangeListener(ClientService.PROP_NOTIFICATION, notificationListener);
 
         // Resposta à criação de pergunta
-        service.addPropertyChangeListener(
-                ClientService.PROP_CREATE_QUESTION_RESPONSE,
-                evt -> {
-                    if (!awaitingCreateQuestion) return;
-                    awaitingCreateQuestion = false;
-                    CreateQuestionResponseDTO resp = (CreateQuestionResponseDTO) evt.getNewValue();
-                    Platform.runLater(() -> {
-                        showSuccessAlert("Pergunta Criada",
-                                "A pergunta foi criada com sucesso!\nCódigo: " +
-                                        (resp != null ? resp.accessCode() : ""));
-                        refreshQuestions(); // volta a pedir TODAS as perguntas
-                    });
-                }
-        );
+        service.addPropertyChangeListener(ClientService.PROP_CREATE_QUESTION_RESPONSE, createQuestionListener);
 
         // Lista de perguntas devolvida
-        service.addPropertyChangeListener(
-                ClientService.PROP_LIST_QUESTIONS_RESPONSE,
-                evt -> {
-                    if (!awaitingListQuestions) return;
-                    awaitingListQuestions = false;
-                    List<Question> list = (List<Question>) evt.getNewValue();
-
-                    Platform.runLater(() -> {
-                        lastQuestions.clear();
-                        if (list != null) lastQuestions.addAll(list);
-                        // actualiza a tabela do diálogo, se existir, aplicando filtro apenas no cliente
-                        refreshQuestionsTableView();
-                        // actualiza métricas do dashboard SEM depender do filtro
-                        updateDashboardStats();
-                    });
-                }
-        );
-
+        service.addPropertyChangeListener(ClientService.PROP_LIST_QUESTIONS_RESPONSE, listQuestionsListener);
 
         // Respostas de uma pergunta (vista do docente) devolvidas
-        service.addPropertyChangeListener(
-                ClientService.PROP_VIEW_ANSWERS_RESPONSE,
-                evt -> {
-                    if (!awaitingViewAnswers) return;
-                    awaitingViewAnswers = false;
-                    List<Answer> answers = (List<Answer>) evt.getNewValue();
-                    final Question q = pendingViewQuestion;
-                    pendingViewQuestion = null;
-                    Platform.runLater(() -> {
-                        if (q != null) {
-                            // guarda nº respostas desta pergunta
-                            answersCountByQuestion.put(q.getId(), answers == null ? 0 : answers.size());
-                            updateDashboardStats();
-                            showAnswersDetails(q, answers);
-                        } else {
-                            showErrorAlert("Erro", "Pergunta não encontrada.");
-                        }
-                    });
-                }
-        );
+        service.addPropertyChangeListener(ClientService.PROP_VIEW_ANSWERS_RESPONSE, viewAnswersListener);
+    }
 
+    /** Remove listeners do ClientService para evitar memory‑leaks.
+     *  Deve ser chamado quando o controller deixar de ser usado. */
+    @Override
+    public void dispose() {
+        ClientService service = clientManager.getService();
+        if (service == null) return;
+        try {
+            service.removePropertyChangeListener(ClientService.PROP_NOTIFICATION, notificationListener);
+            service.removePropertyChangeListener(ClientService.PROP_CREATE_QUESTION_RESPONSE, createQuestionListener);
+            service.removePropertyChangeListener(ClientService.PROP_LIST_QUESTIONS_RESPONSE, listQuestionsListener);
+            service.removePropertyChangeListener(ClientService.PROP_VIEW_ANSWERS_RESPONSE, viewAnswersListener);
+        } catch (Exception ignored) {
+            // garantir que dispose é robusto mesmo que o serviço já tenha sido fechado
+        }
     }
 
     private void updateDashboardStats() {
@@ -954,4 +983,5 @@ public class TeacherDashboardController {
         }
         return null;
     }
+
 }

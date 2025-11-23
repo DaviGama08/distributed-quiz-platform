@@ -70,10 +70,12 @@ public class ResponseHandlerThread implements Runnable{
             /* ===== ACK/NACK/ERROR genéricos ===== */
             case ACK -> {
                 System.out.println("[ResponseHandler] Operation acknowledged");
-                // detectar respostas específicas a operações (por convenção: edit-ok)
+                // detectar respostas específicas a operações (por convenção: edit-ok, delete-ok)
                 if (response.getData() instanceof String s) {
                     if ("edit-ok".equalsIgnoreCase(s)) {
                         tInfo.setPropEditQuestionResponse("edit-ok");
+                    } else if ("delete-ok".equalsIgnoreCase(s)) {
+                        tInfo.setPropDeleteQuestionResponse("delete-ok");
                     }
                 }
             }
@@ -86,6 +88,8 @@ public class ResponseHandlerThread implements Runnable{
                     } else if ("edit-fail".equalsIgnoreCase(s)) {
                         // notifica falha na edição
                         tInfo.setPropEditQuestionResponse("edit-fail");
+                    } else if ("delete-fail".equalsIgnoreCase(s)) {
+                        tInfo.setPropDeleteQuestionResponse("delete-fail");
                     }
                 }
             }
@@ -125,14 +129,25 @@ public class ResponseHandlerThread implements Runnable{
 
             case SUBMIT_OK -> {
                 System.out.println("[ResponseHandler] Answer submitted successfully");
-                String msg = response.getData() instanceof String s ? s : "answer-ok";
+                String msg = response.getData() instanceof String s ? s : "Resposta submetida com sucesso!";
                 tInfo.setPropSubmitAnswerOk(msg);
             }
 
             case SUBMIT_FAIL -> {
                 System.err.println("[ResponseHandler] Failed to submit answer");
-                String msg = response.getData() instanceof String s ? s : "answer-fail";
+                String msg = response.getData() instanceof String s ? s : "Submissão da resposta sem sucesso!";
                 tInfo.setPropSubmitAnswerFail(msg);
+            }
+
+            case ANSWER_SUBMITTED -> {
+                System.out.println("[ResponseHandler] Notification: answer submitted");
+                // payload expected to be Integer questionId
+                Object d = response.getData();
+                if (d instanceof Integer qid) {
+                    tInfo.setPropAnswerSubmitted(qid);
+                } else if (d instanceof String s) {
+                    try { tInfo.setPropAnswerSubmitted(Integer.parseInt(s)); } catch (Exception ignored) {}
+                }
             }
 
             case VIEW_ANSWERS_RESPONSE -> {

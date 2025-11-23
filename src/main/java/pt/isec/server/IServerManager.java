@@ -47,4 +47,9 @@ public interface IServerManager {
     void unregisterLogin(long userId);
 
     AuthService getAuthService();
+
+    // Gerir conexões ativas de clientes: registar / remover e enviar mensagens a um utilizador específico
+    void registerClientConnection(long userId, pt.isec.server.NetworkTcpConnection conn);
+    void unregisterClientConnection(long userId);
+    void sendToUser(long userId, pt.isec.common.messages.TcpMessage<?> msg);
 }

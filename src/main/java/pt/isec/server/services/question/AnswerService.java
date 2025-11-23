@@ -6,6 +6,8 @@ import pt.isec.server.IServerManager;
 import pt.isec.server.db.DbCommands;
 import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.OptionLetter;
+import pt.isec.common.messages.TcpMessage;
+import pt.isec.common.messages.MessageType;
 
 import java.sql.DriverManager;
 import java.time.LocalDateTime;
@@ -59,6 +61,27 @@ public class AnswerService {
                         studentId + ", " + questionId + ", '" + selected.name() + "', '" + now + "');"
         );
         server.setDbVersion(server.dbVersion() + 1);
+
+        // Tenta notificar o docente proprietário da pergunta (se estiver conectado)
+        try {
+            Map<String, Object> owner = dbCommands.selectOne("SELECT teacher_id FROM question WHERE id = ?", questionId);
+            if (owner != null && owner.get("teacher_id") != null) {
+                Integer teacherId = ((Number) owner.get("teacher_id")).intValue();
+                // só tenta notificar se o docente estiver autenticado (activeSessions)
+                if (server.isUserLogged(teacherId.longValue())) {
+                    // envia notificação ao docente com o id da pergunta
+                    TcpMessage<Integer> notify = new TcpMessage<>(MessageType.ANSWER_SUBMITTED, questionId, Integer.class);
+                    server.sendToUser(teacherId.longValue(), notify);
+                } else {
+                    // docente não ligado — apenas regista informação de log; o docente verá os updates quando fizer refresh
+                    System.out.println("[AnswerService] Teacher " + teacherId + " not logged; skipping live notify for question " + questionId);
+                }
+            }
+        } catch (Exception e) {
+            // falha a notificar não deve impedir o sucesso da submissão
+            System.err.println("[AnswerService] Failed to notify teacher: " + e.getMessage());
+        }
+
         return true;
     }
 
@@ -159,4 +182,3 @@ public class AnswerService {
         }
     }
 }
-

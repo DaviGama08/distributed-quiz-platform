@@ -55,6 +55,8 @@ public class ClientService implements IClientService {
     public static final String PROP_SUBMIT_ANSWER_FAIL       = "submitAnswerFail";
     public static final String PROP_VIEW_ANSWERS_RESPONSE    = "viewAnswersResponse";
     public static final String PROP_LIST_ANSWERED_RESPONSE   = "listAnsweredResponse";
+    public static final String PROP_ANSWER_SUBMITTED = "answerSubmitted";
+    public static final String PROP_DELETE_QUESTION_RESPONSE = "deleteQuestionResponse";
 
     private final PropertyChangeSupport pcs = new PropertyChangeSupport(this);
 
@@ -413,5 +415,15 @@ public class ClientService implements IClientService {
     @Override
     public void setPropListAnsweredResponse(List<Answer> answers){
         pcs.firePropertyChange(PROP_LIST_ANSWERED_RESPONSE, null, answers);
+    }
+
+    @Override
+    public void setPropAnswerSubmitted(Integer questionId) {
+        pcs.firePropertyChange(PROP_ANSWER_SUBMITTED, null, questionId);
+    }
+
+    @Override
+    public void setPropDeleteQuestionResponse(String message) {
+        pcs.firePropertyChange(PROP_DELETE_QUESTION_RESPONSE, null, message);
     }
 }

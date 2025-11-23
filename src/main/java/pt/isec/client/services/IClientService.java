@@ -61,4 +61,8 @@ public interface IClientService {
     void setPropSubmitAnswerFail(String message);
     void setPropViewAnswersResponse(List<Answer> answers);
     void setPropListAnsweredResponse(List<Answer> answers);
+    // Notificação ao docente de que uma resposta foi submetida (payload: questionId Integer)
+    void setPropAnswerSubmitted(Integer questionId);
+    // Resposta à eliminação de pergunta (ack/nack) - payload: String message
+    void setPropDeleteQuestionResponse(String message);
 }

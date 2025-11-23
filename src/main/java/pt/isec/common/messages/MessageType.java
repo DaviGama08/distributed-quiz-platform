@@ -37,6 +37,9 @@ public enum MessageType {
     LIST_ANSWERED_QUESTIONS,
     LIST_ANSWERED_RESPONSE,
 
+    // notificação ao docente de resposta submetida
+    ANSWER_SUBMITTED,
+
     // Replicação incremental via SQL (heartbeat)
     SQL_UPDATE,
     DB_REQUEST_COPY

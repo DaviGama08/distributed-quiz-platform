@@ -275,9 +275,9 @@ public class TeacherDashboardView {
         listQuestionsBtn.setOnAction(e -> controller.onListQuestions());
         logoutBtn.setOnAction(e -> controller.onLogout());
 
-        // clicar no cartão de perfil abre o modal
+        // clicar no cartão de perfil abre o modal de edição de perfil
         if (profileCard != null) {
-            profileCard.setOnMouseClicked(e -> controller.onOpenProfile());
+            profileCard.setOnMouseClicked(e -> controller.onEditProfile());
         }
     }
 

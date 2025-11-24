@@ -18,6 +18,7 @@ import pt.isec.client.services.ClientService;
 import pt.isec.client.ui.view.StudentDashboardView;
 import pt.isec.common.dto.answer.SubmitAnswerDTO;
 import pt.isec.common.dto.question.JoinQuestionDTO;
+import pt.isec.common.dto.auth.UpdateStudentDTO;
 import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.Option;
 import pt.isec.common.model.question.OptionLetter;
@@ -49,6 +50,7 @@ public class StudentDashboardController implements IDisposableProp {
     private final PropertyChangeListener submitAnswerOkListener;
     private final PropertyChangeListener submitAnswerFailListener;
     private final PropertyChangeListener listAnsweredListener;
+    private final PropertyChangeListener updateProfileListener;
 
     // Flags de espera
     // Estas flags sincronizam pedidos assíncronos com as respostas recebidas
@@ -127,6 +129,18 @@ public class StudentDashboardController implements IDisposableProp {
             );
         };
 
+        this.updateProfileListener = evt -> {
+            Object v = evt.getNewValue();
+            String msg = v == null ? null : v.toString();
+            Platform.runLater(() -> {
+                if ("ok".equalsIgnoreCase(msg)) {
+                    showSuccessAlert("Perfil atualizado", "Os dados do perfil foram atualizados com sucesso.");
+                } else {
+                    showErrorAlert("Falha ao actualizar perfil: " + (msg == null ? "Erro desconhecido" : msg));
+                }
+            });
+        };
+
         setupPropertyChangeListeners();
     }
 
@@ -147,6 +161,7 @@ public class StudentDashboardController implements IDisposableProp {
         service.addPropertyChangeListener(ClientService.PROP_SUBMIT_ANSWER_OK, submitAnswerOkListener);
         service.addPropertyChangeListener(ClientService.PROP_SUBMIT_ANSWER_FAIL, submitAnswerFailListener);
         service.addPropertyChangeListener(ClientService.PROP_LIST_ANSWERED_RESPONSE, listAnsweredListener);
+        service.addPropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_RESPONSE, updateProfileListener);
 
     }
 
@@ -160,6 +175,7 @@ public class StudentDashboardController implements IDisposableProp {
         service.removePropertyChangeListener(ClientService.PROP_SUBMIT_ANSWER_OK, submitAnswerOkListener);
         service.removePropertyChangeListener(ClientService.PROP_SUBMIT_ANSWER_FAIL, submitAnswerFailListener);
         service.removePropertyChangeListener(ClientService.PROP_LIST_ANSWERED_RESPONSE, listAnsweredListener);
+        service.removePropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_RESPONSE, updateProfileListener);
 
         // garantir que o indicador de loading do view fica escondido (caso o controller seja descartado enquanto aguardava)
         try { view.hideLoading(); } catch (Exception ignored) {}
@@ -403,30 +419,55 @@ public class StudentDashboardController implements IDisposableProp {
         VBox content = new VBox(10);
         content.setPadding(new Insets(20));
 
-        Label emailLabel = new Label("Email: " + userEmail);
+        Label numberLabel = new Label("Número de estudante:");
+        TextField numberField = new TextField();
+        numberField.setPromptText("Número de estudante");
+        numberField.setText(String.valueOf(clientManager.getUserId()));
 
-        Label nameLabel = new Label("Nome a apresentar:");
+        Label nameLabel = new Label("Nome:");
         TextField nameField = new TextField();
-        nameField.setPromptText("Ex: Ana Silva");
-        nameField.setText(studentDisplayName);
+        nameField.setText(userName != null ? userName : "");
 
-        content.getChildren().addAll(emailLabel, nameLabel, nameField);
+        Label emailLabel = new Label("Email:");
+        TextField emailField = new TextField();
+        emailField.setText(userEmail != null ? userEmail : "");
+
+        Label oldPwLabel = new Label("Password atual (só necessária se pretende alterar):");
+        PasswordField oldPwField = new PasswordField();
+
+        Label newPwLabel = new Label("Nova password (deixe vazio para não alterar):");
+        PasswordField newPwField = new PasswordField();
+
+        content.getChildren().addAll(numberLabel, numberField, nameLabel, nameField, emailLabel, emailField,
+                oldPwLabel, oldPwField, newPwLabel, newPwField);
 
         dialog.getDialogPane().setContent(content);
-
         ButtonType saveButtonType = new ButtonType("Guardar", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CLOSE);
 
         dialog.showAndWait().ifPresent(bt -> {
             if (bt == saveButtonType) {
-                String newName = nameField.getText().trim();
-                if (newName.isEmpty()) {
-                    showErrorAlert("O nome não pode estar vazio.");
-                } else {
-                    studentDisplayName = newName;
-                    view.setWelcomeName(studentDisplayName);
-                    showSuccessAlert("Perfil atualizado",
-                            "Os dados de perfil foram actualizados para esta sessão.");
+                try {
+                    Integer number = Integer.parseInt(numberField.getText().trim());
+                    String name = nameField.getText().trim();
+                    String email = emailField.getText().trim();
+                    String oldPw = oldPwField.getText();
+                    String newPw = newPwField.getText();
+
+                    if (name.isBlank() || email.isBlank()) {
+                        showErrorAlert("Nome e email são obrigatórios.");
+                        return;
+                    }
+
+                    UpdateStudentDTO dto = new UpdateStudentDTO(clientManager.getUserId(), number, name, email,
+                            (oldPw == null || oldPw.isBlank()) ? null : oldPw,
+                            (newPw == null || newPw.isBlank()) ? null : newPw);
+                    clientManager.getAuthService().updateStudent(dto);
+                    // feedback será dado pelo updateProfileListener
+                } catch (NumberFormatException nfe) {
+                    showErrorAlert("Número de estudante inválido.");
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
                 }
             }
         });

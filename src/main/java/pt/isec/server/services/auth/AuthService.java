@@ -203,6 +203,92 @@ public class AuthService implements IAuthService {
             throw new RuntimeException(e);
         }
     }
+
+    @Override
+    public void updateStudent(UpdateStudentDTO dto) throws Exception {
+        if (dto == null) throw new IllegalArgumentException("Dados em falta");
+        Integer userId = dto.userId();
+        Integer studentNumber = dto.studentNumber();
+        String name = dto.name();
+        String email = dto.email();
+        String oldPw = dto.oldPassword();
+        String newPw = dto.newPassword();
+
+        if (studentNumber == null || studentNumber <= 0) throw new IllegalArgumentException("Número de estudante inválido");
+        if (!isValidName(name)) throw new IllegalArgumentException("Nome inválido");
+        if (!isValidEmail(email)) throw new IllegalArgumentException("Email inválido");
+
+        // Verificar se email já existe noutro registo (teacher OR student with different student_number)
+        Map<String,Object> exists = dbCommands.selectOne(
+                "SELECT student_number FROM student WHERE email = ? LIMIT 1", email
+        );
+        if (exists != null) {
+            Integer other = ((Number) exists.get("student_number")).intValue();
+            if (!other.equals(studentNumber)) throw new IllegalArgumentException("Email já existe");
+        }
+        Map<String,Object> teacherWithEmail = dbCommands.selectOne(
+                "SELECT id FROM teacher WHERE email = ? LIMIT 1", email
+        );
+        if (teacherWithEmail != null) throw new IllegalArgumentException("Email já existe");
+
+        // Verificar se student_number colide com outro student (only if changing number)
+        Map<String,Object> rec = dbCommands.selectOne("SELECT student_number FROM student WHERE student_number = ?", studentNumber);
+        // If rec null => odd, but we assume student exists. We'll update by student_number.
+
+        // Se alterar password, verificar oldPw
+        if (newPw != null && !newPw.isBlank()) {
+            if (!isValidPassword(newPw)) throw new IllegalArgumentException("Nova password inválida");
+            Map<String,Object> current = dbCommands.selectOne("SELECT password_hash FROM student WHERE student_number = ?", studentNumber);
+            if (current == null) throw new IllegalArgumentException("Utilizador não encontrado");
+            String stored = (String) current.get("password_hash");
+            if (oldPw == null || !verifyPassword(oldPw, stored)) throw new IllegalArgumentException("Password antiga incorreta");
+            String newHash = hashPassword(newPw);
+            dbCommands.executeUpdate("UPDATE student SET password_hash = ?, name = ?, email = ? WHERE student_number = ?",
+                    newHash, name, email, studentNumber);
+        } else {
+            // apenas atualizar nome/email
+            dbCommands.executeUpdate("UPDATE student SET name = ?, email = ? WHERE student_number = ?",
+                    name, email, studentNumber);
+        }
+    }
+
+    @Override
+    public void updateTeacher(UpdateTeacherDTO dto) throws Exception {
+        if (dto == null) throw new IllegalArgumentException("Dados em falta");
+        Integer teacherId = dto.teacherId();
+        String name = dto.name();
+        String email = dto.email();
+        String oldPw = dto.oldPassword();
+        String newPw = dto.newPassword();
+
+        if (teacherId == null || teacherId <= 0) throw new IllegalArgumentException("ID do docente inválido");
+        if (!isValidName(name)) throw new IllegalArgumentException("Nome inválido");
+        if (!isValidEmail(email)) throw new IllegalArgumentException("Email inválido");
+
+        // Verificar email não exista noutro teacher or student
+        Map<String,Object> exists = dbCommands.selectOne("SELECT id FROM teacher WHERE email = ? LIMIT 1", email);
+        if (exists != null) {
+            int other = ((Number) exists.get("id")).intValue();
+            if (other != teacherId.intValue()) throw new IllegalArgumentException("Email já existe");
+        }
+        Map<String,Object> studentWithEmail = dbCommands.selectOne("SELECT student_number FROM student WHERE email = ? LIMIT 1", email);
+        if (studentWithEmail != null) throw new IllegalArgumentException("Email já existe");
+
+        if (newPw != null && !newPw.isBlank()) {
+            if (!isValidPassword(newPw)) throw new IllegalArgumentException("Nova password inválida");
+            Map<String,Object> current = dbCommands.selectOne("SELECT password_hash FROM teacher WHERE id = ?", teacherId);
+            if (current == null) throw new IllegalArgumentException("Utilizador não encontrado");
+            String stored = (String) current.get("password_hash");
+            if (oldPw == null || !verifyPassword(oldPw, stored)) throw new IllegalArgumentException("Password antiga incorreta");
+            String newHash = hashPassword(newPw);
+            dbCommands.executeUpdate("UPDATE teacher SET password_hash = ?, name = ?, email = ? WHERE id = ?",
+                    newHash, name, email, teacherId);
+        } else {
+            dbCommands.executeUpdate("UPDATE teacher SET name = ?, email = ? WHERE id = ?",
+                    name, email, teacherId);
+        }
+    }
+
     /* --------------------- Métodos auxiliares ------------------------- */
 
     private String newSessionId() {

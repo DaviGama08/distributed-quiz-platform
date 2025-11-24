@@ -76,6 +76,8 @@ public class ResponseHandlerThread implements Runnable{
                         tInfo.setPropEditQuestionResponse("edit-ok");
                     } else if ("delete-ok".equalsIgnoreCase(s)) {
                         tInfo.setPropDeleteQuestionResponse("delete-ok");
+                    } else if ("update-ok".equalsIgnoreCase(s) || "update-profile-ok".equalsIgnoreCase(s)) {
+                        tInfo.setPropUpdateProfileResponse("ok");
                     }
                 }
             }
@@ -90,6 +92,9 @@ public class ResponseHandlerThread implements Runnable{
                         tInfo.setPropEditQuestionResponse("edit-fail");
                     } else if ("delete-fail".equalsIgnoreCase(s)) {
                         tInfo.setPropDeleteQuestionResponse("delete-fail");
+                    } else {
+                        // fallback: trata como resposta de update profile fail
+                        tInfo.setPropUpdateProfileResponse(s);
                     }
                 }
             }

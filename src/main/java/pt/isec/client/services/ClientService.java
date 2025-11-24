@@ -57,6 +57,7 @@ public class ClientService implements IClientService {
     public static final String PROP_LIST_ANSWERED_RESPONSE   = "listAnsweredResponse";
     public static final String PROP_ANSWER_SUBMITTED = "answerSubmitted";
     public static final String PROP_DELETE_QUESTION_RESPONSE = "deleteQuestionResponse";
+    public static final String PROP_UPDATE_PROFILE_RESPONSE   = "updateProfileResponse";
 
     private final PropertyChangeSupport pcs = new PropertyChangeSupport(this);
 
@@ -425,5 +426,10 @@ public class ClientService implements IClientService {
     @Override
     public void setPropDeleteQuestionResponse(String message) {
         pcs.firePropertyChange(PROP_DELETE_QUESTION_RESPONSE, null, message);
+    }
+
+    @Override
+    public void setPropUpdateProfileResponse(String message) {
+        pcs.firePropertyChange(PROP_UPDATE_PROFILE_RESPONSE, null, message);
     }
 }

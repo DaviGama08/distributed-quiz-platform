@@ -65,4 +65,6 @@ public interface IClientService {
     void setPropAnswerSubmitted(Integer questionId);
     // Resposta à eliminação de pergunta (ack/nack) - payload: String message
     void setPropDeleteQuestionResponse(String message);
+    // Resposta a atualização de perfil (payload: String message) - pode ser 'ok' ou erro message
+    void setPropUpdateProfileResponse(String message);
 }

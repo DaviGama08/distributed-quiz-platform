@@ -20,6 +20,7 @@ import pt.isec.client.services.ClientService;
 import pt.isec.client.ui.view.TeacherDashboardView;
 import pt.isec.common.dto.answer.ViewAnswersDTO;
 import pt.isec.common.dto.question.*;
+import pt.isec.common.dto.auth.UpdateTeacherDTO;
 import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.Option;
 import pt.isec.common.model.question.OptionLetter;
@@ -61,6 +62,7 @@ public class TeacherDashboardController implements IDisposableProp {
     private final PropertyChangeListener answerSubmittedListener;
     private final PropertyChangeListener joinQuestionListener;
     private final PropertyChangeListener updateQuestionListener;
+    private final PropertyChangeListener updateProfileListener;
     private volatile boolean awaitingJoinQuestion = false;
     private volatile boolean awaitingUpdateQuestion = false;
 
@@ -285,6 +287,18 @@ public class TeacherDashboardController implements IDisposableProp {
             });
         };
 
+        this.updateProfileListener = evt -> {
+            Object v = evt.getNewValue();
+            String msg = v == null ? null : v.toString();
+            Platform.runLater(() -> {
+                if ("ok".equalsIgnoreCase(msg)) {
+                    showSuccessAlert("Perfil atualizado", "Os dados do perfil foram atualizados com sucesso.");
+                } else {
+                    showErrorAlert("Falha ao actualizar perfil: ", (msg == null ? "Erro desconhecido" : msg));
+                }
+            });
+        };
+
         setupPropertyChangeListeners();
 
         // Pedir imediatamente a lista de perguntas para popular métricas ao abrir o dashboard
@@ -333,6 +347,7 @@ public class TeacherDashboardController implements IDisposableProp {
 
         //Resposta à edição de pergunta
         service.addPropertyChangeListener(ClientService.PROP_UPDATE_QUESTION_RESPONSE, updateQuestionListener);
+        service.addPropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_RESPONSE, updateProfileListener);
 
         // Se o serviço ainda não estiver ligado quando o controller é criado, garante que
         // pedimos a lista de perguntas assim que ficar CONNECTED. Regista um listener
@@ -367,6 +382,7 @@ public class TeacherDashboardController implements IDisposableProp {
             service.removePropertyChangeListener(ClientService.PROP_JOIN_QUESTION_RESPONSE, joinQuestionListener);
             service.removePropertyChangeListener(ClientService.PROP_ANSWER_SUBMITTED, answerSubmittedListener);
             service.removePropertyChangeListener(ClientService.PROP_UPDATE_QUESTION_RESPONSE, updateQuestionListener);
+            service.removePropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_RESPONSE, updateProfileListener);
             service.removePropertyChangeListener(ClientService.PROP_LIST_QUESTIONS_RESPONSE, listQuestionsListener);
             service.removePropertyChangeListener(ClientService.PROP_VIEW_ANSWERS_RESPONSE, viewAnswersListener);
         } catch (Exception ignored) {
@@ -377,7 +393,6 @@ public class TeacherDashboardController implements IDisposableProp {
         try { if (dialogLoadingBox != null) dialogLoadingBox.setVisible(false); } catch (Exception ignored) {}
     }
 
-    //Métricas do dashboard
     private void updateDashboardStats() {
         int total = lastQuestions.size();
         int active = (int) lastQuestions.stream()
@@ -1561,6 +1576,49 @@ public class TeacherDashboardController implements IDisposableProp {
                 }
                 clientManager.getService().logout();          // limpa estado local
                 try { application.showAuthentication(); } catch (Exception ignored) {}
+            }
+        });
+    }
+
+    /** Editar perfil do docente */
+    public void onEditProfile() {
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Editar Perfil");
+        dialog.setHeaderText("Editar dados pessoais");
+
+        VBox content = new VBox(10);
+        content.setPadding(new Insets(20));
+
+        Label nameLabel = new Label("Nome:");
+        TextField nameField = new TextField(userName != null ? userName : "");
+
+        Label emailLabel = new Label("Email:");
+        TextField emailField = new TextField(userEmail != null ? userEmail : "");
+
+        Label oldPwLabel = new Label("Password atual (só se alterar):");
+        PasswordField oldPw = new PasswordField();
+        Label newPwLabel = new Label("Nova password (deixe em branco para não alterar):");
+        PasswordField newPw = new PasswordField();
+
+        content.getChildren().addAll(nameLabel, nameField, emailLabel, emailField, oldPwLabel, oldPw, newPwLabel, newPw);
+        dialog.getDialogPane().setContent(content);
+        ButtonType save = new ButtonType("Salvar", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(save, ButtonType.CANCEL);
+
+        dialog.showAndWait().ifPresent(bt -> {
+            if (bt == save) {
+                String n = nameField.getText().trim();
+                String e = emailField.getText().trim();
+                String opw = oldPw.getText();
+                String npw = newPw.getText();
+                if (n.isBlank() || e.isBlank()) { showErrorAlert("Erro", "Nome e email são obrigatórios."); return; }
+                try {
+                    Integer uid = clientManager.getUserId();
+                    UpdateTeacherDTO dto = new UpdateTeacherDTO(uid, uid, n, e,
+                            (opw == null || opw.isBlank()) ? null : opw,
+                            (npw == null || npw.isBlank()) ? null : npw);
+                    clientManager.getAuthService().updateTeacher(dto);
+                } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
             }
         });
     }

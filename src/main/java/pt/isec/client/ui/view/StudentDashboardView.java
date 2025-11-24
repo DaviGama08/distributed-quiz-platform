@@ -101,10 +101,12 @@ public class StudentDashboardView {
         sidebar.getStyleClass().add("dashboard-sidebar-dark");
         sidebar.setPrefWidth(240);
 
+        profileCard = createProfileCard();
+
         Label menuLabel = new Label("MENU");
         menuLabel.getStyleClass().add("sidebar-title-dark");
 
-        profileCard = createProfileCard();
+
 
         answerQuestionBtn = createMenuButton("Responder Pergunta");
         historyBtn = createMenuButton("Histórico");
@@ -247,8 +249,9 @@ public class StudentDashboardView {
         historyBtn.setOnAction(e -> controller.onShowHistory());
         logoutBtn.setOnAction(e -> controller.onLogout());
 
+        // clicking profile card opens the editable profile dialog
         if (profileCard != null) {
-            profileCard.setOnMouseClicked(e -> controller.onOpenProfile());
+            profileCard.setOnMouseClicked(e -> controller.onProfile());
         }
     }
 

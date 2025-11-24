@@ -1,14 +1,12 @@
 package pt.isec.client.ui.controller;
-
-import javafx.application.Platform;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import pt.isec.client.ClientApplication;
 import pt.isec.client.ClientManager;
 import pt.isec.client.services.ClientService;
+import pt.isec.client.ui.util.UiUtils;
 import pt.isec.client.ui.view.AuthenticationView;
 import pt.isec.common.dto.auth.AuthResponseDTO;
-
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 
@@ -71,10 +69,13 @@ public class AuthenticationController implements IDisposableProp {
     private void handleAuthenticationChange(PropertyChangeEvent evt) {
         boolean authenticated = (boolean) evt.getNewValue();
         if (authenticated) {
-            Platform.runLater(this::openDashboard);
+            UiUtils.runOnUiThread(this::openDashboard);
         }
     }
 
+    /**
+     * Abre o dashboard apropriado (docente/estudante) com base no userType do serviço.
+     */
     private void openDashboard() {
         view.clearLoginFields();
         view.clearRegisterFields();
@@ -104,7 +105,7 @@ public class AuthenticationController implements IDisposableProp {
         service.setUserName(data.name());
         service.setAuthenticated(true);
 
-        Platform.runLater(() ->
+        UiUtils.runOnUiThread(() ->
                 view.setLoginStatus("✔️ Login OK! A carregar dashboard...", Color.GREEN, false, true)
         );
     }
@@ -116,7 +117,7 @@ public class AuthenticationController implements IDisposableProp {
      */
     private void handleLoginFailResponse(PropertyChangeEvent evt) {
         String data = (String) evt.getNewValue();
-        Platform.runLater(() -> {
+        UiUtils.runOnUiThread(() -> {
             if (mode == Mode.LOGIN) {
                 view.setLoginStatus("❌ Login Falhou: " + data, RED, false, true);
             } else {
@@ -142,7 +143,7 @@ public class AuthenticationController implements IDisposableProp {
         service.setUserName(data.name());
         service.setAuthenticated(true);
 
-        Platform.runLater(() -> {
+        UiUtils.runOnUiThread(() -> {
             view.setRegisterStatus(
                     "✔️ Registo concluído! Já pode iniciar sessão com os seus dados.",
                     Color.GREEN,
@@ -171,13 +172,17 @@ public class AuthenticationController implements IDisposableProp {
 
         switch (status) {
             case "DIRECTORY_CONNECTING" -> {
-                Platform.runLater(() -> view.showGlobalLoading("A contactar a diretoria..."));
+                UiUtils.runOnUiThread(() ->
+                        view.showGlobalLoading("A contactar a diretoria...")
+                );
             }
             case "SERVER_CONNECTING" -> {
-                Platform.runLater(() -> view.showGlobalLoading("A ligar ao servidor principal..."));
+                UiUtils.runOnUiThread(() ->
+                        view.showGlobalLoading("A ligar ao servidor principal...")
+                );
             }
             case "CONNECTED" -> {
-                Platform.runLater(() -> {
+                UiUtils.runOnUiThread(() -> {
                     view.hideGlobalLoading();
                     if (!authBusy) {
                         view.setLoginStatus(
@@ -193,20 +198,24 @@ public class AuthenticationController implements IDisposableProp {
                 // Aqui é onde caímos quando:
                 //  - o servidor fecha a ligação depois de 30s sem login
                 //  - ou fecha a ligação após falha de autenticação
-                Platform.runLater(() ->
+                UiUtils.runOnUiThread(() ->
                         view.showGlobalLoading("Ligação ao servidor perdida. A tentar reconectar...")
                 );
             }
             case "DIRECTORY_ERROR" -> {
-                Platform.runLater(() -> view.showGlobalError(
-                        "Não foi possível contactar a diretoria/servidor. \nA aplicação vai encerrar..."
-                ));
+                UiUtils.runOnUiThread(() ->
+                        view.showGlobalError(
+                                "Não foi possível contactar a diretoria/servidor. \nA aplicação vai encerrar..."
+                        )
+                );
                 try { Thread.sleep(3000); } catch (InterruptedException ignored) {}
             }
             case "SERVER_ERROR" -> {
-                Platform.runLater(() -> view.showGlobalError(
-                        "Não foi possível ligar ao servidor principal.\nA aplicação vai encerrar..."
-                ));
+                UiUtils.runOnUiThread(() ->
+                        view.showGlobalError(
+                                "Não foi possível ligar ao servidor principal.\nA aplicação vai encerrar..."
+                        )
+                );
             }
             default -> {
             }
@@ -279,7 +288,9 @@ public class AuthenticationController implements IDisposableProp {
                 try {
                     number = Integer.parseInt(extra);
                 } catch (NumberFormatException e) {
-                    Platform.runLater(() -> showRegisterError("Número de estudante inválido."));
+                    UiUtils.runOnUiThread(() ->
+                            showRegisterError("Número de estudante inválido.")
+                    );
                     return;
                 }
                 clientManager.getAuthService().registerStudent(name, email, password, number);
@@ -287,7 +298,9 @@ public class AuthenticationController implements IDisposableProp {
                 clientManager.getAuthService().registerTeacher(name, email, password, extra);
             }
         } catch (Exception e) {
-            Platform.runLater(() -> showRegisterError("Erro no registo: " + e.getMessage()));
+            UiUtils.runOnUiThread(() ->
+                    showRegisterError("Erro no registo: " + e.getMessage())
+            );
             setAuthBusy(false);
         }
     }
@@ -304,22 +317,7 @@ public class AuthenticationController implements IDisposableProp {
     /** Activa/desactiva o estado de busy e actualiza a interface */
     private void setAuthBusy(boolean busy) {
         authBusy = busy;
-        Platform.runLater(() -> view.setAuthBusy(busy));
-    }
-
-    /** Abre o dashboard apropriado (docente/estudante) */
-    private void openDashboard(String userType, String email) {
-        view.clearLoginFields();
-        view.clearRegisterFields();
-
-        ClientService service = clientManager.getService();
-        String name     = service.getUserName();
-
-        if ("TEACHER".equalsIgnoreCase(userType)) {
-            application.showTeacherDashboard(name, email);
-        } else {
-            application.showStudentDashboard(name, email);
-        }
+        UiUtils.runOnUiThread(() -> view.setAuthBusy(busy));
     }
 
     /** Mostra erro no login */
@@ -349,6 +347,8 @@ public class AuthenticationController implements IDisposableProp {
     @Override
     public void dispose() {
         ClientService service = clientManager.getService();
+        if (service == null) return;
+
         // remover os listeners adicionados, evitando memory leaks
         service.removePropertyChangeListener(ClientService.PROP_AUTHENTICATED, authListener);
         service.removePropertyChangeListener(ClientService.PROP_LOGIN_OK, loginOkListener);

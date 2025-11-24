@@ -1,0 +1,240 @@
+═══════════════════════════════════════════════════════════════════
+  GUIA RÁPIDO: COMO ARRANCAR E TESTAR O SISTEMA
+═══════════════════════════════════════════════════════════════════
+
+📋 PRÉ-REQUISITOS (já cumpridos ✓):
+   ✓ Projeto compilado (target/classes existe)
+   ✓ Java instalado
+   ✓ Scripts .bat criados
+
+═══════════════════════════════════════════════════════════════════
+  PASSO 1: ABRIR 3 TERMINAIS (CMD ou PowerShell)
+═══════════════════════════════════════════════════════════════════
+
+Pode usar:
+  • Windows Terminal (recomendado)
+  • 3 janelas de CMD
+  • 3 tabs de PowerShell
+
+═══════════════════════════════════════════════════════════════════
+  PASSO 2: EXECUTAR OS SCRIPTS (NESTA ORDEM!)
+═══════════════════════════════════════════════════════════════════
+
+┌─ TERMINAL 1: DIRETORIA ────────────────────────────────────────┐
+│                                                                 │
+│  cd H:\GitHub\PD_TP_2526                                       │
+│  test_directory.bat                                            │
+│                                                                 │
+│  Aguarde ver:                                                  │
+│  ✓ "Diretoria iniciada na porta 5555"                         │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─ TERMINAL 2: SERVIDOR ─────────────────────────────────────────┐
+│                                                                 │
+│  cd H:\GitHub\PD_TP_2526                                       │
+│  test_server.bat                                               │
+│                                                                 │
+│  Aguarde ver:                                                  │
+│  ✓ "Servidor iniciado..."                                     │
+│  ✓ "Registado na diretoria"                                   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─ TERMINAL 3: CLIENTE (UI INTERATIVA) ──────────────────────────┐
+│                                                                 │
+│  cd H:\GitHub\PD_TP_2526                                       │
+│  test_client.bat                                               │
+│                                                                 │
+│  Verá o menu principal aparecer!                              │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+  PASSO 3: TESTE RÁPIDO (2 MINUTOS)
+═══════════════════════════════════════════════════════════════════
+
+No TERMINAL 3 (Cliente), faça:
+
+1️⃣ REGISTAR PROFESSOR
+   ────────────────────────────────────────────────────────────
+   → Digite: 2
+   → Nome: Prof Teste
+   → Email: prof@test.com
+   → Password: 1234
+   → Confirmar: 1234
+   → Código: profdei
+
+   ✓ Verá: "Professor registado com sucesso!"
+
+2️⃣ FAZER LOGIN
+   ────────────────────────────────────────────────────────────
+   → Digite: 3
+   → Email: prof@test.com
+   → Password: 1234
+
+   ✓ Verá: "Bem-vindo, Prof Teste!"
+   ✓ Menu do Professor aparece
+
+3️⃣ CRIAR QUESTÃO
+   ────────────────────────────────────────────────────────────
+   → Digite: 1
+   → Enunciado: Qual é a capital de Portugal?
+   → Número de opções: 4
+   → Opção A: Lisboa
+   → Opção B: Porto
+   → Opção C: Coimbra
+   → Opção D: Faro
+   → Resposta correta: A
+   → Duração: 5
+   → Confirmar: S
+
+   ✓ Verá: "Questão criada com sucesso!"
+   ✓ ANOTE O CÓDIGO DE ACESSO! (ex: ABC123)
+
+4️⃣ FAZER LOGOUT
+   ────────────────────────────────────────────────────────────
+   → Digite: 7
+   → Confirmar: S
+
+5️⃣ REGISTAR ESTUDANTE
+   ────────────────────────────────────────────────────────────
+   → Digite: 1
+   → Nome: Maria Silva
+   → Email: maria@test.com
+   → Password: 1234
+   → Confirmar: 1234
+   → Número de estudante: 123456
+
+   ✓ Verá: "Estudante registado com sucesso!"
+
+6️⃣ FAZER LOGIN COMO ESTUDANTE
+   ────────────────────────────────────────────────────────────
+   → Digite: 3
+   → Email: maria@test.com
+   → Password: 1234
+
+   ✓ Menu do Estudante aparece
+
+7️⃣ RESPONDER QUESTÃO
+   ────────────────────────────────────────────────────────────
+   → Digite: 1
+   → Código de acesso: [COLE O CÓDIGO ANOTADO]
+   → Verá a questão e opções
+   → Resposta: A
+   → Confirmar: S
+
+   ✓ Verá: "Resposta submetida com sucesso!"
+
+8️⃣ VER HISTÓRICO
+   ────────────────────────────────────────────────────────────
+   → Digite: 2
+
+   ✓ Verá tabela com suas respostas
+   ✓ Taxa de acerto: 100%
+
+═══════════════════════════════════════════════════════════════════
+  ALTERNATIVA: COMANDOS DIRETOS (sem scripts)
+═══════════════════════════════════════════════════════════════════
+
+Se preferir não usar os scripts .bat:
+
+Terminal 1:
+  cd H:\GitHub\PD_TP_2526
+  java -cp target/classes pt.isec.directory.MainDirectory 5555
+
+Terminal 2:
+  cd H:\GitHub\PD_TP_2526
+  java -cp target/classes pt.isec.serverManager.MainServer 5555 localhost
+
+Terminal 3:
+  cd H:\GitHub\PD_TP_2526
+  java -cp target/classes pt.isec.client.MainClient 5555 localhost
+
+═══════════════════════════════════════════════════════════════════
+  🐛 PROBLEMAS COMUNS E SOLUÇÕES
+═══════════════════════════════════════════════════════════════════
+
+❌ "Porta já em uso"
+   → Fechar programas que usam porta 5555
+   → netstat -ano | findstr :5555
+   → taskkill /PID [número] /F
+
+❌ "Não consegue conectar"
+   → Verificar ordem: Diretoria → Servidor → Cliente
+   → Aguardar 2-3 segundos entre cada componente
+
+❌ "Classe não encontrada"
+   → Recompilar: mvn clean compile -DskipTests
+   → Ou usar: compile_and_test.bat
+
+❌ Scripts .bat não funcionam
+   → Usar comandos diretos (ver acima)
+   → Verificar se está no diretório correto
+
+═══════════════════════════════════════════════════════════════════
+  📊 COMO SABER SE ESTÁ A FUNCIONAR
+═══════════════════════════════════════════════════════════════════
+
+Terminal 1 (Diretoria):
+  ✓ Mensagens: "Servidor registado", "Heartbeat recebido"
+
+Terminal 2 (Servidor):
+  ✓ Mensagens: "Cliente conectado", "Processando pedido"
+
+Terminal 3 (Cliente):
+  ✓ Menu interativo aparece
+  ✓ Pode navegar entre opções
+  ✓ Mensagens de sucesso/erro aparecem
+
+═══════════════════════════════════════════════════════════════════
+  🎯 OUTROS TESTES DISPONÍVEIS
+═══════════════════════════════════════════════════════════════════
+
+Após o teste básico, pode explorar:
+
+Como Professor:
+  • Listar questões (opção 2)
+  • Filtrar por ativas/futuras/expiradas
+  • Eliminar questões sem respostas
+  • Ver estatísticas após questão expirar
+
+Como Estudante:
+  • Responder múltiplas questões
+  • Ver histórico completo
+  • Verificar taxa de acerto
+
+═══════════════════════════════════════════════════════════════════
+  📚 DOCUMENTAÇÃO DETALHADA
+═══════════════════════════════════════════════════════════════════
+
+Para testes mais avançados:
+  • TEST_CLIENT.md - 8 cenários detalhados
+  • READY_TO_TEST.md - Troubleshooting completo
+  • UI_STATUS.md - Funcionalidades da UI
+
+═══════════════════════════════════════════════════════════════════
+  ✅ CHECKLIST DE TESTE
+═══════════════════════════════════════════════════════════════════
+
+Marque conforme testa:
+
+  [ ] Diretoria arrancou
+  [ ] Servidor arrancou e registou
+  [ ] Cliente arrancou e mostrou menu
+  [ ] Registei professor com sucesso
+  [ ] Fiz login como professor
+  [ ] Criei uma questão
+  [ ] Recebi código de acesso
+  [ ] Registei estudante
+  [ ] Fiz login como estudante
+  [ ] Respondi à questão
+  [ ] Vi o histórico
+
+  Se todos ✓ → Sistema 100% funcional! 🎉
+
+═══════════════════════════════════════════════════════════════════
+
+Última atualização: 12/11/2025
+Programação Distribuída - Universidade de Coimbra
+

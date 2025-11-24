@@ -1,40 +1,98 @@
-### IntelliJ IDEA ###
+########################
+# IDEs
+########################
+
+# IntelliJ IDEA
 .idea/
 *.iml
-out/
-!**/src/main/**/out/
-!**/src/test/**/out/
-.kotlin
 
-### Eclipse ###
+# VS Code
+.vscode/
+
+# Eclipse
 .apt_generated
 .classpath
 .factorypath
 .project
-.settings
+.settings/
 .springBeans
 .sts4-cache
-bin/
-!**/src/main/**/bin/
-!**/src/test/**/bin/
 
-### NetBeans ###
+# NetBeans
 /nbproject/private/
 /nbbuild/
 /dist/
 /nbdist/
 /.nb-gradle/
 
-### VS Code ###
-.vscode/
+########################
+# Sistema Operativo
+########################
 
-### Mac OS ###
+# macOS
 .DS_Store
 
-### Build / Java ###
+# Windows
+Thumbs.db
+Desktop.ini
+
+########################
+# Java / Build
+########################
+
+# Saídas de compilação gerais
 target/
+bin/
+out/
+
+# Exceções: se tiveres algum out/bin dentro de src (normalmente não é necessário)
+!**/src/main/**/out/
+!**/src/test/**/out/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+# Ficheiros compilados / artefactos
 *.class
-*.jar
 *.war
 *.ear
+*.zip
+*.tar
+*.tar.gz
+*.log
+
+# Dumps de erros da JVM
 hs_err_pid*
+replay_pid*
+
+########################
+# Maven
+########################
+
+.mvn/
+.mv/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+
+########################
+# Gradle
+########################
+
+.gradle/
+build/
+gradle-app.setting
+gradle-wrapper.jar
+gradle-wrapper.properties~
+.gradle/
+build/
+
+########################
+# Outros
+########################
+
+# Bases de dados locais
+*.dbCommands
+*.dbCommands-wal
+*.dbCommands-shm

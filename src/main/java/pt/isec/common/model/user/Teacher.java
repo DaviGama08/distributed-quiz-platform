@@ -1,33 +1,52 @@
 package pt.isec.common.model.user;
 
-import java.util.Objects;
+import java.io.Serializable;
+import java.time.LocalDateTime;
 
-public final class Teacher extends User{
-    private Integer id;
-    public Teacher(){}
-    public Teacher(Integer id, String name, String email, String passwordHash){
-        super(name, email, passwordHash); this.id = id;
+/**
+ * Docente/Professor.
+ * Identificado por id gerado pela base de dados.
+ */
+public final class Teacher extends User implements Serializable {
+    private static final long serialVersionUID = 1L;
+
+    public Teacher() {
+        super();
     }
 
-    // gets/sets
-    public Integer getId() {return id;}
-    public void setId(Integer id) {this.id = id;}
+    public Teacher(String name, String email, String passwordHash) {
+        super(name, email, passwordHash);
+    }
 
-    // equals/hashCode
+    public Teacher(long id, String name, String email, String passwordHash, LocalDateTime createdAt) {
+        super(id, name, email, passwordHash, createdAt);
+    }
+
+    @Override
+    public String getUserType() {
+        return "teacher";
+    }
+
     @Override
     public boolean equals(Object o) {
-        if(o == this) return true;
-        if(o == null || (o.getClass() != getClass())) return false;
-
-        Teacher t = (Teacher)o;
-
-        return Objects.equals(name, t.name) &&
-                Objects.equals(email, t.email) &&
-                Objects.equals(passwordHash, t.passwordHash) &&
-                Objects.equals(id, t.id);
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        return super.equals(o);
     }
 
-    //Gera um número inteiro que representa a combinação dos três atributos
     @Override
-    public int hashCode(){return Objects.hash(name, email, passwordHash, id);}
+    public int hashCode() {
+        return super.hashCode();
+    }
+
+    @Override
+    public String toString() {
+        return "Teacher{" +
+                "id=" + id +
+                ", name='" + name + '\'' +
+                ", email='" + email + '\'' +
+                ", createdAt=" + createdAt +
+                '}';
+    }
 }
+

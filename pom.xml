@@ -1,16 +1,18 @@
-<!-- xml -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>pt.isec</groupId>
     <artifactId>PD_TP</artifactId>
     <version>1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
 
     <properties>
-        <maven.compiler.source>24</maven.compiler.source>
-        <maven.compiler.target>24</maven.compiler.target>
+        <!-- Java -->
+        <maven.compiler.source>23</maven.compiler.source>
+        <maven.compiler.target>23</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <!-- Versões -->
@@ -23,8 +25,10 @@
         <!-- Plataforma JavaFX (Windows) -->
         <javafx.platform>win</javafx.platform>
 
-        <!-- Main class para executar -->
-        <main.class>pt.isec.MainApp</main.class>
+        <!-- >>> AJUSTA ESTA LINHA PARA A TUA CLASSE MAIN REAL <<< -->
+        <!-- Exemplo: se o ficheiro for src/main/java/pt/isec/client/MainApp.java
+             e tiver "package pt.isec.client;", mete: pt.isec.client.MainApp -->
+        <main.class>pt.isec.client.ClientApplication</main.class>
     </properties>
 
     <dependencies>
@@ -56,7 +60,6 @@
             <version>${jackson.version}</version>
         </dependency>
 
-
         <!-- JUnit 5 para testes -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -74,7 +77,9 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
-                    <release>24</release>
+                    <source>23</source>
+                    <target>23</target>
+                    <release>23</release>
                 </configuration>
             </plugin>
 
@@ -99,4 +104,5 @@
             </plugin>
         </plugins>
     </build>
+
 </project>

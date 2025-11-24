@@ -7,6 +7,7 @@ import pt.isec.common.model.question.Option;
 import pt.isec.common.model.question.OptionLetter;
 import pt.isec.common.model.question.Question;
 
+import java.sql.DriverManager;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -109,7 +110,7 @@ public class QuestionService {
         }
 
         List<Map<String,Object>> rows = new ArrayList<>();
-        try (var con = java.sql.DriverManager.getConnection(dbCommands.getUrl());
+        try (var con = DriverManager.getConnection(dbCommands.getUrl());
              var ps = con.prepareStatement(sql.toString())) {
             for (int i = 0; i < params.size(); i++) {
                 ps.setObject(i + 1, params.get(i));

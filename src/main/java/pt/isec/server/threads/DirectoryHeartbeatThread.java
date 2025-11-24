@@ -14,10 +14,10 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
     private static final int SLEEP_INTERVAL_MS = 50;
     private static final int BUFFER_SIZE = 512;
 
-    private final IServerManager tInfo;
+    private final IServerManager managerTheardInfo;
     private DatagramSocket socket;
 
-    public DirectoryHeartbeatThread(IServerManager tInfo) { this.tInfo = tInfo; }
+    public DirectoryHeartbeatThread(IServerManager managerTheardInfo) { this.managerTheardInfo = managerTheardInfo; }
 
     @Override
     public void run() {
@@ -25,16 +25,16 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             socket = s;
             s.setSoTimeout(SOCKET_TIMEOUT_MS);
 
-            InetAddress dirAddr = InetAddress.getByName(tInfo.directoryHost());
-            int dirPort = tInfo.directoryPort();
+            InetAddress dirAddr = InetAddress.getByName(managerTheardInfo.directoryHost());
+            int dirPort = managerTheardInfo.directoryPort();
 
             // REGISTER
-            String registerMsg = kv(
+            String registerMsg = requestKeyValue(
                     "VER","1","TYPE","REGISTER",
-                    "ID", tInfo.id(),
-                    "TCP", tInfo.serverTcpIp() + ":" + tInfo.serverTcpPort(), //ip e porto do servidor para o cliente saber
-                    "DBV", String.valueOf(tInfo.dbVersion()), //versão da base de dados
-                    "DBP", String.valueOf(tInfo.dbCopyPort()) //porto da base de dados
+                    "ID", managerTheardInfo.id(),
+                    "TCP", managerTheardInfo.serverTcpIp() + ":" + managerTheardInfo.serverTcpPort(), //ip e porto do servidor para o cliente saber
+                    "DBV", String.valueOf(managerTheardInfo.dbVersion()), //versão da base de dados
+                    "DBP", String.valueOf(managerTheardInfo.dbCopyPort()) //porto da base de dados
             );
             send(s, dirAddr, dirPort, registerMsg);
 
@@ -42,26 +42,26 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             Endpoint reply = waitPrincipal(s);
             if (reply == null) {
                 System.err.println("[DIR] sem resposta da diretoria");
-                tInfo.setRunning(false); // running=false e interrompe threads
+                managerTheardInfo.stopRunning(false); // running=false e interrompe threads
                 return;
             }
 
-            tInfo.setPrimary(reply.ip, reply.port);
-            boolean iAmPrimary = Objects.equals(reply.ip, tInfo.serverTcpIp()) && reply.port == tInfo.serverTcpPort();
+            managerTheardInfo.setPrimary(reply.ip, reply.port);
+            boolean iAmPrimary = Objects.equals(reply.ip, managerTheardInfo.serverTcpIp()) && reply.port == managerTheardInfo.serverTcpPort();
 
             // versão enviada pela diretoria: -1 = primeira vez
             if (reply.dbv != null) {
                 if (reply.dbv == -1 && iAmPrimary) {
-                    tInfo.setDbVersion(1); // primeira vez: cria quiz-01.db
+                    managerTheardInfo.setDbVersion(1); // primeira vez: cria quiz-01.db
                 } else if (reply.dbv >= 0) {
-                    tInfo.setDbVersion(reply.dbv);
+                    managerTheardInfo.setDbVersion(reply.dbv);
                 }
             }
 
             if (iAmPrimary) {
                 try {
                     // garantir que estamos a usar o ServerNode concreto
-                    if (tInfo instanceof ServerManager node) {
+                    if (managerTheardInfo instanceof ServerManager node) {
                         node.initDatabaseLayerIfNeeded();
                     } else {
                         System.err.println("[DB] tInfo não é ServerNode — não consigo inicializar BD/Auth.");
@@ -70,24 +70,24 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                     System.err.println("[DB] erro a inicializar base de dados: " + e.getMessage());
                 }
             } else {
-                if (!Files.exists(tInfo.dbPath())) {
+                if (!Files.exists(managerTheardInfo.dbPath())) {
                     System.out.println("[DB] backup sem base de dados local; vai aguardar heartbeat multicast para copiar.");
                 }
             }
 
             System.out.printf("[DIR] principal %s:%d | souPrimario=%s | versao=%d%n",
-                    reply.ip, reply.port, iAmPrimary, tInfo.dbVersion());
+                    reply.ip, reply.port, iAmPrimary, managerTheardInfo.dbVersion());
 
             long last = 0;
 
             // HEARTBEAT — envia a versão atual (NÃO é 1 fixo; usa tInfo.dbVersion())
-            while (tInfo.isRunning()) {
+            while (managerTheardInfo.isRunning()) {
                 long now = System.currentTimeMillis();
 
                 if (now - last >= HEARTBEAT_INTERVAL_MS) {
-                    String hb = kv(
+                    String hb = requestKeyValue(
                             "VER","1","TYPE","HEARTBEAT",
-                            "ID", tInfo.id()
+                            "ID", managerTheardInfo.id()
                     );
                     send(s, dirAddr, dirPort, hb);
                     last = now;
@@ -95,19 +95,19 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
 
                 Endpoint cur = tryReceivePrincipal(s);
                 if (cur != null) {
-                    tInfo.setPrimary(cur.ip, cur.port);
-                    boolean prim = Objects.equals(cur.ip, tInfo.serverTcpIp()) && cur.port == tInfo.serverTcpPort();
+                    managerTheardInfo.setPrimary(cur.ip, cur.port);
+                    boolean prim = Objects.equals(cur.ip, managerTheardInfo.serverTcpIp()) && cur.port == managerTheardInfo.serverTcpPort();
                     System.out.printf("[DIR] principal %s:%d | souPrimario=%s%n", cur.ip, cur.port, prim);
                 }
                 Thread.sleep(SLEEP_INTERVAL_MS);
             }
 
             // DEREGISTER
-            String deregMsg = kv("VER","1","TYPE","DEREGISTER","ID", tInfo.id());
+            String deregMsg = requestKeyValue("VER","1","TYPE","DEREGISTER","ID", managerTheardInfo.id());
             send(s, dirAddr, dirPort, deregMsg);
 
         } catch (Exception e) {
-            if (tInfo.isRunning())
+            if (managerTheardInfo.isRunning())
                 System.err.println("[DIR] erro: " + e.getMessage());
         }finally {
             try {
@@ -118,11 +118,13 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
 
     /* ---------- auxiliares UDP ---------- */
 
+    //Tipo um DTO
     private record Endpoint(String ip, int port, Integer dbv) { }
 
-    private static String kv(String... kv) {
+    //Para separar o pedido por key e value: Type=LOGIN -> "Type", "LOGIN"
+    private static String requestKeyValue(String... keyValue) {
         StringBuilder b = new StringBuilder();
-        for (int i = 0; i < kv.length; i += 2) b.append(kv[i]).append('=').append(kv[i + 1]).append('|');
+        for (int i = 0; i < keyValue.length; i += 2) b.append(keyValue[i]).append('=').append(keyValue[i + 1]).append('|');
         return b.toString();
     }
 
@@ -131,6 +133,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
         s.send(new DatagramPacket(data, data.length, addr, port));
     }
 
+    //Espera a confirmação da ligação ao main server
     private Endpoint waitPrincipal(DatagramSocket s) {
         for (int i = 0; i < RETRY_COUNT; i++) {
             Endpoint ep = tryReceivePrincipal(s);
@@ -139,7 +142,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
         return null;
     }
 
-    // aceita "200 PRINCIPAL ip:port" ou "200 PRINCIPAL ip:port|DBV=NN"
+    // Tenta fazer ligação ao server principal
     private Endpoint tryReceivePrincipal(DatagramSocket s) {
         try {
             byte[] buf = new byte[BUFFER_SIZE];
@@ -147,14 +150,15 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             s.receive(dp);
             String resp = new String(dp.getData(), 0, dp.getLength(), StandardCharsets.UTF_8).trim();
 
+            //Se houver mais servidores iguais
             if (resp.startsWith("409 CONFLICT DUP_ENDPOINT")) {
                 System.err.println("[DIR] ja existe servidor ativo com este ip:porto. a terminar.");
                 System.exit(2); // encerra para não ficar dois no mesmo endpoint
                 return null;    // unreachable
             }
-
+            //Depois passar 17segs sem heartbeat(TTL), a diretoria envia ordem para encerrar servidor
             if (resp.startsWith("SHUTDOWN") || resp.startsWith("404 NO_PRINCIPAL")){
-                tInfo.setRunning(false);
+                managerTheardInfo.stopRunning(false);
                 System.out.println("ENCERREI");
                 return null;
             }

@@ -22,7 +22,7 @@ public interface IServerManager {
     NetworkInterface multicastInterface();
 
     boolean isRunning();
-    void setRunning(boolean v) throws Exception;
+    void stopRunning(boolean v) throws Exception;
 
     boolean isPrimary();
     void setPrimary(String ip, int port);

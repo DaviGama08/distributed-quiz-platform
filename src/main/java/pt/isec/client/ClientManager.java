@@ -32,9 +32,10 @@ public class ClientManager {
     }
     /** Pára o serviço e fecha conexões */
     public void stop(){ service.stop(); }
+
+    public AnswerClientService getAnswerService() { return answerService; }
     public AuthClientService getAuthService() { return authService; }
     public QuestionClientService getQuestionService() { return questionService; }
-    public AnswerClientService getAnswerService() { return answerService; }
     public ClientService getService() { return service; }
     /** Obtém o ID do utilizador autenticado. */
     public Integer getUserId() { return service.getUserId(); }

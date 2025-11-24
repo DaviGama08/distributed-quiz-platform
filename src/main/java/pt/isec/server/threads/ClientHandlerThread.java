@@ -66,7 +66,7 @@ public class ClientHandlerThread implements Runnable {
              try { connection.close(); } catch (IOException ignored) {}
          }
     }
-
+    //Recebe mensagens do cliente
     private void processMessage(TcpMessage<?> tcpMessage) throws Exception {
         if (tcpMessage == null) return;
 
@@ -171,6 +171,7 @@ public class ClientHandlerThread implements Runnable {
 
             case LIST_QUESTIONS -> {
                 try {
+                    //Faz o cast do tipo correto, lançando uma exceção se o tipo for diferente, para segurança.
                     ListQuestionsDTO dto = tcpMessage.getDataAs(ListQuestionsDTO.class);
                     List<?> list = threadInfo.getQuestionService().listQuestions(dto);
                     ArrayList<?> payload = new ArrayList<>(list);

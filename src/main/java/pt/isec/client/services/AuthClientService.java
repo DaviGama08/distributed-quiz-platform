@@ -47,12 +47,16 @@ public class AuthClientService {
         service.getRequestQueue().put(new TcpMessage<>(MessageType.REGISTER_STUDENT, dto));
     }
 
-    /**
-     * Altera a password do utilizador autenticado.
-     * Esta funcionalidade ainda não é suportada no servidor.
-     */
-    public void changePassword(String oldPassword, String newPassword) throws InterruptedException {
-        System.err.println("[AuthClientService] Operação de alterar password não suportada.");
+    /** Atualiza dados do estudante (inclui opcionalmente alteração de password) */
+    public void updateStudent(UpdateStudentDTO dto) throws InterruptedException {
+        if (dto == null) return;
+        service.getRequestQueue().put(new TcpMessage<>(MessageType.UPDATE_STUDENT, dto));
+    }
+
+    /** Atualiza dados do docente (inclui opcionalmente alteração de password) */
+    public void updateTeacher(UpdateTeacherDTO dto) throws InterruptedException {
+        if (dto == null) return;
+        service.getRequestQueue().put(new TcpMessage<>(MessageType.UPDATE_TEACHER, dto));
     }
 
     /**

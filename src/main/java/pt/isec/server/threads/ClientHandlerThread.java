@@ -232,6 +232,27 @@ public class ClientHandlerThread implements Runnable {
                 }
             }
 
+            /* ========= PERFIL ========= */
+            case UPDATE_STUDENT -> {
+                try {
+                    UpdateStudentDTO dto = tcpMessage.getDataAs(UpdateStudentDTO.class);
+                    threadInfo.getAuthService().updateStudent(dto);
+                    connection.sendMessage(new TcpMessage<>(MessageType.ACK, "update-profile-ok", String.class));
+                } catch (Exception e) {
+                    connection.sendMessage(new TcpMessage<>(MessageType.NACK, e.getMessage(), String.class));
+                }
+            }
+
+            case UPDATE_TEACHER -> {
+                try {
+                    UpdateTeacherDTO dto = tcpMessage.getDataAs(UpdateTeacherDTO.class);
+                    threadInfo.getAuthService().updateTeacher(dto);
+                    connection.sendMessage(new TcpMessage<>(MessageType.ACK, "update-profile-ok", String.class));
+                } catch (Exception e) {
+                    connection.sendMessage(new TcpMessage<>(MessageType.NACK, e.getMessage(), String.class));
+                }
+            }
+
             case LIST_ANSWERED_QUESTIONS -> {
                 try {
                     Integer studentId = tcpMessage.getDataAs(Integer.class);

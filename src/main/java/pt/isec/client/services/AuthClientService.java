@@ -1,5 +1,6 @@
 package pt.isec.client.services;
 
+import pt.isec.client.core.IClientService;
 import pt.isec.common.dto.auth.*;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;

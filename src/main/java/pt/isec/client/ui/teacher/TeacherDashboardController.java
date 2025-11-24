@@ -1,4 +1,4 @@
-package pt.isec.client.ui.controller;
+package pt.isec.client.ui.teacher;
 
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
@@ -15,11 +15,11 @@ import javafx.stage.Stage;
 import javafx.stage.Window;
 import pt.isec.client.ClientApplication;
 import pt.isec.client.ClientManager;
-import pt.isec.client.services.ClientService;
+import pt.isec.client.core.ClientService;
+import pt.isec.client.ui.IDisposableProp;
 import pt.isec.client.ui.util.AlertUtils;
 import pt.isec.client.ui.util.UiUtils;
 import pt.isec.client.ui.util.dialogs.TeacherDialogs;
-import pt.isec.client.ui.view.TeacherDashboardView;
 import pt.isec.common.dto.answer.ViewAnswersDTO;
 import pt.isec.common.dto.auth.UpdateTeacherDTO;
 import pt.isec.common.dto.question.CreateQuestionDTO;

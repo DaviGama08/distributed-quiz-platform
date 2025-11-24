@@ -1,5 +1,6 @@
 package pt.isec.client.services;
 
+import pt.isec.client.core.IClientService;
 import pt.isec.common.dto.answer.SubmitAnswerDTO;
 import pt.isec.common.dto.answer.ViewAnswersDTO;
 import pt.isec.common.messages.TcpMessage;

@@ -1,4 +1,4 @@
-package pt.isec.client.ui.view;
+package pt.isec.client.ui.student;
 
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -8,7 +8,6 @@ import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-import pt.isec.client.ui.controller.StudentDashboardController;
 
 /**
  * Dashboard do estudante com tema escuro. Usa dashboard.css para estilos.

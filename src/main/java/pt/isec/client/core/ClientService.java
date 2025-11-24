@@ -1,4 +1,4 @@
-package pt.isec.client.services;
+package pt.isec.client.core;
 import pt.isec.client.ClientManager;
 import pt.isec.client.threads.ClientListenerThread;
 import pt.isec.client.threads.RequestSenderThread;

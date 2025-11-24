@@ -1,4 +1,4 @@
-package pt.isec.client.ui.controller;
+package pt.isec.client.ui.student;
 
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -13,11 +13,11 @@ import javafx.stage.Stage;
 import javafx.stage.Window;
 import pt.isec.client.ClientApplication;
 import pt.isec.client.ClientManager;
-import pt.isec.client.services.ClientService;
+import pt.isec.client.core.ClientService;
+import pt.isec.client.ui.IDisposableProp;
 import pt.isec.client.ui.util.AlertUtils;
 import pt.isec.client.ui.util.UiUtils;
 import pt.isec.client.ui.util.dialogs.StudentDialogs;
-import pt.isec.client.ui.view.StudentDashboardView;
 import pt.isec.common.dto.answer.SubmitAnswerDTO;
 import pt.isec.common.dto.auth.UpdateStudentDTO;
 import pt.isec.common.dto.question.JoinQuestionDTO;

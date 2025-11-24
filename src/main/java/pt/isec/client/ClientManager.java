@@ -4,7 +4,7 @@ import javafx.application.Platform;
 import pt.isec.client.services.AnswerClientService;
 import pt.isec.client.services.AuthClientService;
 import pt.isec.client.services.QuestionClientService;
-import pt.isec.client.services.ClientService;
+import pt.isec.client.core.ClientService;
 /**
  * Classe que orquestra os serviços disponíveis para o cliente.
  */

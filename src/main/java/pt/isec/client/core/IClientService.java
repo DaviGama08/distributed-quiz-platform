@@ -1,4 +1,4 @@
-package pt.isec.client.services;
+package pt.isec.client.core;
 
 import pt.isec.common.dto.auth.AuthResponseDTO;
 import pt.isec.common.dto.question.CreateQuestionResponseDTO;

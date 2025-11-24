@@ -2,11 +2,9 @@ package pt.isec.client;
 import javafx.application.Application;
 import javafx.scene.image.Image;
 import javafx.stage.Stage;
-import pt.isec.client.ui.controller.AuthenticationController;
-import pt.isec.client.ui.controller.StudentDashboardController;
-import pt.isec.client.ui.controller.TeacherDashboardController;
-
-import java.util.Objects;
+import pt.isec.client.ui.auth.AuthenticationController;
+import pt.isec.client.ui.student.StudentDashboardController;
+import pt.isec.client.ui.teacher.TeacherDashboardController;
 
 /**
  * Classe principal JavaFX que inicia a aplicação cliente.

@@ -1,6 +1,6 @@
 package pt.isec.client.threads;
 
-import pt.isec.client.services.IClientService;
+import pt.isec.client.core.IClientService;
 import pt.isec.common.dto.auth.AuthResponseDTO;
 import pt.isec.common.dto.question.CreateQuestionResponseDTO;
 import pt.isec.common.messages.TcpMessage;

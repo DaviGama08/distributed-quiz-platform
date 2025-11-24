@@ -1,11 +1,11 @@
-package pt.isec.client.ui.controller;
+package pt.isec.client.ui.auth;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import pt.isec.client.ClientApplication;
 import pt.isec.client.ClientManager;
-import pt.isec.client.services.ClientService;
+import pt.isec.client.core.ClientService;
+import pt.isec.client.ui.IDisposableProp;
 import pt.isec.client.ui.util.UiUtils;
-import pt.isec.client.ui.view.AuthenticationView;
 import pt.isec.common.dto.auth.AuthResponseDTO;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;

@@ -18,7 +18,7 @@ import java.util.List;
 /**
  * Thread responsável por tratar a comunicação com um cliente.
  */
-public class ClientHandlerThread implements Runnable {
+public class ClientHandlerThread implements Runnable, AutoCloseable {
 
     private static final int FIRST_MESSAGE_TIMEOUT_SEC = 30;
     private static final Duration NO_TIMEOUT = Duration.ZERO;
@@ -254,5 +254,13 @@ public class ClientHandlerThread implements Runnable {
                     new TcpMessage<>(MessageType.ERROR, "Tipo de mensagem não suportado", String.class)
             );
         }
+    }
+
+    @Override
+    public void close() {
+        // this is what you call from outside to "stop" this handler
+        try {
+            connection.close();  // isto desbloqueia o receiveMessage()
+        } catch (IOException ignored) {}
     }
 }

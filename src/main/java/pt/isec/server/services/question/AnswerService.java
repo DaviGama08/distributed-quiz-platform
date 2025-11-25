@@ -32,64 +32,71 @@ public class AnswerService implements IAnswerService {
      */
     @Override
     public boolean submitAnswer(SubmitAnswerDTO dto) throws Exception {
-        try {
-            Integer questionId = dto.questionId();
-            Integer studentId  = dto.studentId();
-            OptionLetter selected = dto.selectedOption();
-            LocalDateTime now = LocalDateTime.now();
+        Integer questionId   = dto.questionId();
+        Integer studentId    = dto.studentId();
+        OptionLetter selected = dto.selectedOption();
+        LocalDateTime now    = LocalDateTime.now();
 
-            // valida pergunta + obtém também o teacher_id numa só query
-            Map<String, Object> q = dbCommands.selectOne(
-                    "SELECT teacher_id, correct_option, start_at, end_at FROM question WHERE id = ?",
-                    questionId
-            );
-            if (q == null)
-                return false; // pergunta inexistente -> SUBMIT_FAIL
+        // valida pergunta (existência + período ativo)
+        Map<String, Object> q = dbCommands.selectOne(
+                "SELECT teacher_id, correct_option, start_at, end_at FROM question WHERE id = ?",
+                questionId
+        );
+        if (q == null)
+            throw new IllegalArgumentException("Pergunta inexistente");
 
-            LocalDateTime startAt = LocalDateTime.parse((String) q.get("start_at"));
-            LocalDateTime endAt   = LocalDateTime.parse((String) q.get("end_at"));
-            if (now.isBefore(startAt) || now.isAfter(endAt)) {
-                return false; // fora do período -> SUBMIT_FAIL
-            }
+        LocalDateTime startAt = LocalDateTime.parse((String) q.get("start_at"));
+        LocalDateTime endAt   = LocalDateTime.parse((String) q.get("end_at"));
 
-            // insere a resposta
-            dbCommands.executeUpdate(
-                    "INSERT INTO answer (student_id, question_id, chosen_option, created_at) " +
-                            "VALUES (?, ?, ?, ?)",
-                    studentId, questionId, selected.name(), now.toString()
-            );
-
-            // registo para replicação
-            context.recordSqlUpdate(
-                    "INSERT INTO answer (student_id, question_id, chosen_option, created_at) VALUES (" +
-                            studentId + ", " + questionId + ", '" + selected.name() + "', '" + now + "');"
-            );
-            context.setDbVersion(context.dbVersion() + 1);
-
-            // notificação em tempo real ao docente
-            Object teacherObj = q.get("teacher_id");
-            if (teacherObj != null) {
-                long teacherId = ((Number) teacherObj).longValue();
-                if (context.isUserLogged(teacherId)) {
-                    TcpMessage<Integer> notify = new TcpMessage<>(
-                            MessageType.ANSWER_SUBMITTED,
-                            questionId,
-                            Integer.class
-                    );
-                    context.sendToUser(teacherId, notify);
-                    System.out.println("[AnswerService] Live notify enviado para docente " +
-                            teacherId + " (questionId=" + questionId + ")");
-                } else {
-                    System.out.println("[AnswerService] Docente " + teacherId +
-                            " não está ligado; não foi possível enviar notify em tempo real.");
-                }
-            }
-
-            return true;
-        } catch (Exception e) {
-            System.err.println("[AnswerService] Erro ao submeter resposta: " + e.getMessage());
-            return false; // força o envio de SUBMIT_FAIL para o cliente
+        if (now.isBefore(startAt) || now.isAfter(endAt)) {
+            throw new IllegalStateException("Pergunta fora do período de disponibilidade");
         }
+
+        // insere a resposta
+        dbCommands.executeUpdate(
+                "INSERT INTO answer (student_id, question_id, chosen_option, created_at) " +
+                        "VALUES (?, ?, ?, ?)",
+                studentId, questionId, selected.name(), now.toString()
+        );
+
+        // registo para replicação
+        context.recordSqlUpdate(
+                "INSERT INTO answer (student_id, question_id, chosen_option, created_at) VALUES (" +
+                        studentId + ", " + questionId + ", '" + selected.name() + "', '" + now + "');"
+        );
+        context.setDbVersion(context.dbVersion() + 1);
+
+        // ---------------- NOTIFICAÇÃO EM TEMPO REAL AO DOCENTE ----------------
+        try {
+            Object rawTeacherId = q.get("teacher_id");
+            Long teacherId = null;
+
+            if (rawTeacherId instanceof Number n) {
+                teacherId = n.longValue();
+            } else if (rawTeacherId instanceof String s && !s.isBlank()) {
+                teacherId = Long.parseLong(s);
+            }
+
+            if (teacherId != null && context.isUserLogged(teacherId)) {
+                TcpMessage<Integer> notify = new TcpMessage<>(
+                        MessageType.ANSWER_SUBMITTED,
+                        questionId,
+                        Integer.class
+                );
+                context.sendToUser(teacherId, notify);
+                System.out.println("[AnswerService] Live notify enviado para docente " +
+                        teacherId + " (questionId=" + questionId + ")");
+            } else {
+                System.out.println("[AnswerService] Docente não ligado ou teacher_id nulo; " +
+                        "não há notify em tempo real para questionId=" + questionId);
+            }
+        } catch (Exception e) {
+            // falha de notify não deve estragar a submissão
+            System.err.println("[AnswerService] Falha ao notificar docente: " + e.getMessage());
+        }
+        // ----------------------------------------------------------------------
+
+        return true;
     }
 
 

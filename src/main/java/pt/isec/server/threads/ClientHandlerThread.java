@@ -99,18 +99,21 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     AuthResponseDTO res = threadInfo.getAuthService().login(dto);
 
                     long userId = Long.parseLong(res.userId());
-                    if(threadInfo.isUserLogged(userId)){
-                        connection.sendMessage(new TcpMessage<>(MessageType.LOGIN_FAIL,
-                                "Utilizador já autenticado noutra sessão",
-                                String.class));
-                    }else{
-                        threadInfo.registerLogin(userId, res.sessionId());
-                        this.loggerUserId = userId;
-                        this.sessionId    = res.sessionId();
-                        // regista também a conexão activa para permitir notificações do servidor a este cliente
-                        try { threadInfo.registerClientConnection(userId, connection); } catch (Exception ignored) {}
-                        connection.sendMessage(new TcpMessage<>(MessageType.LOGIN_OK, res, AuthResponseDTO.class));
-                    }
+
+                    // Se já houver sessão registada para este user, limpa-a mas NÃO recusa o login
+                    try {
+                        if (threadInfo.isUserLogged(userId)) {
+                            threadInfo.unregisterClientConnection(userId);
+                            threadInfo.unregisterLogin(userId);
+                        }
+                    } catch (Exception ignored) { }
+
+                    threadInfo.registerLogin(userId, res.sessionId());
+                    this.loggerUserId = userId;
+                    this.sessionId    = res.sessionId();
+                    try { threadInfo.registerClientConnection(userId, connection); } catch (Exception ignored) {}
+
+                    connection.sendMessage(new TcpMessage<>(MessageType.LOGIN_OK, res, AuthResponseDTO.class));
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.LOGIN_FAIL, e.getMessage(), String.class));
                 }

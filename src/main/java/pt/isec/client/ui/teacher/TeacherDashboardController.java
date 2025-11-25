@@ -124,18 +124,36 @@ public class TeacherDashboardController implements IDisposableProp {
         listQuestionsListener = evt -> {
             if (!awaitingListQuestions) return;
             awaitingListQuestions = false;
+
             @SuppressWarnings("unchecked")
             List<Question> list = (List<Question>) evt.getNewValue();
+
             Platform.runLater(() -> {
+                // detecta se realmente mudou para não duplicar mensagens
+                boolean changed = true;
+                if (list != null && list.size() == lastQuestions.size()) {
+                    changed = false;
+                    for (int i = 0; i < list.size(); i++) {
+                        if (!Objects.equals(lastQuestions.get(i).getId(), list.get(i).getId())) {
+                            changed = true;
+                            break;
+                        }
+                    }
+                }
+
                 lastQuestions.clear();
                 if (list != null) lastQuestions.addAll(list);
                 refreshQuestionsTableView();
                 updateDashboardStats();
-                view.addNotification("Lista de perguntas atualizada. Total: " + lastQuestions.size());
+
+                if (changed) {
+                    view.addNotification("Lista de perguntas atualizada. Total: " + lastQuestions.size());
+                }
+
+                // recarrega contagem de respostas (totalAnswers) após qualquer update
                 fetchAnswerCountsSequentially();
             });
         };
-
         viewAnswersListener = evt -> {
             if (!awaitingViewAnswers) return;
             awaitingViewAnswers = false;

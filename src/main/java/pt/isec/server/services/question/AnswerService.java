@@ -2,7 +2,7 @@ package pt.isec.server.services.question;
 
 import pt.isec.common.dto.answer.SubmitAnswerDTO;
 import pt.isec.common.dto.answer.ViewAnswersDTO;
-import pt.isec.server.IServerManager;
+import pt.isec.server.core.IQuestionAnswerContext;
 import pt.isec.server.db.DbCommands;
 import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.OptionLetter;
@@ -18,18 +18,19 @@ import java.util.Map;
 /**
  * Serviço para submissão e consulta de respostas.
  */
-public class AnswerService {
-    private final IServerManager server;
+public class AnswerService implements IAnswerService {
+    private final IQuestionAnswerContext context;
     private final DbCommands dbCommands;
 
-    public AnswerService(IServerManager server, DbCommands dbCommands) {
-        this.server = server;
+    public AnswerService(IQuestionAnswerContext context, DbCommands dbCommands) {
+        this.context = context;
         this.dbCommands = dbCommands;
     }
 
     /**
      * Regista uma resposta e actualiza a replicação.
      */
+    @Override
     public boolean submitAnswer(SubmitAnswerDTO dto) throws Exception {
         Integer questionId = dto.questionId();
         Integer studentId = dto.studentId();
@@ -55,11 +56,11 @@ public class AnswerService {
         );
 
         // replicação
-        server.recordSqlUpdate(
+        context.recordSqlUpdate(
                 "INSERT INTO answer (student_id, question_id, chosen_option, created_at) VALUES (" +
                         studentId + ", " + questionId + ", '" + selected.name() + "', '" + now + "');"
         );
-        server.setDbVersion(server.dbVersion() + 1);
+        context.setDbVersion(context.dbVersion() + 1);
 
         // Tenta notificar o docente proprietário da pergunta (se estiver conectado)
         try {
@@ -67,10 +68,10 @@ public class AnswerService {
             if (owner != null && owner.get("teacher_id") != null) {
                 Integer teacherId = ((Number) owner.get("teacher_id")).intValue();
                 // só tenta notificar se o docente estiver autenticado (activeSessions)
-                if (server.isUserLogged(teacherId.longValue())) {
+                if (context.isUserLogged(teacherId.longValue())) {
                     // envia notificação ao docente com o id da pergunta
                     TcpMessage<Integer> notify = new TcpMessage<>(MessageType.ANSWER_SUBMITTED, questionId, Integer.class);
-                    server.sendToUser(teacherId.longValue(), notify);
+                    context.sendToUser(teacherId.longValue(), notify);
                 } else {
                     // docente não ligado — apenas regista informação de log; o docente verá os updates quando fizer refresh
                     System.out.println("[AnswerService] Teacher " + teacherId + " not logged; skipping live notify for question " + questionId);
@@ -87,6 +88,7 @@ public class AnswerService {
     /**
      * Devolve respostas de uma pergunta (docente). Calcula isCorrect em memória.
      */
+    @Override
     public List<Answer> viewAnswers(ViewAnswersDTO dto) throws Exception {
         Integer questionId = dto.questionId();
         Integer teacherId = dto.teacherId();
@@ -141,6 +143,7 @@ public class AnswerService {
     /**
      * Histórico de respostas de um estudante. Calcula isCorrect pelo correcto_option da pergunta.
      */
+    @Override
     public List<Answer> getStudentHistory(Integer studentId) throws Exception {
         List<Answer> out = new ArrayList<>();
         try (var con = DriverManager.getConnection(dbCommands.getUrl());

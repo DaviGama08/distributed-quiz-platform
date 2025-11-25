@@ -1,5 +1,7 @@
 package pt.isec.server;
 
+import pt.isec.server.core.ServerManager;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;

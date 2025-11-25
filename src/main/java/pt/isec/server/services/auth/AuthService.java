@@ -207,7 +207,7 @@ public class AuthService implements IAuthService {
     }
 
     @Override
-    public void updateStudent(UpdateStudentDTO dto) throws Exception {
+    public AuthResponseDTO updateStudent(UpdateStudentDTO dto) throws Exception {
         if (dto == null) throw new IllegalArgumentException("Dados em falta");
         Integer userId = dto.userId();
         Integer studentNumber = dto.studentNumber();
@@ -254,10 +254,25 @@ public class AuthService implements IAuthService {
             dbCommands.executeUpdate("UPDATE student SET student_number = ?, name = ?, email = ? WHERE id = ?",
                     studentNumber, name, email, userId);
         }
+
+        // Fetch updated student details
+        Map<String,Object> updatedStudent = dbCommands.selectOne(
+                "SELECT id, student_number, name, email FROM student WHERE id = ?", userId
+        );
+        if (updatedStudent == null) throw new IllegalStateException("Estudante atualizado não encontrado.");
+
+        return new AuthResponseDTO(
+                null, // Session ID is not updated here
+                String.valueOf(((Number) updatedStudent.get("id")).longValue()),
+                ((Number) updatedStudent.get("student_number")).intValue(),
+                "STUDENT",
+                (String) updatedStudent.get("name"),
+                (String) updatedStudent.get("email")
+        );
     }
 
     @Override
-    public void updateTeacher(UpdateTeacherDTO dto) throws Exception {
+    public AuthResponseDTO updateTeacher(UpdateTeacherDTO dto) throws Exception {
         if (dto == null) throw new IllegalArgumentException("Dados em falta");
         Integer teacherId = dto.teacherId();
         String name = dto.name();
@@ -290,6 +305,21 @@ public class AuthService implements IAuthService {
             dbCommands.executeUpdate("UPDATE teacher SET name = ?, email = ? WHERE id = ?",
                     name, email, teacherId);
         }
+
+        // Fetch updated teacher details
+        Map<String,Object> updatedTeacher = dbCommands.selectOne(
+                "SELECT id, name, email FROM teacher WHERE id = ?", teacherId
+        );
+        if (updatedTeacher == null) throw new IllegalStateException("Docente atualizado não encontrado.");
+
+        return new AuthResponseDTO(
+                null, // Session ID is not updated here
+                String.valueOf(((Number) updatedTeacher.get("id")).longValue()),
+                null, // Student number is not applicable for teacher
+                "TEACHER",
+                (String) updatedTeacher.get("name"),
+                (String) updatedTeacher.get("email")
+        );
     }
 
     /* --------------------- Métodos auxiliares ------------------------- */

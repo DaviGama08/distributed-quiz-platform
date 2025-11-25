@@ -19,6 +19,7 @@ import pt.isec.client.ui.util.AlertUtils;
 import pt.isec.client.ui.util.UiUtils;
 import pt.isec.client.ui.util.dialogs.StudentDialogs;
 import pt.isec.common.dto.answer.SubmitAnswerDTO;
+import pt.isec.common.dto.auth.AuthResponseDTO;
 import pt.isec.common.dto.auth.UpdateStudentDTO;
 import pt.isec.common.dto.question.JoinQuestionDTO;
 import pt.isec.common.model.question.Answer;
@@ -38,8 +39,8 @@ public class StudentDashboardController implements IDisposableProp {
     private final Stage stage;
     private final ClientManager clientManager;
     private final ClientApplication application;
-    private final String userEmail;
-    private final String userName;
+    private String userEmail; // Changed to non-final
+    private String userName;  // Changed to non-final
     private final StudentDashboardView view;
 
     // Listeners
@@ -48,7 +49,12 @@ public class StudentDashboardController implements IDisposableProp {
     private final PropertyChangeListener submitAnswerOkListener;
     private final PropertyChangeListener submitAnswerFailListener;
     private final PropertyChangeListener listAnsweredListener;
-    private final PropertyChangeListener updateProfileListener;
+    private final PropertyChangeListener updateProfileOkListener;
+    private final PropertyChangeListener updateProfileFailListener;
+    private final PropertyChangeListener userNameListener;
+    private final PropertyChangeListener userEmailListener;
+    private final PropertyChangeListener studentNumberListener;
+
 
     // Flags de espera
     private volatile boolean awaitingJoinQuestion   = false;
@@ -97,7 +103,6 @@ public class StudentDashboardController implements IDisposableProp {
         };
 
         this.submitAnswerOkListener = evt -> {
-            if (!awaitingSubmitAnswer) return;
             awaitingSubmitAnswer = false;
             String msg = (String) evt.getNewValue();
             UiUtils.runOnUiThread(() ->
@@ -107,7 +112,6 @@ public class StudentDashboardController implements IDisposableProp {
         };
 
         this.submitAnswerFailListener = evt -> {
-            if (!awaitingSubmitAnswer) return;
             awaitingSubmitAnswer = false;
             String msg = (String) evt.getNewValue();
             UiUtils.runOnUiThread(() ->
@@ -126,21 +130,46 @@ public class StudentDashboardController implements IDisposableProp {
             );
         };
 
-        this.updateProfileListener = evt -> {
-            Object v = evt.getNewValue();
-            String msg = v == null ? null : v.toString();
+        this.updateProfileOkListener = evt -> {
+            AuthResponseDTO dto = (AuthResponseDTO) evt.getNewValue();
             UiUtils.runOnUiThread(() -> {
-                if ("ok".equalsIgnoreCase(msg)) {
-                    AlertUtils.showInfo(getOwnerWindow(),
-                            "Perfil atualizado",
-                            "Os dados do perfil foram atualizados com sucesso.");
-                } else {
-                    AlertUtils.showError(getOwnerWindow(),
-                            "Falha ao actualizar perfil",
-                            msg == null ? "Erro desconhecido" : msg);
-                }
+                // Update local fields
+                this.userName = dto.name();
+                this.userEmail = dto.email();
+                // Update view directly or via property changes if view listens to them
+                view.updateUserInfo(this.userName, this.userEmail);
+
+                AlertUtils.showInfo(getOwnerWindow(),
+                        "Perfil atualizado",
+                        "Os dados do perfil foram atualizados com sucesso.");
             });
         };
+
+        this.updateProfileFailListener = evt -> {
+            Object v = evt.getNewValue();
+            String msg = (v == null) ? "Erro desconhecido" : v.toString();
+            UiUtils.runOnUiThread(() -> {
+                AlertUtils.showError(getOwnerWindow(),
+                        "Falha ao actualizar perfil",
+                        msg);
+            });
+        };
+
+        this.userNameListener = evt -> {
+            this.userName = (String) evt.getNewValue();
+            UiUtils.runOnUiThread(() -> view.updateUserInfo(this.userName, this.userEmail));
+        };
+
+        this.userEmailListener = evt -> {
+            this.userEmail = (String) evt.getNewValue();
+            UiUtils.runOnUiThread(() -> view.updateUserInfo(this.userName, this.userEmail));
+        };
+
+        this.studentNumberListener = evt -> {
+            // No direct UI update needed for student number in the main dashboard view,
+            // but it ensures the internal state is updated.
+        };
+
 
         setupPropertyChangeListeners();
     }
@@ -160,7 +189,11 @@ public class StudentDashboardController implements IDisposableProp {
         service.addPropertyChangeListener(ClientService.PROP_SUBMIT_ANSWER_OK, submitAnswerOkListener);
         service.addPropertyChangeListener(ClientService.PROP_SUBMIT_ANSWER_FAIL, submitAnswerFailListener);
         service.addPropertyChangeListener(ClientService.PROP_LIST_ANSWERED_RESPONSE, listAnsweredListener);
-        service.addPropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_RESPONSE, updateProfileListener);
+        service.addPropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_OK, updateProfileOkListener);
+        service.addPropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_FAIL, updateProfileFailListener);
+        service.addPropertyChangeListener(ClientService.PROP_USER_NAME, userNameListener);
+        service.addPropertyChangeListener(ClientService.PROP_USER_EMAIL, userEmailListener);
+        service.addPropertyChangeListener(ClientService.PROP_STUDENT_NUMBER, studentNumberListener);
     }
 
     @Override
@@ -173,7 +206,12 @@ public class StudentDashboardController implements IDisposableProp {
         service.removePropertyChangeListener(ClientService.PROP_SUBMIT_ANSWER_OK, submitAnswerOkListener);
         service.removePropertyChangeListener(ClientService.PROP_SUBMIT_ANSWER_FAIL, submitAnswerFailListener);
         service.removePropertyChangeListener(ClientService.PROP_LIST_ANSWERED_RESPONSE, listAnsweredListener);
-        service.removePropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_RESPONSE, updateProfileListener);
+        service.removePropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_OK, updateProfileOkListener);
+        service.removePropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_FAIL, updateProfileFailListener);
+        service.removePropertyChangeListener(ClientService.PROP_USER_NAME, userNameListener);
+        service.removePropertyChangeListener(ClientService.PROP_USER_EMAIL, userEmailListener);
+        service.removePropertyChangeListener(ClientService.PROP_STUDENT_NUMBER, studentNumberListener);
+
 
         try { view.hideLoading(); } catch (Exception ignored) {}
     }
@@ -194,18 +232,18 @@ public class StudentDashboardController implements IDisposableProp {
         avatarCircle.getStyleClass().add("profile-avatar-circle");
 
         Label initials = new Label(
-                UiUtils.getInitials(userName != null ? userName : userEmail)
+                UiUtils.getInitials(clientManager.getService().getUserName() != null ? clientManager.getService().getUserName() : clientManager.getService().getUserEmail())
         );
         initials.getStyleClass().add("profile-avatar-initials");
         avatarCircle.getChildren().add(initials);
 
-        Label nameLabel = new Label(userName != null ? userName : userEmail);
+        Label nameLabel = new Label(clientManager.getService().getUserName() != null ? clientManager.getService().getUserName() : clientManager.getService().getUserEmail());
         nameLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
 
         Label roleLabel = new Label("Estudante");
         roleLabel.setFont(Font.font("Arial", 12));
 
-        Label emailLabel = new Label(userEmail);
+        Label emailLabel = new Label(clientManager.getService().getUserEmail());
         emailLabel.setFont(Font.font("Arial", 12));
 
         VBox infoBox = new VBox(4, nameLabel, roleLabel, emailLabel);
@@ -313,11 +351,11 @@ public class StudentDashboardController implements IDisposableProp {
 
         Label nameLabel = new Label("Nome:");
         TextField nameField = new TextField();
-        nameField.setText(userName != null ? userName : "");
+        nameField.setText(clientManager.getService().getUserName() != null ? clientManager.getService().getUserName() : "");
 
         Label emailLabel = new Label("Email:");
         TextField emailField = new TextField();
-        emailField.setText(userEmail != null ? userEmail : "");
+        emailField.setText(clientManager.getService().getUserEmail() != null ? clientManager.getService().getUserEmail() : "");
 
         Label oldPwLabel = new Label("Password atual (só necessária se pretende alterar):");
         PasswordField oldPwField = new PasswordField();
@@ -385,6 +423,7 @@ public class StudentDashboardController implements IDisposableProp {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+        dispose();
         clientManager.getService().logout();
         application.showAuthentication();
     }

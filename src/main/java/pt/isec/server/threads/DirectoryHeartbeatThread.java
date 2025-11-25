@@ -1,6 +1,6 @@
 package pt.isec.server.threads;
-import pt.isec.server.IServerManager;
-import pt.isec.server.ServerManager;
+import pt.isec.server.core.IServerManager;
+import pt.isec.server.core.ServerManager;
 import java.io.IOException;
 import java.net.*;
 import java.nio.charset.StandardCharsets;

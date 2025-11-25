@@ -76,8 +76,6 @@ public class ResponseHandlerThread implements Runnable{
                         tInfo.setPropEditQuestionResponse("edit-ok");
                     } else if ("delete-ok".equalsIgnoreCase(s)) {
                         tInfo.setPropDeleteQuestionResponse("delete-ok");
-                    } else if ("update-ok".equalsIgnoreCase(s) || "update-profile-ok".equalsIgnoreCase(s)) {
-                        tInfo.setPropUpdateProfileResponse("ok");
                     }
                 }
             }
@@ -92,9 +90,6 @@ public class ResponseHandlerThread implements Runnable{
                         tInfo.setPropEditQuestionResponse("edit-fail");
                     } else if ("delete-fail".equalsIgnoreCase(s)) {
                         tInfo.setPropDeleteQuestionResponse("delete-fail");
-                    } else {
-                        // fallback: trata como resposta de update profile fail
-                        tInfo.setPropUpdateProfileResponse(s);
                     }
                 }
             }
@@ -171,6 +166,21 @@ public class ResponseHandlerThread implements Runnable{
                     List<Answer> answers = (List<Answer>) list;
                     tInfo.setPropListAnsweredResponse(answers);
                 }
+            }
+
+            /* ===== PERFIL ===== */
+            case UPDATE_PROFILE_OK -> {
+                System.out.println("[ResponseHandler] Profile updated successfully");
+                if(response.getData() instanceof AuthResponseDTO dto)
+                    tInfo.setPropUpdateProfileOk(dto);
+                else
+                    tInfo.setPropUpdateProfileOk(new AuthResponseDTO(null, null, null, null, "ok", null)); // Fallback
+            }
+
+            case UPDATE_PROFILE_FAIL -> {
+                System.err.println("[ResponseHandler] Failed to update profile");
+                String msg = response.getData() instanceof String s ? s : "Erro ao atualizar perfil";
+                tInfo.setPropUpdateProfileFail(msg);
             }
 
             default -> System.out.println("[ResponseHandler] Unhandled message type: " + type);

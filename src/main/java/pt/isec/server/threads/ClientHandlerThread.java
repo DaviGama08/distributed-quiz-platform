@@ -6,8 +6,7 @@ import pt.isec.common.dto.auth.*;
 import pt.isec.common.dto.question.*;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;
-import pt.isec.server.IServerManager;
-import pt.isec.server.NetworkTcpConnection;
+import pt.isec.server.core.IServerManager;
 import pt.isec.common.model.question.Question;
 
 import java.io.IOException;
@@ -164,6 +163,8 @@ public class ClientHandlerThread implements Runnable {
                             ok ? "delete-ok" : "delete-fail",
                             String.class
                     ));
+                } catch (IllegalStateException e) { // Catch specific exception for answered questions
+                    connection.sendMessage(new TcpMessage<>(MessageType.NACK, e.getMessage(), String.class));
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
                 }
@@ -237,20 +238,20 @@ public class ClientHandlerThread implements Runnable {
             case UPDATE_STUDENT -> {
                 try {
                     UpdateStudentDTO dto = tcpMessage.getDataAs(UpdateStudentDTO.class);
-                    threadInfo.getAuthService().updateStudent(dto);
-                    connection.sendMessage(new TcpMessage<>(MessageType.ACK, "update-profile-ok", String.class));
+                    AuthResponseDTO res = threadInfo.getAuthService().updateStudent(dto);
+                    connection.sendMessage(new TcpMessage<>(MessageType.UPDATE_PROFILE_OK, res, AuthResponseDTO.class));
                 } catch (Exception e) {
-                    connection.sendMessage(new TcpMessage<>(MessageType.NACK, e.getMessage(), String.class));
+                    connection.sendMessage(new TcpMessage<>(MessageType.UPDATE_PROFILE_FAIL, e.getMessage(), String.class));
                 }
             }
 
             case UPDATE_TEACHER -> {
                 try {
                     UpdateTeacherDTO dto = tcpMessage.getDataAs(UpdateTeacherDTO.class);
-                    threadInfo.getAuthService().updateTeacher(dto);
-                    connection.sendMessage(new TcpMessage<>(MessageType.ACK, "update-profile-ok", String.class));
+                    AuthResponseDTO res = threadInfo.getAuthService().updateTeacher(dto);
+                    connection.sendMessage(new TcpMessage<>(MessageType.UPDATE_PROFILE_OK, res, AuthResponseDTO.class));
                 } catch (Exception e) {
-                    connection.sendMessage(new TcpMessage<>(MessageType.NACK, e.getMessage(), String.class));
+                    connection.sendMessage(new TcpMessage<>(MessageType.UPDATE_PROFILE_FAIL, e.getMessage(), String.class));
                 }
             }
 

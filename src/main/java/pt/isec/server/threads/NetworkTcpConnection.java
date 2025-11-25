@@ -1,4 +1,4 @@
-package pt.isec.server;
+package pt.isec.server.threads;
 import pt.isec.common.messages.TcpMessage;
 import java.io.*;
 import java.net.InetSocketAddress;

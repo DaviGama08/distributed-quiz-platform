@@ -43,6 +43,8 @@ public enum MessageType {
     // Perfil
     UPDATE_STUDENT,
     UPDATE_TEACHER,
+    UPDATE_PROFILE_OK,
+    UPDATE_PROFILE_FAIL,
 
     // Replicação incremental via SQL (heartbeat)
     SQL_UPDATE,

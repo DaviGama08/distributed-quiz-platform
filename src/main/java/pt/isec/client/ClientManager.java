@@ -13,6 +13,10 @@ public class ClientManager {
     private final AuthClientService authService;
     private final QuestionClientService questionService;
     private final AnswerClientService answerService;
+    // callback que a UI regista para ser executado quando o manager pedir para fechar a UI
+    private Runnable uiCloser;
+
+
 
     public ClientManager(String ip, int port){
         this.service = new ClientService(this, port, ip);
@@ -31,7 +35,23 @@ public class ClientManager {
 
     }
     /** Pára o serviço e fecha conexões */
-    public void stop(){ service.stop(); }
+    public void stop(){
+        if(service != null)
+            service.stop();
+        if(uiCloser != null) {
+            try {
+                javafx.application.Platform.runLater(uiCloser);
+            } catch (Exception e){
+                // caso a JavaFX runtime não esteja disponível, apenas logue
+                System.err.println("[ClientManager] Não conseguiu correr o uiCloser: " + e.getMessage());
+            }
+        }
+    }
+
+    //UI regista aqui o closer
+    public void setUiCloser(Runnable uiCloser) {
+        this.uiCloser = uiCloser;
+    }
 
     public AnswerClientService getAnswerService() { return answerService; }
     public AuthClientService getAuthService() { return authService; }

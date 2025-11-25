@@ -32,74 +32,58 @@ public class AnswerService implements IAnswerService {
      */
     @Override
     public boolean submitAnswer(SubmitAnswerDTO dto) throws Exception {
-        Integer questionId   = dto.questionId();
-        Integer studentId    = dto.studentId();
+        Integer questionId = dto.questionId();
+        Integer studentId = dto.studentId();
         OptionLetter selected = dto.selectedOption();
-        LocalDateTime now    = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now();
 
-        // valida pergunta (existência + período ativo)
+        // valida pergunta
         Map<String, Object> q = dbCommands.selectOne(
-                "SELECT teacher_id, correct_option, start_at, end_at FROM question WHERE id = ?",
+                "SELECT correct_option, start_at, end_at FROM question WHERE id = ?",
                 questionId
         );
-        if (q == null)
-            throw new IllegalArgumentException("Pergunta inexistente");
-
+        if (q == null) throw new IllegalArgumentException("Pergunta inexistente");
         LocalDateTime startAt = LocalDateTime.parse((String) q.get("start_at"));
-        LocalDateTime endAt   = LocalDateTime.parse((String) q.get("end_at"));
-
+        LocalDateTime endAt = LocalDateTime.parse((String) q.get("end_at"));
         if (now.isBefore(startAt) || now.isAfter(endAt)) {
             throw new IllegalStateException("Pergunta fora do período de disponibilidade");
         }
 
         // insere a resposta
         dbCommands.executeUpdate(
-                "INSERT INTO answer (student_id, question_id, chosen_option, created_at) " +
-                        "VALUES (?, ?, ?, ?)",
+                "INSERT INTO answer (student_id, question_id, chosen_option, created_at) VALUES (?, ?, ?, ?)",
                 studentId, questionId, selected.name(), now.toString()
         );
 
-        // registo para replicação
+        // replicação
         context.recordSqlUpdate(
                 "INSERT INTO answer (student_id, question_id, chosen_option, created_at) VALUES (" +
                         studentId + ", " + questionId + ", '" + selected.name() + "', '" + now + "');"
         );
         context.setDbVersion(context.dbVersion() + 1);
 
-        // ---------------- NOTIFICAÇÃO EM TEMPO REAL AO DOCENTE ----------------
+        // Tenta notificar o docente proprietário da pergunta (se estiver conectado)
         try {
-            Object rawTeacherId = q.get("teacher_id");
-            Long teacherId = null;
-
-            if (rawTeacherId instanceof Number n) {
-                teacherId = n.longValue();
-            } else if (rawTeacherId instanceof String s && !s.isBlank()) {
-                teacherId = Long.parseLong(s);
-            }
-
-            if (teacherId != null && context.isUserLogged(teacherId)) {
-                TcpMessage<Integer> notify = new TcpMessage<>(
-                        MessageType.ANSWER_SUBMITTED,
-                        questionId,
-                        Integer.class
-                );
-                context.sendToUser(teacherId, notify);
-                System.out.println("[AnswerService] Live notify enviado para docente " +
-                        teacherId + " (questionId=" + questionId + ")");
-            } else {
-                System.out.println("[AnswerService] Docente não ligado ou teacher_id nulo; " +
-                        "não há notify em tempo real para questionId=" + questionId);
+            Map<String, Object> owner = dbCommands.selectOne("SELECT teacher_id FROM question WHERE id = ?", questionId);
+            if (owner != null && owner.get("teacher_id") != null) {
+                Integer teacherId = ((Number) owner.get("teacher_id")).intValue();
+                // só tenta notificar se o docente estiver autenticado (activeSessions)
+                if (context.isUserLogged(teacherId.longValue())) {
+                    // envia notificação ao docente com o id da pergunta
+                    TcpMessage<Integer> notify = new TcpMessage<>(MessageType.ANSWER_SUBMITTED, questionId, Integer.class);
+                    context.sendToUser(teacherId.longValue(), notify);
+                } else {
+                    // docente não ligado — apenas regista informação de log; o docente verá os updates quando fizer refresh
+                    System.out.println("[AnswerService] Teacher " + teacherId + " not logged; skipping live notify for question " + questionId);
+                }
             }
         } catch (Exception e) {
-            // falha de notify não deve estragar a submissão
-            System.err.println("[AnswerService] Falha ao notificar docente: " + e.getMessage());
+            // falha a notificar não deve impedir o sucesso da submissão
+            System.err.println("[AnswerService] Failed to notify teacher: " + e.getMessage());
         }
-        // ----------------------------------------------------------------------
 
         return true;
     }
-
-
 
     /**
      * Devolve respostas de uma pergunta (docente). Calcula isCorrect em memória.

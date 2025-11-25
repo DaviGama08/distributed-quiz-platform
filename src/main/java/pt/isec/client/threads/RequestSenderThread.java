@@ -19,13 +19,21 @@ public class RequestSenderThread implements Runnable{
 
     @Override
     public void run() {
-        ObjectOutputStream out = service.getOutputStream();
-
         System.out.println("[RequestSender] Started sending requests...");
 
         while(service.isRunning()) {
+            TcpMessage<? extends Serializable> request = null;
             try {
-                TcpMessage<? extends Serializable> request = service.getRequestQueue().take();
+                request = service.getRequestQueue().take();
+
+                ObjectOutputStream out = service.getOutputStream();
+                if (out == null) {
+                    // não temos stream válido — tenta reconectar e re-enfileirar
+                    System.err.println("[RequestSender] No output stream available, requeueing request: " + request.getType());
+                    service.getRequestQueue().put(request);
+                    service.handleConnectionLost();
+                    break;
+                }
 
                 System.out.println("[RequestSender] Sending: " + request.getType());
                 out.writeObject(request);
@@ -33,6 +41,9 @@ public class RequestSenderThread implements Runnable{
             } catch (IOException e) {
                 if(service.isRunning()) {
                     System.err.println("[RequestSender] Failed to send: " + e.getMessage());
+                    try {
+                        if (request != null) service.getRequestQueue().put(request);
+                    } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
                     service.handleConnectionLost();
                 }
                 break;

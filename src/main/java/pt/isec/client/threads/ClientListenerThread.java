@@ -20,33 +20,38 @@ public class ClientListenerThread implements Runnable{
 
     @Override
     public void run() {
-        ObjectInputStream in = service.getInputStream();
-
-        System.out.println("[ClientListener] Started listening for server messages...");
+        System.out.println("[ClientListener] A escuta de mensagens do servidor...");
 
         while(service.isRunning()) {
             try {
+                ObjectInputStream in = service.getInputStream();
+                if (in == null) {
+                    // sem stream válido; aguarda um pouco ou dispara reconexão
+                    Thread.sleep(200);
+                    continue;
+                }
+
                 TcpMessage<? extends Serializable> response = (TcpMessage<? extends Serializable>) in.readObject();
 
                 if(response != null) {
-                    System.out.println("[ClientListener] Received: " + response.getType());
+                    System.out.println("[ClientListener] Recebido: " + response.getType());
                     service.getResponseQueue().put(response);
                 }
             } catch (IOException e) {
                 if(service.isRunning()) {
-                    System.err.println("[ClientListener] Connection lost: " + e.getMessage());
+                    System.err.println("[ClientListener] Ligação perdida: " + e.getMessage());
                     service.handleConnectionLost();
                 }
                 break;
             } catch (ClassNotFoundException e) {
-                System.err.println("[ClientListener] Unknown message type: " + e.getMessage());
+                System.err.println("[ClientListener] Tipo de mensagem desconhecida: " + e.getMessage());
             } catch (InterruptedException e) {
-                System.out.println("[ClientListener] Interrupted");
+                System.out.println("[ClientListener] Interromppido");
                 Thread.currentThread().interrupt();
                 break;
             }
         }
 
-        System.out.println("[ClientListener] Stopped");
+        System.out.println("[ClientListener] Parado");
     }
 }

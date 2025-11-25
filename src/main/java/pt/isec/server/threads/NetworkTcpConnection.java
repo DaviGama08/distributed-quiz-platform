@@ -5,6 +5,7 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.time.Duration;
 
+//Class responsavel para fazer a ligação entre o servidor e o cliente
 public class NetworkTcpConnection implements AutoCloseable {
     private static final int BUFFER_SIZE = 64 * 1024;
     private static final int MAX_INT_TIMEOUT = Integer.MAX_VALUE;
@@ -41,7 +42,7 @@ public class NetworkTcpConnection implements AutoCloseable {
         return (TcpMessage<?>) in.readObject();
     }
 
-    /* ===== NOVO: tipos primitivos e fluxo binário pelo MESMO ObjectStream ===== */
+    /* ===== tipos primitivos e fluxo binário pelo mesmo ObjectStream ===== */
 
     public void writeLong(long v) throws IOException {
         out.writeLong(v);

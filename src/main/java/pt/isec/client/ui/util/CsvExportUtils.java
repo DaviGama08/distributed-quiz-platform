@@ -1,4 +1,5 @@
 package pt.isec.client.ui.util;
+import javafx.application.Platform;
 import javafx.stage.FileChooser;
 import javafx.stage.Window;
 import pt.isec.common.model.question.Answer;
@@ -118,12 +119,16 @@ public final class CsvExportUtils {
             }
         } catch (IOException e) {
             System.out.println("CSV não exportado: " + e.getMessage());
-            AlertUtils.showError(ownerWindow, "Exportar CSV", "Erro ao guardar o ficheiro!");
+            Platform.runLater(() ->
+                AlertUtils.showError(ownerWindow, "Exportar CSV", "Erro ao guardar o ficheiro!")
+            );
             return;
         }
 
         System.out.println("CSV exportado!");
-        AlertUtils.showInfo(ownerWindow, "Exportar CSV", "Ficheiro CSV gravado com sucesso");
+        Platform.runLater(() ->
+            AlertUtils.showInfo(ownerWindow, "Exportar CSV", "Ficheiro CSV gravado com sucesso")
+        );
     }
 
     private static String escapeCsv(String s) {

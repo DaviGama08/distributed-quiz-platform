@@ -279,6 +279,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
         }
     }
 
+    //Encerra o servidor depois da diretoria terminar. Impede que fique preso no connection
     @Override
     public void close() {
         try {

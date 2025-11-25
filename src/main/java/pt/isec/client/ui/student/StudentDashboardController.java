@@ -96,6 +96,8 @@ public class StudentDashboardController implements IDisposableProp {
                 try { view.hideLoading(); } catch (Exception ignored) {}
                 if (q == null) {
                     showErrorAlert("Código inválido ou pergunta não existente.");
+                } else if (!q.isActive()){
+                    showErrorAlert("Não é possivel responder à pergunta.");
                 } else {
                     openQuestionDialog(q);
                 }

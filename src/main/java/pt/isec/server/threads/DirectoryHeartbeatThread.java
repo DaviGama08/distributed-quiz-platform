@@ -30,7 +30,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
 
             // REGISTER
             String registerMsg = requestKeyValue(
-                    "VER","1","TYPE","REGISTER",
+                    "TYPE","REGISTER",
                     "ID", managerTheardInfo.id(),
                     "TCP", managerTheardInfo.serverTcpIp() + ":" + managerTheardInfo.serverTcpPort(), //ip e porto do servidor para o cliente saber
                     "DBV", String.valueOf(managerTheardInfo.dbVersion()), //versão da base de dados
@@ -86,7 +86,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
 
                 if (now - last >= HEARTBEAT_INTERVAL_MS) {
                     String hb = requestKeyValue(
-                            "VER","1","TYPE","HEARTBEAT",
+                            "TYPE","HEARTBEAT",
                             "ID", managerTheardInfo.id()
                     );
                     send(s, dirAddr, dirPort, hb);
@@ -103,7 +103,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             }
 
             // DEREGISTER
-            String deregMsg = requestKeyValue("VER","1","TYPE","DEREGISTER","ID", managerTheardInfo.id());
+            String deregMsg = requestKeyValue("TYPE","DEREGISTER","ID", managerTheardInfo.id());
             send(s, dirAddr, dirPort, deregMsg);
 
         } catch (Exception e) {

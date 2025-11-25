@@ -6,6 +6,8 @@ import pt.isec.directory.IDirectoryManager;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
 
 /**
  * Diretoria robusta com 4 threads (todas via Runnable):
@@ -19,10 +21,10 @@ import java.net.DatagramSocket;
  * === MENSAGENS DE CLIENTE (sem VER) ===
  *  - TYPE=LOGIN
  *
- * === MENSAGENS DE SERVIDOR (requerem VER=1) ===
- *  - VER=1 | TYPE=REGISTER   | ID=<serverId> | TCP=<ip:port> | DBV=<dbVersion>
- *  - VER=1 | TYPE=HEARTBEAT  | ID=<serverId> | DBV=<dbVersion>
- *  - VER=1 | TYPE=DEREGISTER | ID=<serverId>
+ * === MENSAGENS DE SERVIDOR ===
+ *  - TYPE=REGISTER   | ID=<serverId> | TCP=<ip:port> | DBV=<dbVersion>
+ *  - TYPE=HEARTBEAT  | ID=<serverId> | DBV=<dbVersion>
+ *  - TYPE=DEREGISTER | ID=<serverId>
  *
  * Respostas (texto):
  *  - "200 OK"
@@ -56,12 +58,35 @@ public class UdpListenerThread implements Runnable {
                 tInfo.queue().put(
                         new UdpMessage(packet.getAddress(), packet.getPort(), data, data.length)
                 );
+
+            } catch (SocketTimeoutException ste) {
+                // opcional: socket configurado com timeout; apenas revalida loop e continua
+            } catch (SocketException se) {
+                // socket fechado intencionalmente (shutdown) causará aqui um SocketException
+                if (!tInfo.isRunning() || socket.isClosed()) {
+                    // shutdown ordenado — terminar o loop sem alarmes
+                    break;
+                }
+                // erro de socket inesperado -> log e pequena pausa para evitar busy-loop
+                System.err.println("Erro de socket UDP: " + se.getMessage());
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
             } catch (IOException e) {
-                if (tInfo.isRunning())
-                    System.err.println("Erro a receber UDP: " + e.getMessage());
+                // outros IO erros
+                if (tInfo.isRunning()) System.err.println("Erro a receber UDP: " + e.getMessage());
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
             } catch (InterruptedException ie) {
-                //TODO: analisar se é necessário interromper a thread.
-                Thread.currentThread().interrupt();
+                // thread interrompida enquanto bloqueada no queue.put()
+                Thread.currentThread().interrupt(); //restaura sinal de pedido de interrupção
                 break;
             }
         }

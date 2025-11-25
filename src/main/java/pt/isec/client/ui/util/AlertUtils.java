@@ -4,6 +4,9 @@ import javafx.scene.control.ButtonType;
 import javafx.stage.Window;
 import java.util.Optional;
 
+/*
+Class para lidar com as janelas de modal de informação, erro e confirmação
+ */
 public final class AlertUtils {
 
     private AlertUtils() { }

@@ -64,6 +64,7 @@ public class AuthService implements IAuthService {
                     name, email, hashPw
             );
         });
+        //Obtem id do professor
         Map<String,Object> row = dbCommands.selectOne("SELECT id FROM teacher where email = ?", email);
         newId = row == null ? -1L : ((Number) row.get("id")).longValue();
 

@@ -97,6 +97,70 @@ BEGIN
     UPDATE config SET db_version = db_version + 1 WHERE id = 1;
 END;
 
+CREATE TRIGGER IF NOT EXISTS trg_increase_version_answer_insert
+    AFTER INSERT ON answer
+BEGIN
+UPDATE config SET db_version = db_version + 1 WHERE id = 1;
+END;
+CREATE TRIGGER IF NOT EXISTS trg_increase_version_answer_update
+    AFTER UPDATE ON answer
+BEGIN
+UPDATE config SET db_version = db_version + 1 WHERE id = 1;
+END;
+CREATE TRIGGER IF NOT EXISTS trg_increase_version_answer_delete
+    AFTER DELETE ON answer
+BEGIN
+UPDATE config SET db_version = db_version + 1 WHERE id = 1;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_increase_version_option_insert
+    AFTER INSERT ON option
+BEGIN
+UPDATE config SET db_version = db_version + 1 WHERE id = 1;
+END;
+CREATE TRIGGER IF NOT EXISTS trg_increase_version_option_update
+    AFTER UPDATE ON option
+BEGIN
+UPDATE config SET db_version = db_version + 1 WHERE id = 1;
+END;
+CREATE TRIGGER IF NOT EXISTS trg_increase_version_option_delete
+    AFTER DELETE ON option
+BEGIN
+UPDATE config SET db_version = db_version + 1 WHERE id = 1;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_increase_version_teacher_insert
+    AFTER INSERT ON teacher
+BEGIN
+UPDATE config SET db_version = db_version + 1 WHERE id = 1;
+END;
+CREATE TRIGGER IF NOT EXISTS trg_increase_version_teacher_update
+    AFTER UPDATE ON teacher
+BEGIN
+UPDATE config SET db_version = db_version + 1 WHERE id = 1;
+END;
+CREATE TRIGGER IF NOT EXISTS trg_increase_version_teacher_delete
+    AFTER DELETE ON teacher
+BEGIN
+UPDATE config SET db_version = db_version + 1 WHERE id = 1;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_increase_version_student_insert
+    AFTER INSERT ON student
+BEGIN
+UPDATE config SET db_version = db_version + 1 WHERE id = 1;
+END;
+CREATE TRIGGER IF NOT EXISTS trg_increase_version_student_update
+    AFTER UPDATE ON student
+BEGIN
+UPDATE config SET db_version = db_version + 1 WHERE id = 1;
+END;
+CREATE TRIGGER IF NOT EXISTS trg_increase_version_student_delete
+    AFTER DELETE ON student
+BEGIN
+UPDATE config SET db_version = db_version + 1 WHERE id = 1;
+END;
+
 -- Índices úteis
 CREATE INDEX IF NOT EXISTS idx_teacher_email    ON teacher(email);
 CREATE INDEX IF NOT EXISTS idx_student_email    ON student(email);

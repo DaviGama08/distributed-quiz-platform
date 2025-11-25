@@ -26,10 +26,10 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Serviço central de gestão de rede: descoberta, conexão TCP,
- * filas de envio/recepção e propriedades observáveis.
+ * filas de envio/receptão e propriedades observáveis.
  *
  * Esta classe implementa a interface IClientService e expõe métodos
- * para as threads de envio/recepção, assim como setters de eventos
+ * para as threads de envio/receptão, assim como setters de eventos
  * que notificam os controladores da UI.
  */
 public class ClientService implements IClientService {
@@ -39,6 +39,7 @@ public class ClientService implements IClientService {
     public static final String PROP_USER_TYPE         = "userType";
     public static final String PROP_USER_EMAIL        = "userEmail";
     public static final String PROP_USER_NAME         = "userName";
+    public static final String PROP_STUDENT_NUMBER    = "studentNumber"; // New property
     public static final String PROP_CONNECTION_STATUS = "connectionStatus";
 
     // Propriedades específicas para eventos de autenticação
@@ -119,7 +120,7 @@ public class ClientService implements IClientService {
         pcs.firePropertyChange(PROP_NOTIFICATION, null, text);
     }
 
-    /* ==================== Envio/Recepção de Mensagens ==================== */
+    /* ==================== Envio/Receptão de Mensagens ==================== */
 
     /** Enfileira uma mensagem para ser enviada pela thread RequestSenderThread. */
     public void sendMessage(TcpMessage<? extends Serializable> tcpMessage) {
@@ -344,7 +345,12 @@ public class ClientService implements IClientService {
     }
 
     @Override public void setUserId(Integer id) { this.userId = id; }
-    @Override public void setStudentNumber(Integer number) { this.studentNumber = number; }
+    @Override
+    public void setStudentNumber(Integer number) {
+        Integer old = this.studentNumber;
+        this.studentNumber = number;
+        pcs.firePropertyChange(PROP_STUDENT_NUMBER, old, number);
+    }
 
     @Override
     public void setAuthenticated(boolean auth){
@@ -451,8 +457,17 @@ public class ClientService implements IClientService {
     }
 
     @Override
-    public void setPropUpdateProfileOk(String message) {
-        pcs.firePropertyChange(PROP_UPDATE_PROFILE_OK, null, message);
+    public void setPropUpdateProfileOk(AuthResponseDTO dto) {
+        // Update internal state
+        setUserId(Integer.parseInt(dto.userId()));
+        setUserType(dto.userType());
+        setUserName(dto.name());
+        setUserEmail(dto.email());
+        if ("STUDENT".equals(dto.userType())) {
+            setStudentNumber(dto.studentNumber());
+        }
+        // Fire the event
+        pcs.firePropertyChange(PROP_UPDATE_PROFILE_OK, null, dto);
     }
 
     @Override

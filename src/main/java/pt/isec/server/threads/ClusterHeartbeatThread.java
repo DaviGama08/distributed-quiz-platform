@@ -2,9 +2,8 @@ package pt.isec.server.threads;
 
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;
-import pt.isec.server.IServerManager;
-import pt.isec.server.NetworkTcpConnection;
-import pt.isec.server.ServerManager;
+import pt.isec.server.core.IServerManager;
+import pt.isec.server.core.ServerManager;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;

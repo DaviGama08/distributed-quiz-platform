@@ -5,6 +5,8 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
@@ -157,8 +159,8 @@ public class TeacherDashboardController implements IDisposableProp {
             awaitingViewAnswers = false;
             @SuppressWarnings("unchecked")
             List<Answer> answers = (List<Answer>) evt.getNewValue();
-            final Question q = pendingViewQuestion;
-            pendingViewQuestion = null;
+            final Question q = pendingViewQuestion; // q is the question for which answers were fetched
+            pendingViewQuestion = null; // Clear pending question after processing
 
             Platform.runLater(() -> {
                 if (q == null) {
@@ -168,15 +170,15 @@ public class TeacherDashboardController implements IDisposableProp {
                 }
 
                 int count = (answers == null ? 0 : answers.size());
-                answersCountByQuestion.put(q.getId(), count);
+                answersCountByQuestion.put(q.getId(), count); // Update the count for this specific question
                 updateDashboardStats();
 
                 if (bulkLoadingAnswers) {
-                    // durante bulk load só actualizamos contadores
+                    // during bulk load only update counters
                     return;
                 }
 
-                // havia acção pendente (EDIT/DELETE)? trata agora
+                // there was a pending action (EDIT/DELETE)? handle it now
                 if (pendingAction != null && pendingAction != PendingAction.NONE &&
                         pendingActionQuestion != null &&
                         pendingActionQuestion.getId().equals(q.getId())) {
@@ -198,7 +200,7 @@ public class TeacherDashboardController implements IDisposableProp {
                                     "A pergunta já tem respostas e não pode ser editada.");
                             return;
                         }
-                        // sem respostas -> pedir detalhes ao servidor
+                        // no answers -> request details from server
                         Integer teacherId = clientManager.getUserId();
                         if (teacherId == null) {
                             AlertUtils.showError(getCurrentOwnerWindow(),
@@ -238,10 +240,10 @@ public class TeacherDashboardController implements IDisposableProp {
                     }
                 }
 
-                // fluxo normal: mostrar diálogo de respostas (TeacherDialogs)
+                // normal flow: show answers dialog (TeacherDialogs)
                 Window owner = getCurrentOwnerWindow();
                 TeacherDialogs.showAnswersDialog(owner, q, answers, () -> {
-                    // callback para "Eliminar pergunta" dentro do diálogo
+                    // callback for "Delete question" inside the dialog
                     Integer teacherId = clientManager.getUserId();
                     if (teacherId == null) {
                         AlertUtils.showError(owner, "Erro",
@@ -269,11 +271,28 @@ public class TeacherDashboardController implements IDisposableProp {
 
             final Integer finalQid = qid;
             Platform.runLater(() -> {
-                answersCountByQuestion.merge(finalQid, 1, Integer::sum);
-                updateDashboardStats();
+                Integer teacherId = clientManager.getUserId();
+                if (teacherId == null) {
+                    System.err.println("[TeacherDashboardController] Cannot re-fetch answer count: teacher ID is null.");
+                    return;
+                }
+
+                // Create a minimal Question object for pendingViewQuestion.
+                // The viewAnswersListener only needs the ID from this object to update answersCountByQuestion.
+                Question dummyQuestion = new Question(finalQid, null, teacherId, null, null, null, null, null);
+
+                pendingViewQuestion = dummyQuestion; // Set the pending question
+                awaitingViewAnswers = true; // Indicate that we are waiting for answers
                 try {
-                    refreshQuestionsTableView();
-                } catch (Exception ignored) {}
+                    // Request the answers for this specific question from the server
+                    clientManager.getAnswerService()
+                            .viewAnswersForTeacher(new ViewAnswersDTO(finalQid, teacherId));
+                } catch (Exception e) {
+                    awaitingViewAnswers = false; // Clear flag on error
+                    System.err.println("[TeacherDashboardController] Failed to re-fetch answer count for qid=" + finalQid + ": " + e.getMessage());
+                    // Fallback: if re-fetch fails, a full refresh might be needed
+                    refreshQuestions();
+                }
             });
         };
 
@@ -540,11 +559,32 @@ public class TeacherDashboardController implements IDisposableProp {
                     ContextMenu menu = new ContextMenu();
                     MenuItem editItem = new MenuItem("Editar Pergunta");
                     MenuItem deleteItem = new MenuItem("Eliminar Pergunta");
+                    MenuItem copyCodeItem = new MenuItem("Copiar Código"); // novo item
 
                     editItem.setOnAction(ae -> handleEditFromList(selected));
                     deleteItem.setOnAction(ae -> handleDeleteFromList(selected, table));
+                    copyCodeItem.setOnAction(ae -> { // ação para copiar código
+                        if (selected.getAccessCode() != null && !selected.getAccessCode().isEmpty()) {
+                            Clipboard clipboard = Clipboard.getSystemClipboard();
+                            ClipboardContent clipboardContent = new ClipboardContent();
+                            clipboardContent.putString(selected.getAccessCode());
+                            clipboard.setContent(clipboardContent);
+                            AlertUtils.showInfo(
+                                    getCurrentOwnerWindow(),
+                                    "Código Copiado",
+                                    "O código da pergunta foi copiado para a área de transferência."
+                            );
+                        } else {
+                            // aqui estava showWarning -> trocado por showInfo (método existente)
+                            AlertUtils.showInfo(
+                                    getCurrentOwnerWindow(),
+                                    "Código Indisponível",
+                                    "Não há código de acesso para copiar."
+                            );
+                        }
+                    });
 
-                    menu.getItems().addAll(editItem, deleteItem);
+                    menu.getItems().addAll(editItem, deleteItem, copyCodeItem);
                     menu.show(row, event.getScreenX(), event.getScreenY());
                 }
             });
@@ -660,29 +700,28 @@ public class TeacherDashboardController implements IDisposableProp {
 
     private void handleDeleteFromList(Question selected, TableView<Question> table) {
         Integer knownDel = answersCountByQuestion.get(selected.getId());
-        if (knownDel != null && knownDel > 0) {
-            AlertUtils.showError(getCurrentOwnerWindow(),
-                    "Eliminar Indisponível",
-                    "A pergunta já tem respostas e não pode ser eliminada.");
-            return;
-        }
+        if (knownDel != null) { // We know the count
+            if (knownDel > 0) { // And it has answers
+                AlertUtils.showError(getCurrentOwnerWindow(),
+                        "Eliminar Indisponível",
+                        "A pergunta já tem respostas e não pode ser eliminada.");
+                return;
+            }
+            // No answers, proceed with delete confirmation
+            Window owner = (table.getScene() != null ? table.getScene().getWindow() : getCurrentOwnerWindow());
+            boolean confirm = AlertUtils.showConfirmation(
+                    owner,
+                    "Confirmar Eliminação",
+                    "Tem certeza que deseja eliminar a pergunta " + selected.getAccessCode() + "?",
+                    "Esta ação não pode ser desfeita."
+            );
+            if (!confirm) return;
 
-        Window owner = (table.getScene() != null ? table.getScene().getWindow() : getCurrentOwnerWindow());
-        boolean confirm = AlertUtils.showConfirmation(
-                owner,
-                "Confirmar Eliminação",
-                "Tem certeza que deseja eliminar a pergunta " + selected.getAccessCode() + "?",
-                "Esta ação não pode ser desfeita."
-        );
-        if (!confirm) return;
-
-        Integer teacherId = clientManager.getUserId();
-        if (teacherId == null) {
-            AlertUtils.showError(owner, "Erro", "Sessão inválida. Faça login novamente.");
-            return;
-        }
-
-        if (knownDel != null && knownDel == 0) {
+            Integer teacherId = clientManager.getUserId();
+            if (teacherId == null) {
+                AlertUtils.showError(owner, "Erro", "Sessão inválida. Faça login novamente.");
+                return;
+            }
             clientManager.getQuestionService()
                     .deleteQuestion(new DeleteQuestionDTO(selected.getId(), teacherId));
             AlertUtils.showInfo(owner,
@@ -693,7 +732,14 @@ public class TeacherDashboardController implements IDisposableProp {
             return;
         }
 
-        // desconhecemos nº respostas -> pedir e tratar depois
+        // We don't know the answer count -> request it and then handle
+        Integer teacherId = clientManager.getUserId();
+        if (teacherId == null) {
+            AlertUtils.showError(getCurrentOwnerWindow(),
+                    "Erro", "Sessão inválida. Faça login novamente.");
+            return;
+        }
+
         pendingAction = PendingAction.DELETE;
         pendingActionQuestion = selected;
         pendingViewQuestion = selected;
@@ -802,7 +848,7 @@ public class TeacherDashboardController implements IDisposableProp {
             pendingViewQuestion = q;
             awaitingViewAnswers = true;
             clientManager.getAnswerService()
-                    .viewAnswersForTeacher(new ViewAnswersDTO(q.getId(), teacherId));
+                .viewAnswersForTeacher(new ViewAnswersDTO(q.getId(), teacherId));
         });
     }
 

@@ -171,8 +171,10 @@ public class ResponseHandlerThread implements Runnable{
             /* ===== PERFIL ===== */
             case UPDATE_PROFILE_OK -> {
                 System.out.println("[ResponseHandler] Profile updated successfully");
-                String msg = response.getData() instanceof String s ? s : "ok";
-                tInfo.setPropUpdateProfileOk(msg);
+                if(response.getData() instanceof AuthResponseDTO dto)
+                    tInfo.setPropUpdateProfileOk(dto);
+                else
+                    tInfo.setPropUpdateProfileOk(new AuthResponseDTO(null, null, null, null, "ok", null)); // Fallback
             }
 
             case UPDATE_PROFILE_FAIL -> {

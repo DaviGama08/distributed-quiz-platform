@@ -1,4 +1,5 @@
 javac -d ..\bin\server.pt.isec ^
+  ..\pt\isec\server\core\*.java ^
   ..\pt\isec\server\*.java ^
   ..\pt\isec\server\threads\*.java ^
   ..\pt\isec\server\db\*.java ^

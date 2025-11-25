@@ -1,28 +1,30 @@
 package pt.isec.server.services.question;
 
 import pt.isec.common.dto.question.*;
-import pt.isec.server.IServerManager;
+import pt.isec.server.core.IQuestionAnswerContext;
 import pt.isec.server.db.DbCommands;
 import pt.isec.common.model.question.Option;
 import pt.isec.common.model.question.OptionLetter;
 import pt.isec.common.model.question.Question;
 
+import java.sql.DriverManager;
 import java.time.LocalDateTime;
 import java.util.*;
 
 /**
  * Serviço que trata da criação, edição, listagem e acesso de perguntas.
  */
-public class QuestionService {
-    private final IServerManager server;
+public class QuestionService implements IQuestionService {
+    private final IQuestionAnswerContext context;
     private final DbCommands dbCommands;
 
-    public QuestionService(IServerManager server, DbCommands dbCommands) {
-        this.server = server;
+    public QuestionService(IQuestionAnswerContext context, DbCommands dbCommands) {
+        this.context = context;
         this.dbCommands = dbCommands;
     }
 
     /** Cria uma pergunta para um docente. */
+    @Override
     public CreateQuestionResponseDTO createQuestion(CreateQuestionDTO dto) throws Exception {
         if (dto == null)
             throw new IllegalArgumentException("Dados inválidos");
@@ -67,23 +69,24 @@ public class QuestionService {
 
         // replicação incremental
         long qId = qIdArr[0];
-        server.recordSqlUpdate(
+        context.recordSqlUpdate(
                 "INSERT INTO question (id, statement, teacher_id, correct_option, start_at, end_at, access_code) VALUES (" +
                         qId + ", '" + escape(statement) + "', " + teacherId + ", '" + correct.name() + "', '" +
                         startAt + "', '" + endAt + "', '" + accessCode + "');"
         );
         for (Option o : options) {
-            server.recordSqlUpdate(
+            context.recordSqlUpdate(
                     "INSERT INTO option (question_id, letter, text) VALUES (" +
                             qId + ", '" + o.getLetter().name() + "', '" + escape(o.getText()) + "');"
             );
         }
-        server.setDbVersion(server.dbVersion() + 1);
+        context.setDbVersion(context.dbVersion() + 1);
 
         return new CreateQuestionResponseDTO((int) qId, accessCode);
     }
 
     /** Lista perguntas por docente, com filtro opcional (active, future, expired ou null). */
+    @Override
     public List<Question> listQuestions(ListQuestionsDTO dto) throws Exception {
         Integer teacherId = dto.teacherId();
         String filter = dto.filter();
@@ -109,7 +112,7 @@ public class QuestionService {
         }
 
         List<Map<String,Object>> rows = new ArrayList<>();
-        try (var con = java.sql.DriverManager.getConnection(dbCommands.getUrl());
+        try (var con = DriverManager.getConnection(dbCommands.getUrl());
              var ps = con.prepareStatement(sql.toString())) {
             for (int i = 0; i < params.size(); i++) {
                 ps.setObject(i + 1, params.get(i));
@@ -169,6 +172,7 @@ public class QuestionService {
     }
 
     /** Acessa pergunta por código. */
+    @Override
     public Question joinQuestion(JoinQuestionDTO dto) throws Exception {
         String access = dto.accessCode();
         Map<String,Object> r = dbCommands.selectOne(
@@ -196,6 +200,7 @@ public class QuestionService {
     }
 
     /** Edita pergunta se não existirem respostas. */
+    @Override
     public boolean editQuestion(EditQuestionDTO dto) throws Exception {
         Integer quizId = dto.questionId();
         Integer teacherId = dto.teacherId();
@@ -228,22 +233,23 @@ public class QuestionService {
             }
         });
 
-        server.recordSqlUpdate(
+        context.recordSqlUpdate(
                 "UPDATE question SET statement='" + escape(statement) + "', correct_option='" + correct.name() +
                         "', start_at='" + startAt + "', end_at='" + endAt + "' WHERE id=" + quizId + " AND teacher_id=" + teacherId + ";"
         );
-        server.recordSqlUpdate("DELETE FROM option WHERE question_id=" + quizId + ";");
+        context.recordSqlUpdate("DELETE FROM option WHERE question_id=" + quizId + ";");
         for (Option o : options) {
-            server.recordSqlUpdate(
+            context.recordSqlUpdate(
                     "INSERT INTO option (question_id, letter, text) VALUES (" +
                             quizId + ", '" + o.getLetter().name() + "', '" + escape(o.getText()) + "');"
             );
         }
-        server.setDbVersion(server.dbVersion() + 1);
+        context.setDbVersion(context.dbVersion() + 1);
         return true;
     }
 
     /** Elimina pergunta se não tiver respostas. */
+    @Override
     public boolean deleteQuestion(DeleteQuestionDTO dto) throws Exception {
         Integer qId = dto.questionId();
         Integer teacherId = dto.teacherId();
@@ -261,9 +267,9 @@ public class QuestionService {
             tx.executeUpdate("DELETE FROM question WHERE id = ? AND teacher_id = ?", qId, teacherId);
         });
 
-        server.recordSqlUpdate("DELETE FROM option WHERE question_id=" + qId + ";");
-        server.recordSqlUpdate("DELETE FROM question WHERE id=" + qId + " AND teacher_id=" + teacherId + ";");
-        server.setDbVersion(server.dbVersion() + 1);
+        context.recordSqlUpdate("DELETE FROM option WHERE question_id=" + qId + ";");
+        context.recordSqlUpdate("DELETE FROM question WHERE id=" + qId + " AND teacher_id=" + teacherId + ";");
+        context.setDbVersion(context.dbVersion() + 1);
         return true;
     }
 

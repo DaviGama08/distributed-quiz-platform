@@ -1,4 +1,4 @@
-package pt.isec.client.ui.view;
+package pt.isec.client.ui.student;
 
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -8,17 +8,19 @@ import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-import pt.isec.client.ui.controller.StudentDashboardController;
 
 /**
  * Dashboard do estudante com tema escuro. Usa dashboard.css para estilos.
  */
 public class StudentDashboardView {
     private String userName;
-    private Label profileNameLabel;
+    private String userEmail;        // antes era final, agora pode ser atualizado
+
+    private Label profileNameLabel;  // nome no cartão de perfil
+    private Label avatarInitialsLabel; // iniciais no avatar
+    private Label headerEmailLabel;  // email no topo (header)
     private Button overviewBtn;
 
-    private final String userEmail;
     private Scene scene;
 
     private Label welcomeLabel;
@@ -64,8 +66,8 @@ public class StudentDashboardView {
         welcomeLabel.setFont(Font.font("Arial", FontWeight.NORMAL, 24));
         welcomeLabel.getStyleClass().add("header-welcome");
 
-        Label emailLabel = new Label(userEmail);
-        emailLabel.getStyleClass().add("header-email-dark");
+        headerEmailLabel = new Label(userEmail != null ? userEmail : "");
+        headerEmailLabel.getStyleClass().add("header-email-dark");
 
         // loading box (invisível por defeito) para indicar operações assíncronas não-modais
         loadingBox = new HBox(8);
@@ -78,7 +80,7 @@ public class StudentDashboardView {
         loadingBox.getChildren().addAll(pi, loadingLabel);
         loadingBox.setVisible(false);
 
-        header.getChildren().addAll(welcomeLabel, emailLabel);
+        header.getChildren().addAll(welcomeLabel, headerEmailLabel);
         header.getChildren().add(loadingBox);
         return header;
     }
@@ -101,10 +103,10 @@ public class StudentDashboardView {
         sidebar.getStyleClass().add("dashboard-sidebar-dark");
         sidebar.setPrefWidth(240);
 
+        profileCard = createProfileCard();
+
         Label menuLabel = new Label("MENU");
         menuLabel.getStyleClass().add("sidebar-title-dark");
-
-        profileCard = createProfileCard();
 
         answerQuestionBtn = createMenuButton("Responder Pergunta");
         historyBtn = createMenuButton("Histórico");
@@ -134,17 +136,17 @@ public class StudentDashboardView {
         StackPane avatarCircle = new StackPane();
         avatarCircle.getStyleClass().add("profile-avatar-circle");
 
-        Label initials = new Label(getInitials(userName != null ? userName : userEmail));
-        initials.getStyleClass().add("profile-avatar-initials");
-        avatarCircle.getChildren().add(initials);
+        avatarInitialsLabel = new Label(getInitials(userName != null ? userName : userEmail));
+        avatarInitialsLabel.getStyleClass().add("profile-avatar-initials");
+        avatarCircle.getChildren().add(avatarInitialsLabel);
 
-        Label nameLabel = new Label(userName != null ? userName : "Utilizador");
-        nameLabel.getStyleClass().add("profile-name-label");
+        profileNameLabel = new Label(userName != null ? userName : "Utilizador");
+        profileNameLabel.getStyleClass().add("profile-name-label");
 
         Label roleLabel = new Label("Estudante");
         roleLabel.getStyleClass().add("profile-role-label");
 
-        card.getChildren().addAll(avatarCircle, nameLabel, roleLabel);
+        card.getChildren().addAll(avatarCircle, profileNameLabel, roleLabel);
         return card;
     }
 
@@ -164,6 +166,10 @@ public class StudentDashboardView {
             profileNameLabel.setText(name);
         if (welcomeLabel != null)
             welcomeLabel.setText("Bem-vindo, " + name + "!");
+        // atualizar iniciais também
+        if (avatarInitialsLabel != null) {
+            avatarInitialsLabel.setText(getInitials(name));
+        }
     }
 
     public String getProfileName() {
@@ -224,15 +230,17 @@ public class StudentDashboardView {
 
     public Scene getScene() { return scene; }
 
-    /** NOVO: actualizar texto de boas-vindas com o nome do aluno */
+    /** Actualizar texto de boas-vindas com o nome do aluno */
     public void setWelcomeName(String name) {
+        if (welcomeLabel == null)
+            return;
+
         if (name == null || name.trim().isEmpty()) {
             welcomeLabel.setText("Bem-vindo, Estudante!");
         } else {
             welcomeLabel.setText("Bem-vindo, " + name + "!");
         }
     }
-
 
     private String deriveNameFromEmail(String email) {
         if (email == null || !email.contains("@"))
@@ -242,18 +250,50 @@ public class StudentDashboardView {
         return Character.toUpperCase(part.charAt(0)) + part.substring(1);
     }
 
+    /**
+     * NOVO: método usado pelo StudentDashboardController para manter
+     * o nome e o email sincronizados com o servidor.
+     */
+    public void updateUserInfo(String name, String email) {
+        // atualiza nome (perfil + header)
+        if (name != null && !name.isBlank()) {
+            setProfileName(name); // já actualiza welcomeLabel e iniciais
+        } else if ((this.userName == null || this.userName.isBlank()) && email != null) {
+            // se não tiver nome, pode derivar de email
+            String derived = deriveNameFromEmail(email);
+            setProfileName(derived);
+        }
+
+        // atualiza email no header
+        if (email != null && !email.isBlank()) {
+            this.userEmail = email;
+            if (headerEmailLabel != null) {
+                headerEmailLabel.setText(email);
+            }
+        }
+
+        // atualiza iniciais com base no melhor texto disponível
+        String baseForInitials = (this.userName != null && !this.userName.isBlank())
+                ? this.userName
+                : (this.userEmail != null ? this.userEmail : null);
+        if (baseForInitials != null && avatarInitialsLabel != null) {
+            avatarInitialsLabel.setText(getInitials(baseForInitials));
+        }
+    }
+
     public void registerHandlers(StudentDashboardController controller) {
         answerQuestionBtn.setOnAction(e -> controller.onAnswerQuestion());
         historyBtn.setOnAction(e -> controller.onShowHistory());
         logoutBtn.setOnAction(e -> controller.onLogout());
 
+        // clicking profile card opens the editable profile dialog
         if (profileCard != null) {
-            profileCard.setOnMouseClicked(e -> controller.onOpenProfile());
+            profileCard.setOnMouseClicked(e -> controller.onProfile());
         }
     }
 
     public void update() {
-        // nada extra
+        // nada extra por agora
     }
 
     public void addNotification(String message) {

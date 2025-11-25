@@ -1,6 +1,6 @@
 package pt.isec.server.threads;
-import pt.isec.server.IServerManager;
-import pt.isec.server.NetworkTcpConnection;
+import pt.isec.server.core.IServerManager;
+
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;

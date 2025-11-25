@@ -1,8 +1,9 @@
-package pt.isec.server;
+package pt.isec.server.core;
 import pt.isec.server.db.DbCommands;
-import pt.isec.server.services.auth.AuthService;
-import pt.isec.server.services.question.AnswerService;
-import pt.isec.server.services.question.QuestionService;
+import pt.isec.server.services.auth.IAuthService;
+import pt.isec.server.services.question.IAnswerService;
+import pt.isec.server.services.question.IQuestionService;
+import pt.isec.server.threads.NetworkTcpConnection;
 
 import java.net.NetworkInterface;
 import java.nio.file.Path;
@@ -22,7 +23,7 @@ public interface IServerManager {
     NetworkInterface multicastInterface();
 
     boolean isRunning();
-    void setRunning(boolean v) throws Exception;
+    void stopRunning(boolean v) throws Exception;
 
     boolean isPrimary();
     void setPrimary(String ip, int port);
@@ -37,8 +38,9 @@ public interface IServerManager {
     boolean tryLockCopy();
     void unlockCopy();
 
-    QuestionService getQuestionService();
-    AnswerService getAnswerService();
+    // Agora expõe apenas interfaces
+    IQuestionService getQuestionService();
+    IAnswerService getAnswerService();
     void recordSqlUpdate(String sql);
     List<String> pollPendingSqlUpdates();
 
@@ -46,10 +48,10 @@ public interface IServerManager {
     void registerLogin(long userId, String sessionId);
     void unregisterLogin(long userId);
 
-    AuthService getAuthService();
+    IAuthService getAuthService();
 
     // Gerir conexões ativas de clientes: registar / remover e enviar mensagens a um utilizador específico
-    void registerClientConnection(long userId, pt.isec.server.NetworkTcpConnection conn);
+    void registerClientConnection(long userId, NetworkTcpConnection conn);
     void unregisterClientConnection(long userId);
     void sendToUser(long userId, pt.isec.common.messages.TcpMessage<?> msg);
 }

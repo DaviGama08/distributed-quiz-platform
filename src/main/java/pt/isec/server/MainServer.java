@@ -1,5 +1,7 @@
 package pt.isec.server;
 
+import pt.isec.server.core.ServerManager;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -7,7 +9,7 @@ import java.nio.file.Paths;
 public class MainServer {
     public static void main(String[] args) throws Exception {
         if (args.length != 6) {
-            System.out.println("usage: LauncherServer <dirHost> <dirPort> <dataDir|PROJECT|HOME> <mcIfIp|AUTO> <clientPort> <dbCopyPort>");
+            System.out.println("usage: LauncherServer <dirHost> <dirPort> <dataDir|PROJECT|HOME> <multicastIfIp|AUTO> <clientPort> <dbCopyPort>");
             return;
         }
         Class.forName("org.sqlite.JDBC");
@@ -15,7 +17,7 @@ public class MainServer {
         String dirHost    = args[0];
         int    dirPort    = Integer.parseInt(args[1]);
         String dataArg    = args[2];
-        String mcIfIp     = args[3];
+        String multicastInterfaceIp     = args[3];
         int    clientPort = Integer.parseInt(args[4]);
         int    dbCopyPort = Integer.parseInt(args[5]);
 
@@ -35,14 +37,15 @@ public class MainServer {
         }
         Files.createDirectories(dataDir); //Cria a pasta com o nome definido e no local definido
 
-        // ficheiro distinto por servidor (evita colisões)
+        // ficheiro distinto por servidor (evita colisões). Resolve
         Path dbFile = dataDir.resolve("quiz-" + clientPort + ".db");
 
         System.out.println("[DB] dir : " + dataDir);
         System.out.println("[DB] file: " + dbFile + " (exists=" + Files.exists(dbFile) + ")");
 
         // NÃO usar try-with-resources aqui, para o servidor não fechar logo
-        ServerManager serverManager = new ServerManager(dirHost, dirPort, mcIfIp, clientPort, dbCopyPort, dbFile);
+        //Cria instancia do serverManager passando IP e Porto da diretoria, MultiCast IP e porto do Client, Porto da BD e Ficheiro do BD
+        ServerManager serverManager = new ServerManager(dirHost, dirPort, multicastInterfaceIp, clientPort, dbCopyPort, dbFile);
         serverManager.run();
 
         System.out.println("[LauncherServer] Servidor iniciado. Ctrl+C para terminar.");

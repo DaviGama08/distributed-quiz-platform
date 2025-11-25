@@ -1,6 +1,6 @@
 package pt.isec.client.threads;
 
-import pt.isec.client.services.IClientService;
+import pt.isec.client.core.IClientService;
 import pt.isec.common.dto.auth.AuthResponseDTO;
 import pt.isec.common.dto.question.CreateQuestionResponseDTO;
 import pt.isec.common.messages.TcpMessage;
@@ -166,6 +166,21 @@ public class ResponseHandlerThread implements Runnable{
                     List<Answer> answers = (List<Answer>) list;
                     tInfo.setPropListAnsweredResponse(answers);
                 }
+            }
+
+            /* ===== PERFIL ===== */
+            case UPDATE_PROFILE_OK -> {
+                System.out.println("[ResponseHandler] Profile updated successfully");
+                if(response.getData() instanceof AuthResponseDTO dto)
+                    tInfo.setPropUpdateProfileOk(dto);
+                else
+                    tInfo.setPropUpdateProfileOk(new AuthResponseDTO(null, null, null, null, "ok", null)); // Fallback
+            }
+
+            case UPDATE_PROFILE_FAIL -> {
+                System.err.println("[ResponseHandler] Failed to update profile");
+                String msg = response.getData() instanceof String s ? s : "Erro ao atualizar perfil";
+                tInfo.setPropUpdateProfileFail(msg);
             }
 
             default -> System.out.println("[ResponseHandler] Unhandled message type: " + type);

@@ -40,6 +40,12 @@ public enum MessageType {
     // notificação ao docente de resposta submetida
     ANSWER_SUBMITTED,
 
+    // Perfil
+    UPDATE_STUDENT,
+    UPDATE_TEACHER,
+    UPDATE_PROFILE_OK,
+    UPDATE_PROFILE_FAIL,
+
     // Replicação incremental via SQL (heartbeat)
     SQL_UPDATE,
     DB_REQUEST_COPY

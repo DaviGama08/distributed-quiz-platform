@@ -35,7 +35,7 @@ public class WorkerThread implements Runnable{
 
                 String reply;
 
-                // Distinguir entre mensagens de CLIENTE (sem VER) e SERVIDOR (com VER)
+                // Distinguir entre mensagens de CLIENTE (sem campo de versão) e SERVIDOR (tipo por TYPE)
                 switch (type) {
                     // === MENSAGENS DE CLIENTE (sem VER requerido) ===
                     case "LOGIN" -> {
@@ -43,14 +43,11 @@ public class WorkerThread implements Runnable{
                         reply = handleLogin();
                     }
 
-                    // === MENSAGENS DE SERVIDOR (requerem VER=1) ===
+                    // === MENSAGENS DE SERVIDOR ===
                     case "REGISTER", "HEARTBEAT", "DEREGISTER" -> {
-                        String ver = kv.get("VER");
-                        //TODO ANALISAR PARA O CASO DE A VERSÃO DA BASE DE DADOS MUDAR
-                        if (!"1".equals(ver)) {
-                            send(msg, "400 BAD_REQUEST VER");
-                            continue;
-                        }
+                        // Para o servidor: não exigimos mais o campo VER aqui — o formato esperado
+                        // é KEY=VALUE|KEY=VALUE|... onde TYPE indica a ação.
+                        // Para compatibilidade, ignoramos quaisquer campos extra.
 
                         //Para o servidor
                         reply = switch (type) {
@@ -114,7 +111,7 @@ public class WorkerThread implements Runnable{
      * Trata pedido de desregisto de um servidor.
      *
      * Protocolo esperado:
-     * REQUEST:  VER=1|TYPE=DEREGISTER|ID=<uuid>
+     * REQUEST:  TYPE=DEREGISTER|ID=<uuid>
      * RESPONSE: 200 OK (servidor removido com sucesso)
      *           400 BAD_REQUEST ID (ID ausente ou vazio)
      *           409 CONFLICT UNKNOWN_ID (ID desconhecido)
@@ -138,7 +135,7 @@ public class WorkerThread implements Runnable{
      * Trata pedido de heartbeat (manter servidor ativo).
      *
      * Protocolo esperado:
-     * REQUEST:  VER=1|TYPE=HEARTBEAT|ID=<uuid>
+     * REQUEST:  TYPE=HEARTBEAT|ID=<uuid>
      * RESPONSE: 200 OK (heartbeat recebido, timestamp atualizado)
      *           400 BAD_REQUEST ID (ID ausente ou vazio)
      *           409 CONFLICT UNKNOWN_ID (ID desconhecido)
@@ -166,7 +163,7 @@ public class WorkerThread implements Runnable{
     /**
      * Trata pedido de registo de um novo servidor.
      *
-     * REQUEST:  VER=1|TYPE=REGISTER|ID=<uuid>|TCP=<ip>:<port>|DBV=<versão_bd>
+     * REQUEST:  TYPE=REGISTER|ID=<uuid>|TCP=<ip>:<port>|DBV=<versão_bd>
      * RESPONSE: 200 PRINCIPAL <ip>:<port>|DBV=<versão_global_ou_-1>
      *           400 BAD_REQUEST ID/TCP/TCP_PORT
      *           404 NO_PRINCIPAL
@@ -243,8 +240,8 @@ public class WorkerThread implements Runnable{
     /**
      * Faz parsing de uma mensagem no formato KEY=VALUE|KEY=VALUE|...
      *
-     * Exemplo: "VER=1|TYPE=REGISTER|ID=abc123|TCP=192.168.1.10:9999"
-     * Resultado: Map{"VER"->"1", "TYPE"->"REGISTER", "ID"->"abc123", "TCP"->"192.168.1.10:9999"}
+     * Exemplo: "TYPE=REGISTER|ID=abc123|TCP=192.168.1.10:9999"
+     * Resultado: Map{"TYPE"->"REGISTER", "ID"->"abc123", "TCP"->"192.168.1.10:9999"}
      *
      * @param s String com pares KEY=VALUE separados por pipe '|'
      * @return Map com os pares chave-valor extraídos

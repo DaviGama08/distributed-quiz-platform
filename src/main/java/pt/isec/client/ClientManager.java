@@ -4,7 +4,7 @@ import javafx.application.Platform;
 import pt.isec.client.services.AnswerClientService;
 import pt.isec.client.services.AuthClientService;
 import pt.isec.client.services.QuestionClientService;
-import pt.isec.client.services.ClientService;
+import pt.isec.client.core.ClientService;
 /**
  * Classe que orquestra os serviços disponíveis para o cliente.
  */
@@ -32,12 +32,17 @@ public class ClientManager {
     }
     /** Pára o serviço e fecha conexões */
     public void stop(){ service.stop(); }
+
+    public AnswerClientService getAnswerService() { return answerService; }
     public AuthClientService getAuthService() { return authService; }
     public QuestionClientService getQuestionService() { return questionService; }
-    public AnswerClientService getAnswerService() { return answerService; }
     public ClientService getService() { return service; }
     /** Obtém o ID do utilizador autenticado. */
     public Integer getUserId() { return service.getUserId(); }
     /** Define o ID do utilizador autenticado. */
     public void setUserId(Integer id) { service.setUserId(id); }
+    /** Obtém o número de estudante do utilizador autenticado. */
+    public Integer getStudentNumber() { return service.getStudentNumber(); }
+    /** Define o número de estudante do utilizador autenticado. */
+    public void setStudentNumber(Integer number) { service.setStudentNumber(number); }
 }

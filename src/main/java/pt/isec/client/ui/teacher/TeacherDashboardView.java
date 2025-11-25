@@ -1,4 +1,4 @@
-package pt.isec.client.ui.view;
+package pt.isec.client.ui.teacher;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -7,7 +7,6 @@ import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-import pt.isec.client.ui.controller.TeacherDashboardController;
 
 /**
  * Dashboard do docente (tema escuro com acentos vermelhos).
@@ -275,9 +274,9 @@ public class TeacherDashboardView {
         listQuestionsBtn.setOnAction(e -> controller.onListQuestions());
         logoutBtn.setOnAction(e -> controller.onLogout());
 
-        // clicar no cartão de perfil abre o modal
+        // clicar no cartão de perfil abre o modal de edição de perfil
         if (profileCard != null) {
-            profileCard.setOnMouseClicked(e -> controller.onOpenProfile());
+            profileCard.setOnMouseClicked(e -> controller.onEditProfile());
         }
     }
 

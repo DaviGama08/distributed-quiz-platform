@@ -1,14 +1,16 @@
-package pt.isec.server;
-
+package pt.isec.server.core;
 import pt.isec.server.db.DbCommands;
 import pt.isec.server.db.DbCreate;
 import pt.isec.server.services.auth.AuthService;
+import pt.isec.server.services.auth.IAuthService;
 import pt.isec.server.services.question.AnswerService;
+import pt.isec.server.services.question.IAnswerService;
+import pt.isec.server.services.question.IQuestionService;
 import pt.isec.server.services.question.QuestionService;
 import pt.isec.server.threads.ClusterHeartbeatThread;
 import pt.isec.server.threads.ClientListenerThread;
 import pt.isec.server.threads.DirectoryHeartbeatThread;
-
+import pt.isec.server.threads.NetworkTcpConnection;
 import java.net.*;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -17,13 +19,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class ServerManager implements IServerManager, Runnable, AutoCloseable {
+public class ServerManager implements IServerManager, IQuestionAnswerContext, Runnable, AutoCloseable {
     private volatile boolean dbInitialised = false;
     private DbCommands dbCommands;
 
-    private AuthService authService;
-    private QuestionService questionService;
-    private AnswerService answerService;
+    // Agora guardamos as referências como interfaces
+    private IAuthService authService;
+    private IQuestionService questionService;
+    private IAnswerService answerService;
 
     private final List<String> pendingSqlUpdates = Collections.synchronizedList(new ArrayList<>());
     private final Map<Long, String> activeSessions = new ConcurrentHashMap<>();
@@ -49,14 +52,14 @@ public class ServerManager implements IServerManager, Runnable, AutoCloseable {
     private final AtomicLong dbVersion = new AtomicLong(0);
     private final AtomicBoolean copying = new AtomicBoolean(false);
 
-    private Thread tClusterHeartbeat, tDirectoryHeartbeat, tClientListener;
+    private Thread threadClusterHeartbeat, tDirectoryHeartbeat, threadClientListener;
 
     private final Map<Long, NetworkTcpConnection> activeClientConnections = new ConcurrentHashMap<>();
 
     public ServerManager(String dirHost, int dirPort, String mcIfIp,
                          int clientPort, int dbCopyPort, Path initialDbPath) throws Exception {
-        this.id = UUID.randomUUID().toString();
-        this.ip = InetAddress.getLocalHost().getHostAddress();
+        this.id = UUID.randomUUID().toString(); //gera um identificador único aleatório e atribui-o como uma string
+        this.ip = InetAddress.getLocalHost().getHostAddress(); //IP local desta máquina
         this.clientPort = clientPort;
         this.dbCopyPort = dbCopyPort;
         this.dirHost = dirHost;
@@ -106,6 +109,8 @@ public class ServerManager implements IServerManager, Runnable, AutoCloseable {
         return null;
     }
 
+    //atualiza o caminho para o ficheiro da base de dados, construindo um novo nome que inclui a versão
+    // da base de dados e se é a principal ou uma cópia de segurança.
     private synchronized void refreshDbPath() {
         String versionStr = String.format("%02d", dbVersion.get());
         String name = "quiz-" + versionStr + (isPrimary ? ".db" : "-backup.db");
@@ -125,11 +130,13 @@ public class ServerManager implements IServerManager, Runnable, AutoCloseable {
             try {
                 DbCreate.createIfMissing(this.dbPath, "/db/schema.sql");
                 this.dbCommands = new DbCommands("jdbc:sqlite:" + this.dbPath.toAbsolutePath());
+
+                // serviços concretos, mas guardados como interfaces
                 this.authService = new AuthService(dbCommands);
 
-                // inicializa novos serviços
-                this.questionService = new QuestionService(this, dbCommands);
-                this.answerService = new AnswerService(this, dbCommands);
+                IQuestionAnswerContext qaContext = this;
+                this.questionService = new QuestionService(qaContext, dbCommands);
+                this.answerService   = new AnswerService(qaContext, dbCommands);
 
                 System.out.println("[DB] camada de dados inicializada em " + dbPath);
                 dbInitialised = true;
@@ -142,29 +149,35 @@ public class ServerManager implements IServerManager, Runnable, AutoCloseable {
 
     // IQUIZSERVER INTERFACE
     @Override
-    public QuestionService getQuestionService() {
+    public IQuestionService getQuestionService() {
+        //Inicializa a BD se necessário, e configura os serviços necessários para auth, perg e respostas
         initDatabaseLayerIfNeeded();
-        return questionService;
+        return questionService; //retorna referencia do serviço de perguntas
     }
 
     @Override
-    public AnswerService getAnswerService() {
+    public IAnswerService getAnswerService() {
         initDatabaseLayerIfNeeded();
-        return answerService;
+        return answerService; //retorna referencia do serviço de respostas
     }
 
+    //Para adicionar tarefas SQL à lista de pendentes
     @Override
     public void recordSqlUpdate(String sql) {
         if (sql != null && !sql.isBlank())
+            //Adiciona à lista tarefas com a segurança da concorrência (syncronizedList)
             pendingSqlUpdates.add(sql);
     }
 
+    //Para retornar as tarefas da lista de pendentes
     @Override
     public List<String> pollPendingSqlUpdates() {
+        //Bloqueia para concorrência
         synchronized (pendingSqlUpdates) {
+            //Faz copia da lista
             List<String> copy = new ArrayList<>(pendingSqlUpdates);
-            pendingSqlUpdates.clear();
-            return copy;
+            pendingSqlUpdates.clear();//limpa a lista para receber novos pedidos
+            return copy; //retorna a cópia da lista
         }
     }
 
@@ -229,11 +242,11 @@ public class ServerManager implements IServerManager, Runnable, AutoCloseable {
     }
 
     @Override
-    public void setRunning(boolean v) throws Exception {
+    public void stopRunning(boolean v) throws Exception {
         running = v;
-        tClientListener.join();
+        threadClientListener.join();
         System.out.println("[QuizServer] tClientListener encerrada");
-        tClusterHeartbeat.join();
+        threadClusterHeartbeat.join();
         System.out.println("[QuizServer] tClusterHeartbeat  encerrada");
         System.out.println("[QuizServer] tDirectoryHeartbeat encerrada");
         close();
@@ -245,7 +258,7 @@ public class ServerManager implements IServerManager, Runnable, AutoCloseable {
     }
 
     @Override
-    public AuthService getAuthService() {
+    public IAuthService getAuthService() {
         initDatabaseLayerIfNeeded();
         return authService;
     }
@@ -324,9 +337,9 @@ public class ServerManager implements IServerManager, Runnable, AutoCloseable {
     // CLOSEABLE INTERFACE
     @Override
     public void close() throws Exception {
-        if (tClusterHeartbeat != null)   tClusterHeartbeat.interrupt();
+        if (threadClusterHeartbeat != null)   threadClusterHeartbeat.interrupt();
         if (tDirectoryHeartbeat != null) tDirectoryHeartbeat.interrupt();
-        if (tClientListener != null)     tClientListener.interrupt();
+        if (threadClientListener != null)     threadClientListener.interrupt();
     }
 
     // RUNNABLE INTERFACE
@@ -337,11 +350,11 @@ public class ServerManager implements IServerManager, Runnable, AutoCloseable {
 
     private void start() {
         tDirectoryHeartbeat = new Thread(new DirectoryHeartbeatThread(this), "directory-heartbeat");
-        tClusterHeartbeat   = new Thread(new ClusterHeartbeatThread(this),   "cluster-heartbeat");
-        tClientListener     = new Thread(new ClientListenerThread(this),     "client-listener");
+        threadClusterHeartbeat = new Thread(new ClusterHeartbeatThread(this),   "cluster-heartbeat");
+        threadClientListener = new Thread(new ClientListenerThread(this),     "client-listener");
 
-        tClusterHeartbeat.start();
+        threadClusterHeartbeat.start();
         tDirectoryHeartbeat.start();
-        tClientListener.start();
+        threadClientListener.start();
     }
 }

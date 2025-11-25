@@ -1,4 +1,4 @@
-package pt.isec.client.services;
+package pt.isec.client.core;
 
 import pt.isec.common.dto.auth.AuthResponseDTO;
 import pt.isec.common.dto.question.CreateQuestionResponseDTO;
@@ -36,12 +36,14 @@ public interface IClientService {
 
     // Estado de autenticação
     void setUserId(Integer id);
+    void setStudentNumber(Integer number);
     void setUserType(String t);
     void setUserEmail(String e);
     void setAuthenticated(boolean authenticated);
     void setUserName(String name);
 
     Integer getUserId();
+    Integer getStudentNumber();
     String getUserType();
     String getUserEmail();
     String getUserName();
@@ -65,4 +67,7 @@ public interface IClientService {
     void setPropAnswerSubmitted(Integer questionId);
     // Resposta à eliminação de pergunta (ack/nack) - payload: String message
     void setPropDeleteQuestionResponse(String message);
+    // Resposta a atualização de perfil (payload: AuthResponseDTO)
+    void setPropUpdateProfileOk(AuthResponseDTO dto);
+    void setPropUpdateProfileFail(String message);
 }

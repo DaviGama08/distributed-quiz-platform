@@ -238,9 +238,9 @@ public class ClientHandlerThread implements Runnable {
                 try {
                     UpdateStudentDTO dto = tcpMessage.getDataAs(UpdateStudentDTO.class);
                     threadInfo.getAuthService().updateStudent(dto);
-                    connection.sendMessage(new TcpMessage<>(MessageType.ACK, "update-profile-ok", String.class));
+                    connection.sendMessage(new TcpMessage<>(MessageType.UPDATE_PROFILE_OK, "Perfil atualizado com sucesso", String.class));
                 } catch (Exception e) {
-                    connection.sendMessage(new TcpMessage<>(MessageType.NACK, e.getMessage(), String.class));
+                    connection.sendMessage(new TcpMessage<>(MessageType.UPDATE_PROFILE_FAIL, e.getMessage(), String.class));
                 }
             }
 
@@ -248,9 +248,9 @@ public class ClientHandlerThread implements Runnable {
                 try {
                     UpdateTeacherDTO dto = tcpMessage.getDataAs(UpdateTeacherDTO.class);
                     threadInfo.getAuthService().updateTeacher(dto);
-                    connection.sendMessage(new TcpMessage<>(MessageType.ACK, "update-profile-ok", String.class));
+                    connection.sendMessage(new TcpMessage<>(MessageType.UPDATE_PROFILE_OK, "Perfil atualizado com sucesso", String.class));
                 } catch (Exception e) {
-                    connection.sendMessage(new TcpMessage<>(MessageType.NACK, e.getMessage(), String.class));
+                    connection.sendMessage(new TcpMessage<>(MessageType.UPDATE_PROFILE_FAIL, e.getMessage(), String.class));
                 }
             }
 

@@ -58,7 +58,9 @@ public class TeacherDashboardController implements IDisposableProp {
     private final PropertyChangeListener answerSubmittedListener;
     private final PropertyChangeListener joinQuestionListener;
     private final PropertyChangeListener updateQuestionListener;
-    private final PropertyChangeListener updateProfileListener;
+    private final PropertyChangeListener updateProfileOkListener;
+    private final PropertyChangeListener updateProfileFailListener;
+
 
     // última lista de perguntas recebidas
     private final List<Question> lastQuestions = new ArrayList<>();
@@ -87,6 +89,8 @@ public class TeacherDashboardController implements IDisposableProp {
 
     // diálogo de detalhes actualmente aberto (para poder fechar após edição)
     private volatile Dialog<?> currentDetailsDialog = null;
+    private volatile Dialog<?> currentEditProfileDialog = null;
+
 
     // caixas de loading (quando existem)
     private volatile HBox listLoadingBox = null;
@@ -344,22 +348,34 @@ public class TeacherDashboardController implements IDisposableProp {
             });
         };
 
-        this.updateProfileListener = evt -> {
+        this.updateProfileOkListener = evt -> {
             Object v = evt.getNewValue();
-            String msg = (v == null ? null : v.toString());
+            String msg = (v == null ? "Os dados do perfil foram atualizados com sucesso." : v.toString());
             Platform.runLater(() -> {
-                Window owner = getCurrentOwnerWindow();
-                if ("ok".equalsIgnoreCase(msg)) {
-                    AlertUtils.showInfo(owner,
-                            "Perfil atualizado",
-                            "Os dados do perfil foram atualizados com sucesso.");
-                } else {
-                    AlertUtils.showError(owner,
-                            "Falha ao actualizar perfil",
-                            (msg == null ? "Erro desconhecido" : msg));
+                if (currentEditProfileDialog != null) {
+                    try {
+                        currentEditProfileDialog.close();
+                    } catch (Exception ignored) {}
+                    currentEditProfileDialog = null;
                 }
+                AlertUtils.showInfo(getCurrentOwnerWindow(), "Perfil atualizado", msg);
             });
         };
+
+        this.updateProfileFailListener = evt -> {
+            Object v = evt.getNewValue();
+            String msg = (v == null ? "Erro desconhecido" : v.toString());
+            Platform.runLater(() -> {
+                if (currentEditProfileDialog != null) {
+                    try {
+                        currentEditProfileDialog.close();
+                    } catch (Exception ignored) {}
+                    currentEditProfileDialog = null;
+                }
+                AlertUtils.showError(getCurrentOwnerWindow(), "Falha ao actualizar perfil", msg);
+            });
+        };
+
 
         setupPropertyChangeListeners();
         updateDashboardStats();
@@ -390,7 +406,9 @@ public class TeacherDashboardController implements IDisposableProp {
         service.addPropertyChangeListener(ClientService.PROP_VIEW_ANSWERS_RESPONSE, viewAnswersListener);
         service.addPropertyChangeListener(ClientService.PROP_ANSWER_SUBMITTED, answerSubmittedListener);
         service.addPropertyChangeListener(ClientService.PROP_UPDATE_QUESTION_RESPONSE, updateQuestionListener);
-        service.addPropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_RESPONSE, updateProfileListener);
+        service.addPropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_OK, updateProfileOkListener);
+        service.addPropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_FAIL, updateProfileFailListener);
+
 
         // Listener temporário para fazer refreshQuestions assim que estiver CONNECTED
         PropertyChangeListener connectListener = new PropertyChangeListener() {
@@ -424,7 +442,9 @@ public class TeacherDashboardController implements IDisposableProp {
             service.removePropertyChangeListener(ClientService.PROP_VIEW_ANSWERS_RESPONSE, viewAnswersListener);
             service.removePropertyChangeListener(ClientService.PROP_ANSWER_SUBMITTED, answerSubmittedListener);
             service.removePropertyChangeListener(ClientService.PROP_UPDATE_QUESTION_RESPONSE, updateQuestionListener);
-            service.removePropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_RESPONSE, updateProfileListener);
+            service.removePropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_OK, updateProfileOkListener);
+            service.removePropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_FAIL, updateProfileFailListener);
+
         } catch (Exception ignored) {
         }
 
@@ -848,6 +868,7 @@ public class TeacherDashboardController implements IDisposableProp {
 
     public void onEditProfile() {
         Dialog<ButtonType> dialog = new Dialog<>();
+        this.currentEditProfileDialog = dialog;
         dialog.setTitle("Editar Perfil");
         dialog.setHeaderText("Editar dados pessoais");
 
@@ -916,6 +937,7 @@ public class TeacherDashboardController implements IDisposableProp {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+        dispose(); // Limpa os listeners antes de fazer logout
         clientManager.getService().logout();
         application.showAuthentication();
     }

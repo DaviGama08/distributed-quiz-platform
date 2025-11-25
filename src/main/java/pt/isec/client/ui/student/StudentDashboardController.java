@@ -48,7 +48,9 @@ public class StudentDashboardController implements IDisposableProp {
     private final PropertyChangeListener submitAnswerOkListener;
     private final PropertyChangeListener submitAnswerFailListener;
     private final PropertyChangeListener listAnsweredListener;
-    private final PropertyChangeListener updateProfileListener;
+    private final PropertyChangeListener updateProfileOkListener;
+    private final PropertyChangeListener updateProfileFailListener;
+
 
     // Flags de espera
     private volatile boolean awaitingJoinQuestion   = false;
@@ -126,21 +128,26 @@ public class StudentDashboardController implements IDisposableProp {
             );
         };
 
-        this.updateProfileListener = evt -> {
+        this.updateProfileOkListener = evt -> {
             Object v = evt.getNewValue();
-            String msg = v == null ? null : v.toString();
+            String msg = (v == null) ? "Os dados do perfil foram atualizados com sucesso." : v.toString();
             UiUtils.runOnUiThread(() -> {
-                if ("ok".equalsIgnoreCase(msg)) {
-                    AlertUtils.showInfo(getOwnerWindow(),
-                            "Perfil atualizado",
-                            "Os dados do perfil foram atualizados com sucesso.");
-                } else {
-                    AlertUtils.showError(getOwnerWindow(),
-                            "Falha ao actualizar perfil",
-                            msg == null ? "Erro desconhecido" : msg);
-                }
+                AlertUtils.showInfo(getOwnerWindow(),
+                        "Perfil atualizado",
+                        msg);
             });
         };
+
+        this.updateProfileFailListener = evt -> {
+            Object v = evt.getNewValue();
+            String msg = (v == null) ? "Erro desconhecido" : v.toString();
+            UiUtils.runOnUiThread(() -> {
+                AlertUtils.showError(getOwnerWindow(),
+                        "Falha ao actualizar perfil",
+                        msg);
+            });
+        };
+
 
         setupPropertyChangeListeners();
     }
@@ -160,7 +167,8 @@ public class StudentDashboardController implements IDisposableProp {
         service.addPropertyChangeListener(ClientService.PROP_SUBMIT_ANSWER_OK, submitAnswerOkListener);
         service.addPropertyChangeListener(ClientService.PROP_SUBMIT_ANSWER_FAIL, submitAnswerFailListener);
         service.addPropertyChangeListener(ClientService.PROP_LIST_ANSWERED_RESPONSE, listAnsweredListener);
-        service.addPropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_RESPONSE, updateProfileListener);
+        service.addPropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_OK, updateProfileOkListener);
+        service.addPropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_FAIL, updateProfileFailListener);
     }
 
     @Override
@@ -173,7 +181,9 @@ public class StudentDashboardController implements IDisposableProp {
         service.removePropertyChangeListener(ClientService.PROP_SUBMIT_ANSWER_OK, submitAnswerOkListener);
         service.removePropertyChangeListener(ClientService.PROP_SUBMIT_ANSWER_FAIL, submitAnswerFailListener);
         service.removePropertyChangeListener(ClientService.PROP_LIST_ANSWERED_RESPONSE, listAnsweredListener);
-        service.removePropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_RESPONSE, updateProfileListener);
+        service.removePropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_OK, updateProfileOkListener);
+        service.removePropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_FAIL, updateProfileFailListener);
+
 
         try { view.hideLoading(); } catch (Exception ignored) {}
     }
@@ -385,6 +395,7 @@ public class StudentDashboardController implements IDisposableProp {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+        dispose();
         clientManager.getService().logout();
         application.showAuthentication();
     }

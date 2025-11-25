@@ -4,9 +4,10 @@ import pt.isec.server.core.IServerManager;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
+import java.util.List;
 /**
  * aceita conexões tcp de clientes e cria uma thread para cada sessão.
  * se o nó atual não for o servidor primário, responde "not-primary".
@@ -18,6 +19,8 @@ public class ClientListenerThread implements Runnable, AutoCloseable {
 
     private final IServerManager tInfo;
     private ServerSocket serverSocket;
+
+    private final List<ClientHandlerThread> handlers = new CopyOnWriteArrayList<>();
 
     public ClientListenerThread(IServerManager tInfo) {this.tInfo = tInfo;}
 
@@ -33,7 +36,10 @@ public class ClientListenerThread implements Runnable, AutoCloseable {
             while (tInfo.isRunning()) {
                 try {
                     Socket newSocket = serverSocket.accept();
-                    pool.execute(new ClientHandlerThread(tInfo, new NetworkTcpConnection(newSocket)));
+                    ClientHandlerThread handler =
+                            new ClientHandlerThread(tInfo, new NetworkTcpConnection(newSocket));
+                    handlers.add(handler);
+                    pool.execute(handler);
 
                 } catch (SocketTimeoutException e) {
                     // timeout normal: volta ao while e verifica tInfo.isRunning()
@@ -56,6 +62,10 @@ public class ClientListenerThread implements Runnable, AutoCloseable {
     public void close() throws Exception {
         if (serverSocket != null)
             serverSocket.close();
+
+        for (ClientHandlerThread h : handlers) {
+            try { h.close(); } catch (Exception ignored) {}
+        }
         pool.shutdownNow(); // encerra todas as threads de cliente
     }
 }

@@ -28,22 +28,15 @@ import pt.isec.common.model.question.Question;
 import java.beans.PropertyChangeListener;
 import java.util.List;
 
-/**
- * Controlador do dashboard do estudante. Interage com o servidor para
- * responder a perguntas e obter histórico, seguindo o modelo de eventos.
- * Todos os pedidos são enfileirados e as respostas são tratadas via
- * propriedades do ClientService.
- */
 public class StudentDashboardController implements IDisposableProp {
 
     private final Stage stage;
     private final ClientManager clientManager;
     private final ClientApplication application;
-    private String userEmail; // Changed to non-final
-    private String userName;  // Changed to non-final
+    private String userEmail;
+    private String userName;
     private final StudentDashboardView view;
 
-    // Listeners
     private final PropertyChangeListener notificationListener;
     private final PropertyChangeListener joinQuestionListener;
     private final PropertyChangeListener submitAnswerOkListener;
@@ -55,11 +48,9 @@ public class StudentDashboardController implements IDisposableProp {
     private final PropertyChangeListener userEmailListener;
     private final PropertyChangeListener studentNumberListener;
 
-
-    // Flags de espera
-    private volatile boolean awaitingJoinQuestion   = false;
-    private volatile boolean awaitingSubmitAnswer   = false;
-    private volatile boolean awaitingHistory        = false;
+    private volatile boolean awaitingJoinQuestion = false;
+    private volatile boolean awaitingSubmitAnswer = false;
+    private volatile boolean awaitingHistory = false;
 
     public StudentDashboardController(Stage stage,
                                       ClientManager clientManager,
@@ -76,8 +67,7 @@ public class StudentDashboardController implements IDisposableProp {
         view.createView();
         view.registerHandlers(this);
 
-        // ----------------- Listeners -----------------
-        this.notificationListener = evt -> {
+        notificationListener = evt -> {
             String notification = (String) evt.getNewValue();
             if (notification != null) {
                 Platform.runLater(() -> {
@@ -87,7 +77,7 @@ public class StudentDashboardController implements IDisposableProp {
             }
         };
 
-        this.joinQuestionListener = evt -> {
+        joinQuestionListener = evt -> {
             if (!awaitingJoinQuestion) return;
             awaitingJoinQuestion = false;
             Question q = (Question) evt.getNewValue();
@@ -96,93 +86,92 @@ public class StudentDashboardController implements IDisposableProp {
                 try { view.hideLoading(); } catch (Exception ignored) {}
                 if (q == null) {
                     showErrorAlert("Código inválido ou pergunta não existente.");
-                } else if (!q.isActive()){
-                    showErrorAlert("Não é possivel responder à pergunta.");
+                    view.addNotification("Falha ao carregar pergunta para o código indicado.");
                 } else {
+                    view.addNotification("Pergunta " + q.getAccessCode() + " carregada para resposta.");
                     openQuestionDialog(q);
                 }
             });
         };
 
-        this.submitAnswerOkListener = evt -> {
+        submitAnswerOkListener = evt -> {
             awaitingSubmitAnswer = false;
             String msg = (String) evt.getNewValue();
-            UiUtils.runOnUiThread(() ->
-                    showSuccessAlert("Resposta submetida com sucesso!",
-                            msg == null ? "" : msg)
-            );
+            UiUtils.runOnUiThread(() -> {
+                showSuccessAlert("Resposta submetida com sucesso!", msg == null ? "" : msg);
+                view.addNotification("Resposta submetida com sucesso.");
+            });
         };
 
-        this.submitAnswerFailListener = evt -> {
+        submitAnswerFailListener = evt -> {
             awaitingSubmitAnswer = false;
             String msg = (String) evt.getNewValue();
-            UiUtils.runOnUiThread(() ->
-                    showErrorAlert("Falha ao submeter a resposta: " +
-                            (msg == null ? "" : msg))
-            );
+            UiUtils.runOnUiThread(() -> {
+                String full = "Falha ao submeter a resposta: " + (msg == null ? "" : msg);
+                showErrorAlert(full);
+                view.addNotification(full);
+            });
         };
 
-        this.listAnsweredListener = evt -> {
+        listAnsweredListener = evt -> {
             if (!awaitingHistory) return;
             awaitingHistory = false;
             @SuppressWarnings("unchecked")
             List<Answer> history = (List<Answer>) evt.getNewValue();
-            UiUtils.runOnUiThread(() ->
-                    StudentDialogs.showHistoryDialog(getOwnerWindow(), history)
-            );
+            UiUtils.runOnUiThread(() -> {
+                StudentDialogs.showHistoryDialog(getOwnerWindow(), history);
+                view.addNotification("Histórico de respostas carregado (" +
+                        (history == null ? 0 : history.size()) + " registos).");
+            });
         };
 
-        this.updateProfileOkListener = evt -> {
+        updateProfileOkListener = evt -> {
             AuthResponseDTO dto = (AuthResponseDTO) evt.getNewValue();
             UiUtils.runOnUiThread(() -> {
-                // Update local fields
                 this.userName = dto.name();
                 this.userEmail = dto.email();
-                // Update view directly or via property changes if view listens to them
                 view.updateUserInfo(this.userName, this.userEmail);
 
                 AlertUtils.showInfo(getOwnerWindow(),
                         "Perfil atualizado",
                         "Os dados do perfil foram atualizados com sucesso.");
+                view.addNotification("Perfil atualizado: " + this.userName + " (" + this.userEmail + ").");
             });
         };
 
-        this.updateProfileFailListener = evt -> {
+        updateProfileFailListener = evt -> {
             Object v = evt.getNewValue();
             String msg = (v == null) ? "Erro desconhecido" : v.toString();
             UiUtils.runOnUiThread(() -> {
                 AlertUtils.showError(getOwnerWindow(),
                         "Falha ao actualizar perfil",
                         msg);
+                view.addNotification("Falha ao atualizar perfil: " + msg);
             });
         };
 
-        this.userNameListener = evt -> {
+        userNameListener = evt -> {
             this.userName = (String) evt.getNewValue();
             UiUtils.runOnUiThread(() -> view.updateUserInfo(this.userName, this.userEmail));
         };
 
-        this.userEmailListener = evt -> {
+        userEmailListener = evt -> {
             this.userEmail = (String) evt.getNewValue();
             UiUtils.runOnUiThread(() -> view.updateUserInfo(this.userName, this.userEmail));
         };
 
-        this.studentNumberListener = evt -> {
-            // No direct UI update needed for student number in the main dashboard view,
-            // but it ensures the internal state is updated.
+        studentNumberListener = evt -> {
+            // apenas actualiza estado interno no ClientManager, sem UI
         };
-
 
         setupPropertyChangeListeners();
     }
 
-    /** Exibe o dashboard do estudante */
     public void show() {
         stage.setScene(view.getScene());
         stage.setMaximized(true);
     }
 
-    /** Regista listeners para eventos do ClientService */
     private void setupPropertyChangeListeners() {
         ClientService service = clientManager.getService();
 
@@ -214,14 +203,11 @@ public class StudentDashboardController implements IDisposableProp {
         service.removePropertyChangeListener(ClientService.PROP_USER_EMAIL, userEmailListener);
         service.removePropertyChangeListener(ClientService.PROP_STUDENT_NUMBER, studentNumberListener);
 
-
         try { view.hideLoading(); } catch (Exception ignored) {}
     }
 
-    // ----------------------------------------------------------
-    // PERFIL (apenas ver)
-    // ----------------------------------------------------------
-
+    // ---------------- PERFIL (só ver, não editável) ----------------
+    
     public void onOpenProfile() {
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Perfil do Estudante");
@@ -234,12 +220,12 @@ public class StudentDashboardController implements IDisposableProp {
         avatarCircle.getStyleClass().add("profile-avatar-circle");
 
         Label initials = new Label(
-                UiUtils.getInitials(clientManager.getService().getUserName() != null ? clientManager.getService().getUserName() : clientManager.getService().getUserEmail())
+                UiUtils.getInitials(clientManager.getService().getUserName())
         );
         initials.getStyleClass().add("profile-avatar-initials");
         avatarCircle.getChildren().add(initials);
 
-        Label nameLabel = new Label(clientManager.getService().getUserName() != null ? clientManager.getService().getUserName() : clientManager.getService().getUserEmail());
+        Label nameLabel = new Label(clientManager.getService().getUserName());
         nameLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
 
         Label roleLabel = new Label("Estudante");
@@ -265,16 +251,14 @@ public class StudentDashboardController implements IDisposableProp {
         dialog.showAndWait();
     }
 
-    // ----------------------------------------------------------
-    // RESPONDER PERGUNTA
-    // ----------------------------------------------------------
+    // ---------------- RESPONDER PERGUNTA ----------------
 
-    /** Handler para solicitar uma pergunta (insere código e envia JoinQuestion) */
     public void onAnswerQuestion() {
         StudentDialogs.showEnterQuestionCodeDialog(getOwnerWindow(), code -> {
             Integer studentId = clientManager.getUserId();
             if (studentId == null) {
                 showErrorAlert("Sessão inválida. Faça login novamente.");
+                view.addNotification("Falha ao procurar pergunta: sessão inválida.");
                 return;
             }
             awaitingJoinQuestion = true;
@@ -285,16 +269,18 @@ public class StudentDashboardController implements IDisposableProp {
             } catch (Exception e) {
                 try { view.hideLoading(); } catch (Exception ignored) {}
                 awaitingJoinQuestion = false;
-                showErrorAlert("Erro ao procurar pergunta: " + e.getMessage());
+                String msg = "Erro ao procurar pergunta: " + e.getMessage();
+                showErrorAlert(msg);
+                view.addNotification(msg);
             }
         });
     }
 
-    /** Abre a janela com a pergunta e envia a resposta seleccionada */
     private void openQuestionDialog(Question question) {
         Integer studentId = clientManager.getUserId();
         if (studentId == null) {
             showErrorAlert("Sessão inválida. Faça login novamente.");
+            view.addNotification("Sessão inválida ao tentar responder à pergunta.");
             return;
         }
 
@@ -302,26 +288,26 @@ public class StudentDashboardController implements IDisposableProp {
                 getOwnerWindow(),
                 question,
                 studentId,
-                (SubmitAnswerDTO dto) -> {
+                dto -> {
                     awaitingSubmitAnswer = true;
                     try {
                         clientManager.getAnswerService().submitAnswer(dto);
                     } catch (Exception ex) {
                         awaitingSubmitAnswer = false;
-                        showErrorAlert("Erro ao submeter resposta: " + ex.getMessage());
+                        String msg = "Erro ao submeter resposta: " + ex.getMessage();
+                        showErrorAlert(msg);
+                        view.addNotification(msg);
                     }
                 });
     }
 
-    // ----------------------------------------------------------
-    // HISTÓRICO
-    // ----------------------------------------------------------
+    // ---------------- HISTÓRICO ----------------
 
-    /** Handler para solicitar o histórico de respostas */
     public void onShowHistory() {
         Integer studentId = clientManager.getUserId();
         if (studentId == null) {
             showErrorAlert("Sessão inválida. Faça login novamente.");
+            view.addNotification("Falha ao obter histórico: sessão inválida.");
             return;
         }
         awaitingHistory = true;
@@ -329,15 +315,14 @@ public class StudentDashboardController implements IDisposableProp {
             clientManager.getAnswerService().viewAnswersForStudent(studentId);
         } catch (Exception e) {
             awaitingHistory = false;
-            showErrorAlert("Erro ao obter histórico: " + e.getMessage());
+            String msg = "Erro ao obter histórico: " + e.getMessage();
+            showErrorAlert(msg);
+            view.addNotification(msg);
         }
     }
 
-    // ----------------------------------------------------------
-    // PERFIL (edição de dados + password)
-    // ----------------------------------------------------------
+    // ---------------- PERFIL (edição) ----------------
 
-    /** Edição do perfil do estudante */
     public void onProfile() {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle("Perfil do Estudante");
@@ -353,11 +338,13 @@ public class StudentDashboardController implements IDisposableProp {
 
         Label nameLabel = new Label("Nome:");
         TextField nameField = new TextField();
-        nameField.setText(clientManager.getService().getUserName() != null ? clientManager.getService().getUserName() : "");
+        nameField.setText(clientManager.getService().getUserName() != null
+                ? clientManager.getService().getUserName() : "");
 
         Label emailLabel = new Label("Email:");
         TextField emailField = new TextField();
-        emailField.setText(clientManager.getService().getUserEmail() != null ? clientManager.getService().getUserEmail() : "");
+        emailField.setText(clientManager.getService().getUserEmail() != null
+                ? clientManager.getService().getUserEmail() : "");
 
         Label oldPwLabel = new Label("Password atual (só necessária se pretende alterar):");
         PasswordField oldPwField = new PasswordField();
@@ -389,6 +376,7 @@ public class StudentDashboardController implements IDisposableProp {
 
                 if (name.isBlank() || email.isBlank()) {
                     showErrorAlert("Nome e email são obrigatórios.");
+                    view.addNotification("Edição de perfil falhou: nome/email em falta.");
                     return;
                 }
 
@@ -398,18 +386,17 @@ public class StudentDashboardController implements IDisposableProp {
                         (newPw == null || newPw.isBlank()) ? null : newPw
                 );
                 clientManager.getAuthService().updateStudent(dto);
-                // feedback vem via updateProfileListener
+                view.addNotification("Pedido de atualização de perfil enviado.");
             } catch (NumberFormatException nfe) {
                 showErrorAlert("Número de estudante inválido.");
+                view.addNotification("Número de estudante inválido ao editar perfil.");
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
             }
         });
     }
 
-    // ----------------------------------------------------------
-    // LOGOUT
-    // ----------------------------------------------------------
+    // ---------------- LOGOUT ----------------
 
     public void onLogout() {
         boolean confirm = AlertUtils.showConfirmation(
@@ -430,9 +417,7 @@ public class StudentDashboardController implements IDisposableProp {
         application.showAuthentication();
     }
 
-    // ----------------------------------------------------------
-    // HELPERS
-    // ----------------------------------------------------------
+    // ---------------- HELPERS ----------------
 
     private Window getOwnerWindow() {
         if (view != null && view.getScene() != null) {

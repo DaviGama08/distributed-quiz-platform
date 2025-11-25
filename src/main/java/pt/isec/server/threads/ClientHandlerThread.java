@@ -281,9 +281,8 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
 
     @Override
     public void close() {
-        // this is what you call from outside to "stop" this handler
         try {
-            connection.close();  // isto desbloqueia o receiveMessage()
+            connection.close();
         } catch (IOException ignored) {}
     }
 }

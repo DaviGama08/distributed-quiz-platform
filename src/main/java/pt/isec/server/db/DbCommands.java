@@ -34,7 +34,10 @@ public final class DbCommands {
         //PreparedStatement serve para executar comandos sql
         try (Connection c = openConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             bind(ps, args); //bind está a
-            return ps.executeUpdate();
+            int x = ps.executeUpdate();
+            if(x > 0)
+                update_db_version(c);
+            return x;
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -53,6 +56,16 @@ public final class DbCommands {
         }
     }
 
+    private void update_db_version(Connection c){
+
+        String sql = "UPDATE config SET db_version = db_version + 1 WHERE id = 1";
+        try (PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     /* ========================= 2) TRANSACÕES ========================= */
 
     public void runInTransaction(TransactionWork work) throws Exception {
@@ -60,6 +73,7 @@ public final class DbCommands {
             c.setAutoCommit(false);
             try {
                 work.run(new Transaction(c));
+                update_db_version(c);
                 c.commit();
             } catch (Exception e) {
                 c.rollback();

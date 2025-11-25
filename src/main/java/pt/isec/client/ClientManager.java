@@ -41,4 +41,8 @@ public class ClientManager {
     public Integer getUserId() { return service.getUserId(); }
     /** Define o ID do utilizador autenticado. */
     public void setUserId(Integer id) { service.setUserId(id); }
+    /** Obtém o número de estudante do utilizador autenticado. */
+    public Integer getStudentNumber() { return service.getStudentNumber(); }
+    /** Define o número de estudante do utilizador autenticado. */
+    public void setStudentNumber(Integer number) { service.setStudentNumber(number); }
 }

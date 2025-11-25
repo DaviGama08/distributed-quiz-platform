@@ -511,7 +511,7 @@ public final class TeacherDialogs {
         TableColumn<Answer, String> studCol = new TableColumn<>("Nº Aluno");
         studCol.setCellValueFactory(data ->
                 new javafx.beans.property.SimpleStringProperty(
-                        String.valueOf(data.getValue().getStudentId()))
+                        String.valueOf(data.getValue().getStudentNumber()))
         );
 
         TableColumn<Answer, String> nameCol = new TableColumn<>("Nome");

@@ -104,9 +104,9 @@ public final class CsvExportUtils {
                 for (Answer a : answers) {
                     if (a == null) continue;
 
-                    String numero = a.getStudentId() == null
+                    String numero = a.getStudentNumber() == null
                             ? ""
-                            : a.getStudentId().toString();
+                            : a.getStudentNumber().toString();
                     String nome = escapeCsv(a.getStudentName());
                     String email = escapeCsv(a.getStudentEmail());
                     String resp = a.getSelectedOption() != null

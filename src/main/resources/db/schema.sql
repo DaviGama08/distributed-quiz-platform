@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS teacher (
 
 -- Estudantes
 CREATE TABLE IF NOT EXISTS student (
-                                       student_number INTEGER PRIMARY KEY,
+                                       id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                                       student_number INTEGER NOT NULL UNIQUE,
                                        name           TEXT NOT NULL,
                                        email          TEXT NOT NULL UNIQUE,
                                        password_hash  TEXT NOT NULL,
@@ -71,11 +72,11 @@ CREATE TABLE IF NOT EXISTS option (
 
 -- Respostas dos estudantes
 CREATE TABLE IF NOT EXISTS answer (
-                                      student_number INTEGER NOT NULL REFERENCES student(student_number) ON DELETE CASCADE,
+                                      student_id     INTEGER NOT NULL REFERENCES student(id) ON DELETE CASCADE,
                                       question_id    INTEGER NOT NULL REFERENCES question(id) ON DELETE CASCADE,
                                       chosen_option  CHAR(1) NOT NULL CHECK (chosen_option BETWEEN 'A' AND 'Z'),
                                       created_at     TEXT DEFAULT CURRENT_TIMESTAMP,
-                                      PRIMARY KEY (student_number, question_id)
+                                      PRIMARY KEY (student_id, question_id)
 );
 
 -- Triggers para atualizar db_version quando mexes em question
@@ -164,5 +165,5 @@ END;
 -- Índices úteis
 CREATE INDEX IF NOT EXISTS idx_teacher_email    ON teacher(email);
 CREATE INDEX IF NOT EXISTS idx_student_email    ON student(email);
-CREATE INDEX IF NOT EXISTS idx_answer_student   ON answer(student_number);
+CREATE INDEX IF NOT EXISTS idx_answer_student   ON answer(student_id);
 CREATE INDEX IF NOT EXISTS idx_question_teacher ON question(teacher_id);

@@ -17,7 +17,6 @@ import java.util.Map;
 
 /**
  * Serviço para submissão e consulta de respostas.
- * Usa colunas correctas da tabela answer (student_number, question_id, chosen_option, created_at).
  */
 public class AnswerService {
     private final IServerManager server;
@@ -51,13 +50,13 @@ public class AnswerService {
 
         // insere a resposta
         dbCommands.executeUpdate(
-                "INSERT INTO answer (student_number, question_id, chosen_option, created_at) VALUES (?, ?, ?, ?)",
+                "INSERT INTO answer (student_id, question_id, chosen_option, created_at) VALUES (?, ?, ?, ?)",
                 studentId, questionId, selected.name(), now.toString()
         );
 
         // replicação
         server.recordSqlUpdate(
-                "INSERT INTO answer (student_number, question_id, chosen_option, created_at) VALUES (" +
+                "INSERT INTO answer (student_id, question_id, chosen_option, created_at) VALUES (" +
                         studentId + ", " + questionId + ", '" + selected.name() + "', '" + now + "');"
         );
         server.setDbVersion(server.dbVersion() + 1);
@@ -103,26 +102,28 @@ public class AnswerService {
         List<Answer> out = new ArrayList<>();
         try (var con = java.sql.DriverManager.getConnection(dbCommands.getUrl());
              var ps = con.prepareStatement(
-                     "SELECT a.student_number, a.chosen_option, a.created_at, " +
-                             "s.name AS student_name, s.email AS student_email " +
+                     "SELECT a.student_id, a.chosen_option, a.created_at, " +
+                             "s.name AS student_name, s.email AS student_email, s.student_number " +
                              "FROM answer a " +
-                             "JOIN student s ON s.student_number = a.student_number " +
+                             "JOIN student s ON s.id = a.student_id " +
                              "WHERE a.question_id = ? " +
                              "ORDER BY a.created_at")) {
             ps.setInt(1, questionId);
             try (var rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    Integer stuId = rs.getInt("student_number");
+                    Integer stuId = rs.getInt("student_id");
                     OptionLetter sel = OptionLetter.valueOf(rs.getString("chosen_option"));
                     LocalDateTime at = LocalDateTime.parse(rs.getString("created_at"));
                     boolean isCorrect = sel.equals(correct);
 
                     String studentName = rs.getString("student_name");
                     String studentEmail = rs.getString("student_email");
+                    Integer studentNumber = rs.getInt("student_number");
 
                     out.add(new Answer(
                             null,
                             stuId,
+                            studentNumber,
                             questionId,
                             sel,
                             at,
@@ -148,7 +149,7 @@ public class AnswerService {
                              "q.correct_option, q.statement " +
                              "FROM answer a " +
                              "JOIN question q ON q.id = a.question_id " +
-                             "WHERE a.student_number = ? " +
+                             "WHERE a.student_id = ? " +
                              "ORDER BY a.created_at DESC")) {
             ps.setInt(1, studentId);
             try (var rs = ps.executeQuery()) {
@@ -168,6 +169,7 @@ public class AnswerService {
                     out.add(new Answer(
                             null,
                             studentId,
+                            null, // studentNumber
                             qId,
                             sel,
                             at,

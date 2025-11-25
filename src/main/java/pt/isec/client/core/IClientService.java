@@ -36,12 +36,14 @@ public interface IClientService {
 
     // Estado de autenticação
     void setUserId(Integer id);
+    void setStudentNumber(Integer number);
     void setUserType(String t);
     void setUserEmail(String e);
     void setAuthenticated(boolean authenticated);
     void setUserName(String name);
 
     Integer getUserId();
+    Integer getStudentNumber();
     String getUserType();
     String getUserEmail();
     String getUserName();

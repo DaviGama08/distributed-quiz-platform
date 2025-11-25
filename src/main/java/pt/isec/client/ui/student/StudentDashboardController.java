@@ -309,7 +309,7 @@ public class StudentDashboardController implements IDisposableProp {
         Label numberLabel = new Label("Número de estudante:");
         TextField numberField = new TextField();
         numberField.setPromptText("Número de estudante");
-        numberField.setText(String.valueOf(clientManager.getUserId()));
+        numberField.setText(String.valueOf(clientManager.getStudentNumber()));
 
         Label nameLabel = new Label("Nome:");
         TextField nameField = new TextField();

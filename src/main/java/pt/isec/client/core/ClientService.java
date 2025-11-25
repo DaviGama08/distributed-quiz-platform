@@ -65,6 +65,7 @@ public class ClientService implements IClientService {
     private String userType;
     private String userEmail;
     private Integer userId;
+    private Integer studentNumber;
     private String userName;
 
     private final int directoryUdpPort;
@@ -189,6 +190,7 @@ public class ClientService implements IClientService {
         setUserType(null);
         setUserEmail(null);
         setUserId(null);
+        setStudentNumber(null);
         setUserName(null);
     }
 
@@ -327,6 +329,7 @@ public class ClientService implements IClientService {
     @Override public BlockingQueue<TcpMessage<? extends Serializable>> getResponseQueue() { return responseQueue; }
     @Override public boolean isAuthenticated(){ return authenticated; }
     @Override public Integer getUserId() { return userId; }
+    @Override public Integer getStudentNumber() { return studentNumber; }
     @Override public String  getUserType(){ return userType; }
     @Override public String  getUserEmail(){ return userEmail; }
     @Override public String getUserName() {return userName;}
@@ -339,6 +342,7 @@ public class ClientService implements IClientService {
     }
 
     @Override public void setUserId(Integer id) { this.userId = id; }
+    @Override public void setStudentNumber(Integer number) { this.studentNumber = number; }
 
     @Override
     public void setAuthenticated(boolean auth){
@@ -363,6 +367,14 @@ public class ClientService implements IClientService {
 
     @Override
     public void setPropLoginOk(AuthResponseDTO dto){
+        setAuthenticated(true);
+        setUserId(Integer.parseInt(dto.userId()));
+        setUserType(dto.userType());
+        setUserName(dto.name());
+        setUserEmail(dto.email());
+        if ("STUDENT".equals(dto.userType())) {
+            setStudentNumber(dto.studentNumber());
+        }
         pcs.firePropertyChange(PROP_LOGIN_OK, null , dto);
     }
 
@@ -373,6 +385,14 @@ public class ClientService implements IClientService {
 
     @Override
     public void setPropRegisterOk(AuthResponseDTO dto){
+        setAuthenticated(true);
+        setUserId(Integer.parseInt(dto.userId()));
+        setUserType(dto.userType());
+        setUserName(dto.name());
+        setUserEmail(dto.email());
+        if ("STUDENT".equals(dto.userType())) {
+            setStudentNumber(dto.studentNumber());
+        }
         pcs.firePropertyChange(PROP_REGISTER_OK, null , dto);
     }
 

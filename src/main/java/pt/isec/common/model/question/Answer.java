@@ -11,6 +11,7 @@ public final class Answer implements Serializable {
     private static final long serialVersionUID = 1L;
     private Integer id;
     private Integer studentId;
+    private Integer studentNumber; // Added
     private Integer questionId;
     private OptionLetter selectedOption;
     private LocalDateTime answeredAt;
@@ -23,23 +24,7 @@ public final class Answer implements Serializable {
 
     public Answer(Integer id,
                   Integer studentId,
-                  Integer questionId,
-                  OptionLetter selectedOption,
-                  LocalDateTime answeredAt,
-                  boolean isCorrect) {
-        this.id = id;
-        this.studentId = studentId;
-        this.questionId = questionId;
-        this.selectedOption = selectedOption;
-        this.answeredAt = answeredAt;
-        this.isCorrect = isCorrect;
-        this.studentName = null;
-        this.studentEmail = null;
-        this.questionStatement = null;
-    }
-
-    public Answer(Integer id,
-                  Integer studentId,
+                  Integer studentNumber, // Added
                   Integer questionId,
                   OptionLetter selectedOption,
                   LocalDateTime answeredAt,
@@ -49,6 +34,7 @@ public final class Answer implements Serializable {
                   String questionStatement) {
         this.id = id;
         this.studentId = studentId;
+        this.studentNumber = studentNumber; // Added
         this.questionId = questionId;
         this.selectedOption = selectedOption;
         this.answeredAt = answeredAt;
@@ -64,10 +50,11 @@ public final class Answer implements Serializable {
 
     public Integer getStudentId() {return studentId;}
     public void setStudentId(Integer studentId) {
-        if (studentId == null || studentId <= 0)
-            throw new IllegalArgumentException("studentId must be positive");
         this.studentId = studentId;
     }
+
+    public Integer getStudentNumber() { return studentNumber; } // Added
+    public void setStudentNumber(Integer studentNumber) { this.studentNumber = studentNumber; } // Added
 
     public String getQuestionStatement() {
         return questionStatement;
@@ -83,67 +70,45 @@ public final class Answer implements Serializable {
 
     public Integer getQuestionId() {return questionId;}
     public void setQuestionId(Integer questionId) {
-        if (questionId == null || questionId <= 0)
-            throw new IllegalArgumentException("questionId must be positive");
         this.questionId = questionId;
     }
 
     public OptionLetter getSelectedOption() {return selectedOption;}
     public void setSelectedOption(OptionLetter selectedOption) {
-        if (selectedOption == null)
-            throw new IllegalArgumentException("selectedOption cannot be null");
         this.selectedOption = selectedOption;
     }
 
     public LocalDateTime getAnsweredAt() {return answeredAt;}
     public void setAnsweredAt(LocalDateTime answeredAt) {
-        if (answeredAt == null)
-            throw new IllegalArgumentException("answeredAt cannot be null");
         this.answeredAt = answeredAt;
     }
 
     public boolean isCorrect() {return isCorrect;}
     public void setCorrect(boolean correct) {this.isCorrect = correct;}
 
-    //toString
     @Override
     public String toString() {
-        return "Answer{id=" + id + ", studentId=" + studentId +
-                ", questionId=" + questionId + ", selectedOption=" + selectedOption +
-                ", answeredAt=" + answeredAt + ", isCorrect=" + isCorrect + '}';
+        return "Answer{" +
+                "id=" + id +
+                ", studentId=" + studentId +
+                ", studentNumber=" + studentNumber +
+                ", questionId=" + questionId +
+                ", selectedOption=" + selectedOption +
+                ", answeredAt=" + answeredAt +
+                ", isCorrect=" + isCorrect +
+                '}';
     }
 
-    //equals/hashCode
     @Override
     public boolean equals(Object o) {
-        if(o == this) return true;
+        if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Answer answer = (Answer) o;
-        return selectedOption == answer.selectedOption &&
-                Objects.equals(id, answer.id) &&
-                Objects.equals(studentId, answer.studentId) &&
-                Objects.equals(questionId, answer.questionId) &&
-                Objects.equals(answeredAt, answer.answeredAt);
+        return isCorrect == answer.isCorrect && Objects.equals(id, answer.id) && Objects.equals(studentId, answer.studentId) && Objects.equals(studentNumber, answer.studentNumber) && Objects.equals(questionId, answer.questionId) && selectedOption == answer.selectedOption && Objects.equals(answeredAt, answer.answeredAt) && Objects.equals(studentName, answer.studentName) && Objects.equals(studentEmail, answer.studentEmail) && Objects.equals(questionStatement, answer.questionStatement);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, studentId, questionId, selectedOption, answeredAt);
-    }
-
-    private void validate(Integer studentId, Integer questionId,
-                          OptionLetter selectedOption, LocalDateTime answeredAt) {
-
-        if (studentId == null || studentId <= 0)
-            throw new IllegalArgumentException("studentId must be positive");
-
-        if (questionId == null || questionId <= 0)
-            throw new IllegalArgumentException("questionId must be positive");
-
-        if (selectedOption == null)
-            throw new IllegalArgumentException("selectedOption cannot be null");
-
-        if (answeredAt == null)
-            throw new IllegalArgumentException("answeredAt cannot be null");
+        return Objects.hash(id, studentId, studentNumber, questionId, selectedOption, answeredAt, isCorrect, studentName, studentEmail, questionStatement);
     }
 }

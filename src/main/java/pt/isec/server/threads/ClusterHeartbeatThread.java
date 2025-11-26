@@ -1,9 +1,9 @@
 package pt.isec.server.threads;
-
-import pt.isec.common.messages.TcpMessage;
-import pt.isec.common.messages.MessageType;
 import pt.isec.server.core.IServerManager;
 import pt.isec.server.core.ServerManager;
+import pt.isec.common.messages.TcpMessage;
+import pt.isec.common.messages.MessageType;
+import pt.isec.common.util.Log;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -115,7 +115,8 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                                 boolean versionMismatch = rxVersion >= 0 && rxVersion != tInfo.dbVersion();
 
                                 if (missingDb || versionMismatch) {
-                                    System.err.printf("[%s][MC] pedir cópia: falta=%s versao(local=%d, rx=%d) → %s:%d%n",
+                                    Log.error(ClusterHeartbeatThread.class,
+                                            "[%s][MC] pedir cópia: falta=%s versao(local=%d, rx=%d) → %s:%d%n",
                                             Instant.now(), missingDb, tInfo.dbVersion(), rxVersion, senderIp, rxDbPort);
 
                                     if (rxDbPort > 0) {
@@ -130,7 +131,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                                             requestDbCopyFromPrimary(senderIp, rxDbPort, rxVersion);
                                         }
                                     } else {
-                                        System.err.println("[MC] heartbeat sem dbPort → não posso pedir cópia.");
+                                        Log.error(ClusterHeartbeatThread.class, "[MC] heartbeat sem dbPort → não posso pedir cópia.");
                                     }
                                 }
                             }
@@ -139,7 +140,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                         // sem heartbeat no ciclo
                     } catch (Exception e) {
                         if (tInfo.isRunning())
-                            System.err.println("[MC-LOOP] erro rx: " + e.getMessage());
+                            Log.error(ClusterHeartbeatThread.class, "[MC-LOOP] erro rx: " + e.getMessage());
                     }
                 }
 
@@ -151,14 +152,14 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                     // sem pedido
                 } catch (Exception e) {
                     if (tInfo.isRunning())
-                        System.err.println("[DBCOPY] erro no accept: " + e.getMessage());
+                        Log.error(ClusterHeartbeatThread.class, "[DBCOPY] erro no accept: " + e.getMessage());
                 }
 
                 Thread.sleep(LOOP_SLEEP_MS);
             }
         } catch (Exception e) {
             if (tInfo.isRunning())
-                System.err.println("[MC-LOOP] erro: " + e.getMessage());
+                Log.error(ClusterHeartbeatThread.class, "[MC-LOOP] erro: " + e.getMessage());
         }
     }
 
@@ -196,7 +197,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
 
             var resp = conn.receiveMessage();
             if (resp == null || resp.getType() != MessageType.ACK) {
-                System.err.println("[DBCOPY/RQ] resposta inválida (esperado ACK copy-start)");
+                Log.error(ClusterHeartbeatThread.class, "[DBCOPY/RQ] resposta inválida (esperado ACK copy-start)");
                 return;
             }
 
@@ -207,7 +208,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
             try (FileOutputStream fos = new FileOutputStream(tmp.toFile())) {
                 total = conn.receiveExactly(fos, size);
             }
-            System.out.printf("[DBCOPY/RQ] %d bytes recebidos -> %s%n", total, tmp);
+            Log.info(ClusterHeartbeatThread.class, "[DBCOPY/RQ] %d bytes recebidos -> %s%n", total, tmp);
 
             boolean moved = false;
             try {
@@ -226,19 +227,19 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                     Files.deleteIfExists(tmp);
                     moved = true;
                 } catch (Exception e) {
-                    System.err.println("[DBCOPY/RQ] falha no copy+delete: " + e.getMessage());
+                    Log.error(ClusterHeartbeatThread.class, "[DBCOPY/RQ] falha no copy+delete: " + e.getMessage());
                 }
             }
 
             if (moved) {
-                System.out.println("[DBCOPY/RQ] cópia concluída em " + target);
+                Log.info(ClusterHeartbeatThread.class, "[DBCOPY/RQ] cópia concluída em " + target);
                 tInfo.setDbVersion(rxVersion);
             } else {
-                System.err.println("[DBCOPY/RQ] não consegui substituir " + target + " (ficou " + tmp + ")");
+                Log.error(ClusterHeartbeatThread.class, "[DBCOPY/RQ] não consegui substituir " + target + " (ficou " + tmp + ")");
             }
 
         } catch (Exception e) {
-            System.err.println("[DBCOPY/RQ] erro: " + e.getMessage());
+            Log.error(ClusterHeartbeatThread.class, "[DBCOPY/RQ] erro: " + e.getMessage());
             try { Files.deleteIfExists(tmp); } catch (Exception ignore) {}
         }
     }
@@ -266,11 +267,11 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
 
             try (FileInputStream fis = new FileInputStream(dbFile.toFile())) {
                 long sent = connection.sendStreamViaObjectOut(fis, size);
-                System.out.printf("[DBCOPY] %d bytes enviados -> %s%n", sent, dbFile);
+                Log.info(ClusterHeartbeatThread.class, "[DBCOPY] %d bytes enviados -> %s%n", sent, dbFile);
             }
 
         } catch (Exception e) {
-            System.err.println("[DBCOPY] erro sessão cópia: " + e.getMessage());
+            Log.error(ClusterHeartbeatThread.class, "[DBCOPY] erro sessão cópia: " + e.getMessage());
         } finally {
             try { s.close(); } catch (Exception ignore) {}
         }

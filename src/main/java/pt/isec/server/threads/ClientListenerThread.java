@@ -1,5 +1,7 @@
 package pt.isec.server.threads;
+
 import pt.isec.server.core.IServerManager;
+import pt.isec.common.util.Log;
 
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -30,7 +32,7 @@ public class ClientListenerThread implements Runnable, AutoCloseable {
             // cria o socket tcp que aceita conexões de clientes
             serverSocket = new ServerSocket(tInfo.serverTcpPort());
             serverSocket.setSoTimeout(1000); // 1 segundo
-            System.out.println("[ACCEPT] a escutar clientes em " + tInfo.serverTcpPort());
+            Log.info(ClientListenerThread.class, "[ACCEPT] a escutar clientes em " + tInfo.serverTcpPort());
 
             // loop principal — aceita clientes enquanto o servidor estiver a correr
             while (tInfo.isRunning()) {
@@ -49,7 +51,7 @@ public class ClientListenerThread implements Runnable, AutoCloseable {
 
         } catch (Exception e) {
             if (tInfo.isRunning()) {
-                System.err.println("[ACCEPT] erro: " + e.getMessage());
+                Log.error(ClientListenerThread.class, "[ACCEPT] erro: " + e.getMessage());
             }
         } finally {
             try {

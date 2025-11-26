@@ -1,6 +1,8 @@
 package pt.isec.server.threads;
 import pt.isec.server.core.IServerManager;
 import pt.isec.server.core.ServerManager;
+import pt.isec.common.util.Log;
+
 import java.io.IOException;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
@@ -41,7 +43,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             // espera "200 PRINCIPAL ip:port[|DBV=X]"
             Endpoint reply = waitPrincipal(s);
             if (reply == null) {
-                System.err.println("[DIR] sem resposta da diretoria");
+                Log.error(DirectoryHeartbeatThread.class, "[DIR] sem resposta da diretoria");
                 managerTheardInfo.stopRunning(false); // running=false e interrompe threads
                 return;
             }
@@ -64,18 +66,19 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                     if (managerTheardInfo instanceof ServerManager node) {
                         node.initDatabaseLayerIfNeeded();
                     } else {
-                        System.err.println("[DB] tInfo não é ServerNode — não consigo inicializar BD/Auth.");
+                        Log.error(DirectoryHeartbeatThread.class, "[DB] tInfo não é ServerNode — não consigo inicializar BD/Auth.");
                     }
                 } catch (Exception e) {
-                    System.err.println("[DB] erro a inicializar base de dados: " + e.getMessage());
+                    Log.error(DirectoryHeartbeatThread.class, "[DB] erro a inicializar base de dados: " + e.getMessage());
                 }
             } else {
                 if (!Files.exists(managerTheardInfo.dbPath())) {
-                    System.out.println("[DB] backup sem base de dados local; vai aguardar heartbeat multicast para copiar.");
+                    Log.info(DirectoryHeartbeatThread.class, "[DB] backup sem base de dados local; vai aguardar heartbeat multicast para copiar.");
                 }
             }
 
-            System.out.printf("[DIR] principal %s:%d | souPrimario=%s | versao=%d%n",
+            Log.info(DirectoryHeartbeatThread.class,
+                    "[DIR] principal %s:%d | souPrimario=%s | versao=%d%n",
                     reply.ip, reply.port, iAmPrimary, managerTheardInfo.dbVersion());
 
             long last = 0;
@@ -97,7 +100,8 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                 if (cur != null) {
                     managerTheardInfo.setPrimary(cur.ip, cur.port);
                     boolean prim = Objects.equals(cur.ip, managerTheardInfo.serverTcpIp()) && cur.port == managerTheardInfo.serverTcpPort();
-                    System.out.printf("[DIR] principal %s:%d | souPrimario=%s%n", cur.ip, cur.port, prim);
+                    Log.info(DirectoryHeartbeatThread.class,
+                            "[DIR] principal %s:%d | souPrimario=%s%n", cur.ip, cur.port, prim);
                 }
                 Thread.sleep(SLEEP_INTERVAL_MS);
             }
@@ -108,7 +112,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
 
         } catch (Exception e) {
             if (managerTheardInfo.isRunning())
-                System.err.println("[DIR] erro: " + e.getMessage());
+                Log.error(DirectoryHeartbeatThread.class, "[DIR] erro: " + e.getMessage());
         }finally {
             try {
                 close();
@@ -152,14 +156,14 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
 
             //Se houver mais servidores iguais
             if (resp.startsWith("409 CONFLICT DUP_ENDPOINT")) {
-                System.err.println("[DIR] ja existe servidor ativo com este ip:porto. a terminar.");
+                Log.error(DirectoryHeartbeatThread.class, "[DIR] ja existe servidor ativo com este ip:porto. a terminar.");
                 System.exit(2); // encerra para não ficar dois no mesmo endpoint
                 return null;    // unreachable
             }
             //Depois passar 17segs sem heartbeat(TTL), a diretoria envia ordem para encerrar servidor
             if (resp.startsWith("SHUTDOWN") || resp.startsWith("404 NO_PRINCIPAL")){
                 managerTheardInfo.stopRunning(false);
-                System.out.println("ENCERREI");
+                Log.info(DirectoryHeartbeatThread.class, "ENCERREI");
                 return null;
             }
 

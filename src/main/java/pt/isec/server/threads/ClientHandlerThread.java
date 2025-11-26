@@ -8,6 +8,7 @@ import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;
 import pt.isec.server.core.IServerManager;
 import pt.isec.common.model.question.Question;
+import pt.isec.common.util.Log;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -55,7 +56,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                 processMessage(msg);
             }
         } catch (Exception e) {
-            System.err.println("Client connection closed with exception: " + e.getMessage());
+            Log.error(ClientHandlerThread.class, "Client connection closed with exception: " + e.getMessage());
             e.printStackTrace();
         } finally {
             if (loggerUserId != null) {

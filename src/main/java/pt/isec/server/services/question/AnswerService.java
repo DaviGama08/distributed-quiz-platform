@@ -8,6 +8,7 @@ import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.OptionLetter;
 import pt.isec.server.core.IQuestionAnswerContext;
 import pt.isec.server.db.DbCommands;
+import pt.isec.common.util.Log;
 
 import java.sql.DriverManager;
 import java.time.LocalDateTime;
@@ -79,16 +80,16 @@ public class AnswerService implements IAnswerService {
                 // envia notificação ao docente com o id da pergunta
                 TcpMessage<Integer> notify = new TcpMessage<>(MessageType.ANSWER_SUBMITTED, questionId, Integer.class);
                 context.sendToUser(teacherId, notify);
-                System.out.println("[AnswerService] Live notify enviado para docente " +
+                Log.info(AnswerService.class, "[AnswerService] Live notify enviado para docente " +
                         teacherId + " (questionId=" + questionId + ")");
             } else {
                 // docente não ligado — apenas regista informação de log; o docente verá os updates quando fizer refresh
-                System.out.println("[AnswerService] Docente não ligado ou teacher_id nulo; " +
+                Log.info(AnswerService.class, "[AnswerService] Docente não ligado ou teacher_id nulo; " +
                         "não há notify em tempo real para questionId=" + questionId);
             }
         } catch (Exception e) {
             // falha a notificar não deve impedir o sucesso da submissão
-            System.err.println("[AnswerService] Failed to notify teacher: " + e.getMessage());
+            Log.error(AnswerService.class, "[AnswerService] Failed to notify teacher: " + e.getMessage());
         }
 
         return true;

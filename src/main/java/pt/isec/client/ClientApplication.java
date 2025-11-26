@@ -1,4 +1,5 @@
 package pt.isec.client;
+
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.control.Alert;
@@ -27,12 +28,13 @@ public class ClientApplication extends Application {
     private TeacherDashboardController teacherController;
     private StudentDashboardController studentController;
 
-    private PropertyChangeListener connectionListener; //Para o caso de perder a ligação com o servidor, encerra a UI
+    // Listener para estado de ligação (para tratar reconexão / erro permanente)
+    private PropertyChangeListener connectionListener;
 
     private ClientManager clientManager;
     private Stage primaryStage;
 
-    // Non-modal reconnection indicator (keeps a single instance and is shown/hidden by connection events)
+    // Indicador não-modal de reconexão
     private Alert reconnectAlert;
 
     @Override
@@ -48,29 +50,24 @@ public class ClientApplication extends Application {
             stage.getIcons().add(new Image(iconStream));
         }
 
-        //regista o uiCloser para permitir que o manager feche a UI ao parar
-        clientManager.setUiCloser(() -> {
-            //garante a execução na thread JavaFX
-            Platform.runLater(() -> {
-                if(primaryStage.isShowing())
-                    primaryStage.close();
-                Platform.exit();
-            });
-        });
+        // Permite que o ClientManager feche a UI quando parar
+        clientManager.setUiCloser(() -> Platform.runLater(() -> {
+            if (primaryStage.isShowing())
+                primaryStage.close();
+            Platform.exit();
+        }));
 
-        //Regista listener para estados de erro/desconexão
+        // Listener para estados de ligação (reconexão/erro permanente)
         connectionListener = evt -> {
             String status = evt.getNewValue() == null ? "" : evt.getNewValue().toString();
 
-            // Use Platform.runLater for any UI operations
             Platform.runLater(() -> {
-                // Tratar estados transitórios (reconnecting) sem fechar a UI
+                // Estado de reconexão -> mostra indicador não-modal
                 if (ClientService.STATUS_RECONNECTING.equals(status)) {
-                    // Show a single non-modal alert with a progress indicator
                     if (reconnectAlert == null) {
                         reconnectAlert = new Alert(Alert.AlertType.INFORMATION);
                         reconnectAlert.initOwner(primaryStage);
-                        reconnectAlert.initModality(Modality.NONE); // non-modal
+                        reconnectAlert.initModality(Modality.NONE); // não-modal
                         reconnectAlert.setHeaderText(null);
                         reconnectAlert.setTitle("A tentar reconectar");
 
@@ -81,13 +78,12 @@ public class ClientApplication extends Application {
                         content.setStyle("-fx-padding:10;");
                         reconnectAlert.getDialogPane().setContent(content);
 
-                        // show non-blocking
                         reconnectAlert.show();
                     }
                     return;
                 }
 
-                // If we have reconnected, hide the reconnection indicator if visible
+                // Se reconectou com sucesso, esconde o indicador
                 if (ClientService.STATUS_CONNECTED.equals(status)) {
                     if (reconnectAlert != null) {
                         try { reconnectAlert.close(); } catch (Exception ignored) {}
@@ -96,23 +92,27 @@ public class ClientApplication extends Application {
                     return;
                 }
 
-                // Fechar apenas em erro permanente
-                if ("DIRECTORY_ERROR".equals(status) || "SERVER_ERROR".equals(status) || "DISCONNECTED".equals(status) || ClientService.STATUS_DISCONNECTED_PERMANENT.equals(status)) {
-                    // close reconnection indicator if still open
+                // Erro permanente / desligado
+                if ("DIRECTORY_ERROR".equals(status) ||
+                        "SERVER_ERROR".equals(status) ||
+                        "DISCONNECTED".equals(status) ||
+                        ClientService.STATUS_DISCONNECTED_PERMANENT.equals(status)) {
+
                     if (reconnectAlert != null) {
                         try { reconnectAlert.close(); } catch (Exception ignored) {}
                         reconnectAlert = null;
                     }
 
-                    Alert a = new Alert(Alert.AlertType.ERROR, "Ligação perdida permanentemente. A aplicação vai encerrar.");
+                    Alert a = new Alert(Alert.AlertType.ERROR,
+                            "Ligação perdida permanentemente. A aplicação vai encerrar.");
                     a.initOwner(primaryStage);
                     a.setHeaderText(null);
-                    a.show(); // mostra não bloqueante
-                    // Não fechamos aqui; o uiCloser registado no ClientManager será invocado para fechar a UI de forma centralizada.
+                    a.show();
+                    // O fecho real é feito via uiCloser no ClientManager.
                 }
             });
         };
-        //Adiciona o Listener para a falha de ligação
+        // Regista o listener de ligação
         clientManager.getService().addPropertyChangeListener(ClientService.PROP_CONNECTION_STATUS, connectionListener);
 
         primaryStage.setTitle("Sistema de Gestão de Perguntas");
@@ -120,9 +120,9 @@ public class ClientApplication extends Application {
         showAuthentication();
         primaryStage.show();
 
+        // arranque do cliente em thread separada
         new Thread(() -> clientManager.start()).start();
     }
-
 
     /** Mostra o ecrã de autenticação */
     public void showAuthentication() {
@@ -144,8 +144,11 @@ public class ClientApplication extends Application {
     @Override
     public void stop() {
         if (clientManager != null) {
-            if(connectionListener != null) {
-                clientManager.getService().removePropertyChangeListener(ClientService.PROP_CONNECTION_STATUS, connectionListener);
+            if (connectionListener != null) {
+                try {
+                    clientManager.getService()
+                            .removePropertyChangeListener(ClientService.PROP_CONNECTION_STATUS, connectionListener);
+                } catch (Exception ignored) {}
                 connectionListener = null;
             }
             clientManager.stop();

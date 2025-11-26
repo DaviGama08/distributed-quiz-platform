@@ -14,25 +14,28 @@ import javafx.scene.text.FontWeight;
  */
 public class StudentDashboardView {
     private String userName;
-    private String userEmail;        // antes era final, agora pode ser atualizado
-
-    private Label profileNameLabel;  // nome no cartão de perfil
-    private Label avatarInitialsLabel; // iniciais no avatar
-    private Label headerEmailLabel;  // email no topo (header)
-    private Button overviewBtn;
+    private String userEmail;        // mutável para poder ser atualizado
 
     private Scene scene;
 
+    // Header
     private Label welcomeLabel;
+    private Label headerEmailLabel;
+
+    // Notificações
     private TextArea notificationArea;
 
-    // botões do menu
+    // Sidebar / perfil
+    private Label profileNameLabel;      // nome no cartão de perfil
+    private Label avatarInitialsLabel;   // iniciais no avatar
+    private VBox profileCard;
+
+    // Botões do menu
     private Button answerQuestionBtn;
     private Button historyBtn;
     private Button logoutBtn;
 
-    private VBox profileCard;
-
+    // Loading overlay leve no header
     private HBox loadingBox;
 
     public StudentDashboardView(String userName, String userEmail) {
@@ -57,6 +60,8 @@ public class StudentDashboardView {
         } catch (Exception ignored) { }
     }
 
+    /* =================== HEADER =================== */
+
     private VBox createHeader() {
         VBox header = new VBox(10);
         header.getStyleClass().add("dashboard-header-dark");
@@ -72,23 +77,23 @@ public class StudentDashboardView {
         // loading box (invisível por defeito) para indicar operações assíncronas não-modais
         loadingBox = new HBox(8);
         loadingBox.setAlignment(Pos.CENTER_LEFT);
-        loadingBox.setPadding(new Insets(4,0,0,0));
+        loadingBox.setPadding(new Insets(4, 0, 0, 0));
         ProgressIndicator pi = new ProgressIndicator();
-        pi.setPrefSize(16,16);
+        pi.setPrefSize(16, 16);
         Label loadingLabel = new Label("");
         loadingLabel.setStyle("-fx-text-fill: #7f8c8d;");
         loadingBox.getChildren().addAll(pi, loadingLabel);
         loadingBox.setVisible(false);
 
-        header.getChildren().addAll(welcomeLabel, headerEmailLabel);
-        header.getChildren().add(loadingBox);
+        header.getChildren().addAll(welcomeLabel, headerEmailLabel, loadingBox);
         return header;
     }
 
     public void showLoading(String message) {
         if (loadingBox == null) return;
         Platform.runLater(() -> {
-            ((Label)loadingBox.getChildren().get(1)).setText(message);
+            Label label = (Label) loadingBox.getChildren().get(1);
+            label.setText(message);
             loadingBox.setVisible(true);
         });
     }
@@ -97,6 +102,8 @@ public class StudentDashboardView {
         if (loadingBox == null) return;
         Platform.runLater(() -> loadingBox.setVisible(false));
     }
+
+    /* =================== SIDEBAR / PERFIL =================== */
 
     private VBox createSidebar() {
         VBox sidebar = new VBox(12);
@@ -112,6 +119,7 @@ public class StudentDashboardView {
         historyBtn = createMenuButton("Histórico");
         logoutBtn = createMenuButton("Logout");
 
+        // Empurra logout para baixo
         Region spacer = new Region();
         VBox.setVgrow(spacer, Priority.ALWAYS);
 
@@ -176,6 +184,8 @@ public class StudentDashboardView {
         return profileNameLabel != null ? profileNameLabel.getText() : userName;
     }
 
+    /* =================== MAIN AREA =================== */
+
     private VBox createMainArea() {
         VBox mainArea = new VBox(20);
         mainArea.getStyleClass().add("dashboard-main-area");
@@ -228,7 +238,11 @@ public class StudentDashboardView {
         return btn;
     }
 
-    public Scene getScene() { return scene; }
+    /* =================== API PÚBLICA =================== */
+
+    public Scene getScene() {
+        return scene;
+    }
 
     /** Actualizar texto de boas-vindas com o nome do aluno */
     public void setWelcomeName(String name) {
@@ -251,8 +265,8 @@ public class StudentDashboardView {
     }
 
     /**
-     * NOVO: método usado pelo StudentDashboardController para manter
-     * o nome e o email sincronizados com o servidor.
+     * Usado pelo StudentDashboardController para manter nome/email
+     * sincronizados com o servidor (header + perfil + avatar).
      */
     public void updateUserInfo(String name, String email) {
         // atualiza nome (perfil + header)
@@ -286,7 +300,7 @@ public class StudentDashboardView {
         historyBtn.setOnAction(e -> controller.onShowHistory());
         logoutBtn.setOnAction(e -> controller.onLogout());
 
-        // clicking profile card opens the editable profile dialog
+        // clicar no cartão de perfil abre o diálogo de edição de perfil
         if (profileCard != null) {
             profileCard.setOnMouseClicked(e -> controller.onProfile());
         }
@@ -297,6 +311,7 @@ public class StudentDashboardView {
     }
 
     public void addNotification(String message) {
+        if (notificationArea == null) return;
         String timestamp = java.time.LocalTime.now().format(
                 java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss")
         );

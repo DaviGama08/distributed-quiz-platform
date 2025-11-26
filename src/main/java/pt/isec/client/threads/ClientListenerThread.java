@@ -11,7 +11,7 @@ import java.io.Serializable;
  * Thread que escuta continuamente mensagens vindas do servidor via TCP
  * e coloca-as na fila de respostas para serem processadas.
  */
-public class ClientListenerThread implements Runnable{
+public class ClientListenerThread implements Runnable {
     private final IClientService service;
 
     public ClientListenerThread(IClientService service) {
@@ -22,23 +22,25 @@ public class ClientListenerThread implements Runnable{
     public void run() {
         System.out.println("[ClientListener] A escuta de mensagens do servidor...");
 
-        while(service.isRunning()) {
+        while (service.isRunning()) {
             try {
                 ObjectInputStream in = service.getInputStream();
                 if (in == null) {
-                    // sem stream válido; aguarda um pouco ou dispara reconexão
+                    // Sem stream válido (por ex. durante reconexão); aguarda um pouco
                     Thread.sleep(200);
                     continue;
                 }
 
-                TcpMessage<? extends Serializable> response = (TcpMessage<? extends Serializable>) in.readObject();
+                @SuppressWarnings("unchecked")
+                TcpMessage<? extends Serializable> response =
+                        (TcpMessage<? extends Serializable>) in.readObject();
 
-                if(response != null) {
+                if (response != null) {
                     System.out.println("[ClientListener] Recebido: " + response.getType());
                     service.getResponseQueue().put(response);
                 }
             } catch (IOException e) {
-                if(service.isRunning()) {
+                if (service.isRunning()) {
                     System.err.println("[ClientListener] Ligação perdida: " + e.getMessage());
                     service.handleConnectionLost();
                 }
@@ -46,7 +48,7 @@ public class ClientListenerThread implements Runnable{
             } catch (ClassNotFoundException e) {
                 System.err.println("[ClientListener] Tipo de mensagem desconhecida: " + e.getMessage());
             } catch (InterruptedException e) {
-                System.out.println("[ClientListener] Interromppido");
+                System.out.println("[ClientListener] Interrompido");
                 Thread.currentThread().interrupt();
                 break;
             }

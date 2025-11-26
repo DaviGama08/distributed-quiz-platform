@@ -31,6 +31,7 @@ public class ClientListenerThread implements Runnable{
                 if(response != null) {
                     System.out.println("[ClientListener] Received: " + response.getType());
                     service.getResponseQueue().put(response);
+
                 }
             } catch (IOException e) {
                 if(service.isRunning()) {

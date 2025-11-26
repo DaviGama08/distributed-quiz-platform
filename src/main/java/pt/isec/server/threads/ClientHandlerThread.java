@@ -57,15 +57,16 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
         } catch (Exception e) {
             System.err.println("Client connection closed with exception: " + e.getMessage());
             e.printStackTrace();
-        }finally{
-            if(loggerUserId != null){
+        } finally {
+            if (loggerUserId != null) {
                 try { threadInfo.unregisterClientConnection(loggerUserId); } catch (Exception ignored) {}
                 threadInfo.unregisterLogin(loggerUserId);
-             }
-             try { connection.close(); } catch (IOException ignored) {}
-         }
+            }
+            try { connection.close(); } catch (IOException ignored) {}
+        }
     }
-    //Recebe mensagens do cliente
+
+    // Recebe mensagens do cliente
     private void processMessage(TcpMessage<?> tcpMessage) throws Exception {
         if (tcpMessage == null) return;
 
@@ -111,6 +112,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     threadInfo.registerLogin(userId, res.sessionId());
                     this.loggerUserId = userId;
                     this.sessionId    = res.sessionId();
+                    // regista também a conexão activa para permitir notificações do servidor a este cliente
                     try { threadInfo.registerClientConnection(userId, connection); } catch (Exception ignored) {}
 
                     connection.sendMessage(new TcpMessage<>(MessageType.LOGIN_OK, res, AuthResponseDTO.class));
@@ -120,8 +122,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
             }
 
             case LOGOUT -> {
-                // sem gestão real de sessão para já
-                if(loggerUserId != null){
+                if (loggerUserId != null) {
                     try { threadInfo.unregisterClientConnection(loggerUserId); } catch (Exception ignored) {}
                     threadInfo.unregisterLogin(loggerUserId);
                     loggerUserId = null;
@@ -166,7 +167,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                             ok ? "delete-ok" : "delete-fail",
                             String.class
                     ));
-                } catch (IllegalStateException e) { // Catch specific exception for answered questions
+                } catch (IllegalStateException e) { // pergunta com respostas, etc.
                     connection.sendMessage(new TcpMessage<>(MessageType.NACK, e.getMessage(), String.class));
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
@@ -175,7 +176,6 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
 
             case LIST_QUESTIONS -> {
                 try {
-                    //Faz o cast do tipo correto, lançando uma exceção se o tipo for diferente, para segurança.
                     ListQuestionsDTO dto = tcpMessage.getDataAs(ListQuestionsDTO.class);
                     List<?> list = threadInfo.getQuestionService().listQuestions(dto);
                     ArrayList<?> payload = new ArrayList<>(list);
@@ -238,6 +238,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
             }
 
             /* ========= PERFIL ========= */
+
             case UPDATE_STUDENT -> {
                 try {
                     UpdateStudentDTO dto = tcpMessage.getDataAs(UpdateStudentDTO.class);
@@ -282,7 +283,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
         }
     }
 
-    //Encerra o servidor depois da diretoria terminar. Impede que fique preso no connection
+    // Encerra o servidor depois da diretoria terminar. Impede que fique preso no connection
     @Override
     public void close() {
         try {

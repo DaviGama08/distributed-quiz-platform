@@ -37,6 +37,10 @@ import pt.isec.common.model.question.Question;
 import java.beans.PropertyChangeListener;
 import java.util.*;
 
+/**
+ * Controlador do dashboard do docente. Lida com criação, listagem
+ * e visualização de respostas de perguntas em regime assíncrono.
+ */
 public class TeacherDashboardController implements IDisposableProp {
 
     private final Stage stage;
@@ -46,6 +50,7 @@ public class TeacherDashboardController implements IDisposableProp {
     private String userName;
     private final TeacherDashboardView view;
 
+    // listeners
     private final PropertyChangeListener notificationListener;
     private final PropertyChangeListener createQuestionListener;
     private final PropertyChangeListener listQuestionsListener;
@@ -56,30 +61,40 @@ public class TeacherDashboardController implements IDisposableProp {
     private final PropertyChangeListener updateProfileOkListener;
     private final PropertyChangeListener updateProfileFailListener;
 
+    // última lista de perguntas recebidas
     private final List<Question> lastQuestions = new ArrayList<>();
+    // nº de respostas por pergunta (idPergunta -> count)
     private final Map<Integer, Integer> answersCountByQuestion = new HashMap<>();
 
+    // tabela de listagem (se diálogo de listar estiver aberto)
     private TableView<Question> questionsTable = null;
 
+    // flags de espera
     private volatile boolean awaitingCreateQuestion = false;
-    private volatile boolean awaitingListQuestions = false;
-    private volatile boolean awaitingViewAnswers = false;
-    private volatile boolean awaitingJoinQuestion = false;
+    private volatile boolean awaitingListQuestions  = false;
+    private volatile boolean awaitingViewAnswers    = false;
+    private volatile boolean awaitingJoinQuestion   = false;
     private volatile boolean awaitingUpdateQuestion = false;
 
+    // filtro actual na listagem (apenas cliente)
     private volatile String currentFilter = null;
+
+    // pergunta pendente para ver respostas
     private volatile Question pendingViewQuestion = null;
 
     private enum PendingAction { NONE, EDIT, DELETE }
     private volatile PendingAction pendingAction = PendingAction.NONE;
     private volatile Question pendingActionQuestion = null;
 
+    // diálogos
     private volatile Dialog<?> currentDetailsDialog = null;
     private volatile Dialog<?> currentEditProfileDialog = null;
 
+    // caixas de loading (quando existirem)
     private volatile HBox listLoadingBox = null;
     private volatile HBox dialogLoadingBox = null;
 
+    // flag para carregamento em massa de contagens de respostas
     private volatile boolean bulkLoadingAnswers = false;
 
     public TeacherDashboardController(Stage stage,
@@ -97,7 +112,9 @@ public class TeacherDashboardController implements IDisposableProp {
         view.createView();
         view.registerHandlers(this);
 
-        notificationListener = evt -> {
+        /* ===================== LISTENERS ===================== */
+
+        this.notificationListener = evt -> {
             String notification = (String) evt.getNewValue();
             if (notification != null) {
                 Platform.runLater(() -> {
@@ -107,7 +124,7 @@ public class TeacherDashboardController implements IDisposableProp {
             }
         };
 
-        createQuestionListener = evt -> {
+        this.createQuestionListener = evt -> {
             if (!awaitingCreateQuestion) return;
             awaitingCreateQuestion = false;
             CreateQuestionResponseDTO resp = (CreateQuestionResponseDTO) evt.getNewValue();
@@ -121,7 +138,7 @@ public class TeacherDashboardController implements IDisposableProp {
             });
         };
 
-        listQuestionsListener = evt -> {
+        this.listQuestionsListener = evt -> {
             if (!awaitingListQuestions) return;
             awaitingListQuestions = false;
 
@@ -129,7 +146,6 @@ public class TeacherDashboardController implements IDisposableProp {
             List<Question> list = (List<Question>) evt.getNewValue();
 
             Platform.runLater(() -> {
-                // detecta se realmente mudou para não duplicar mensagens
                 boolean changed = true;
                 if (list != null && list.size() == lastQuestions.size()) {
                     changed = false;
@@ -150,11 +166,12 @@ public class TeacherDashboardController implements IDisposableProp {
                     view.addNotification("Lista de perguntas atualizada. Total: " + lastQuestions.size());
                 }
 
-                // recarrega contagem de respostas (totalAnswers) após qualquer update
+                // recarrega contagem de respostas após qualquer update
                 fetchAnswerCountsSequentially();
             });
         };
-        viewAnswersListener = evt -> {
+
+        this.viewAnswersListener = evt -> {
             if (!awaitingViewAnswers) return;
             awaitingViewAnswers = false;
             @SuppressWarnings("unchecked")
@@ -174,9 +191,11 @@ public class TeacherDashboardController implements IDisposableProp {
                 updateDashboardStats();
 
                 if (bulkLoadingAnswers) {
+                    // durante bulk load só atualiza contadores
                     return;
                 }
 
+                // havia uma ação pendente (EDIT/DELETE)?
                 if (pendingAction != null && pendingAction != PendingAction.NONE &&
                         pendingActionQuestion != null &&
                         pendingActionQuestion.getId().equals(q.getId())) {
@@ -266,24 +285,29 @@ public class TeacherDashboardController implements IDisposableProp {
             });
         };
 
-        answerSubmittedListener = evt -> {
+        // Listener disparado quando o servidor envia ANSWER_SUBMITTED
+        this.answerSubmittedListener = evt -> {
             Integer qid = null;
             Object v = evt.getNewValue();
-            if (v instanceof Integer) qid = (Integer) v;
-            else if (v instanceof String) {
+            if (v instanceof Integer) {
+                qid = (Integer) v;
+            } else if (v instanceof String) {
                 try { qid = Integer.parseInt((String) v); } catch (Exception ignored) {}
             }
             if (qid == null) return;
 
             Integer finalQid = qid;
             Platform.runLater(() -> {
+                // incrementa contador local da pergunta
                 answersCountByQuestion.merge(finalQid, 1, Integer::sum);
+                // recalcula métricas do dashboard
                 updateDashboardStats();
+                // log visível no painel
                 view.addNotification("Uma nova resposta foi submetida à pergunta ID " + finalQid + ".");
             });
         };
 
-        joinQuestionListener = evt -> {
+        this.joinQuestionListener = evt -> {
             if (!awaitingJoinQuestion) return;
             awaitingJoinQuestion = false;
             Question q = (Question) evt.getNewValue();
@@ -319,7 +343,7 @@ public class TeacherDashboardController implements IDisposableProp {
             });
         };
 
-        updateQuestionListener = evt -> {
+        this.updateQuestionListener = evt -> {
             if (!awaitingUpdateQuestion) return;
             awaitingUpdateQuestion = false;
             Object payload = evt.getNewValue();
@@ -367,11 +391,9 @@ public class TeacherDashboardController implements IDisposableProp {
                         : null;
 
                 if (dto != null) {
-                    // atualiza campos do controller (fields, não parâmetros do construtor)
                     this.userName  = dto.name();
                     this.userEmail = dto.email();
 
-                    // atualiza a vista com os novos dados
                     view.updateUserInfo(this.userName, this.userEmail);
 
                     if (currentEditProfileDialog != null) {
@@ -399,7 +421,7 @@ public class TeacherDashboardController implements IDisposableProp {
             });
         };
 
-        updateProfileFailListener = evt -> {
+        this.updateProfileFailListener = evt -> {
             Object v = evt.getNewValue();
             String msg = (v == null ? "Erro desconhecido" : v.toString());
             Platform.runLater(() -> {
@@ -418,6 +440,8 @@ public class TeacherDashboardController implements IDisposableProp {
         updateDashboardStats();
         refreshQuestions();
     }
+
+    /* ===================== LIFECYCLE ===================== */
 
     public void show() {
         stage.setScene(view.getScene());
@@ -442,22 +466,7 @@ public class TeacherDashboardController implements IDisposableProp {
         service.addPropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_OK, updateProfileOkListener);
         service.addPropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_FAIL, updateProfileFailListener);
 
-        PropertyChangeListener connectListener = new PropertyChangeListener() {
-            @Override
-            public void propertyChange(java.beans.PropertyChangeEvent evt) {
-                Object val = evt.getNewValue();
-                if (val instanceof String s && "CONNECTED".equalsIgnoreCase(s)) {
-                    Platform.runLater(() -> {
-                        try { refreshQuestions(); } catch (Exception ignored) {}
-                    });
-                    try {
-                        clientManager.getService().removePropertyChangeListener(
-                                ClientService.PROP_CONNECTION_STATUS, this);
-                    } catch (Exception ignored) {}
-                }
-            }
-        };
-        service.addPropertyChangeListener(ClientService.PROP_CONNECTION_STATUS, connectListener);
+        // ⚠️ ConnectListener removido daqui conforme pedido
     }
 
     @Override
@@ -481,7 +490,7 @@ public class TeacherDashboardController implements IDisposableProp {
         try { if (dialogLoadingBox != null) dialogLoadingBox.setVisible(false); } catch (Exception ignored) {}
     }
 
-    // ---------------- DASHBOARD ----------------
+    /* ===================== MÉTRICAS / DASHBOARD ===================== */
 
     private void updateDashboardStats() {
         int total = lastQuestions.size();
@@ -496,7 +505,7 @@ public class TeacherDashboardController implements IDisposableProp {
         view.updateStats(total, active, totalAnswers);
     }
 
-    // ---------------- CRIAR PERGUNTA ----------------
+    /* ===================== CRIAR PERGUNTA ===================== */
 
     public void onCreateQuestion() {
         Integer teacherId = clientManager.getUserId();
@@ -507,14 +516,14 @@ public class TeacherDashboardController implements IDisposableProp {
         }
 
         Window owner = getCurrentOwnerWindow();
-        TeacherDialogs.showCreateQuestionDialog(owner, teacherId, dto -> {
+        TeacherDialogs.showCreateQuestionDialog(owner, teacherId, (CreateQuestionDTO dto) -> {
             awaitingCreateQuestion = true;
             clientManager.getQuestionService().createQuestion(dto);
             view.addNotification("Pedido para criar nova pergunta enviado.");
         });
     }
 
-    // ---------------- GERIR PERGUNTAS ----------------
+    /* ===================== GERIR / LISTAR PERGUNTAS ===================== */
 
     public void onManageQuestions() {
         Dialog<Void> dialog = new Dialog<>();
@@ -554,7 +563,6 @@ public class TeacherDashboardController implements IDisposableProp {
             ContextMenu menu = new ContextMenu(viewAnswersItem, editItem, deleteItem, copyCodeItem);
             row.setContextMenu(menu);
 
-            // double-click com botão esquerdo
             row.setOnMouseClicked(event -> {
                 if (!row.isEmpty()
                         && event.getClickCount() == 2
@@ -673,6 +681,11 @@ public class TeacherDashboardController implements IDisposableProp {
         dialog.showAndWait();
 
         questionsTable = null;
+    }
+
+    /** Método antigo mantido por compatibilidade: delega para onManageQuestions(). */
+    public void onListQuestions() {
+        onManageQuestions();
     }
 
     private void handleEditFromList(Question selected) {
@@ -824,7 +837,56 @@ public class TeacherDashboardController implements IDisposableProp {
                 .listQuestions(new ListQuestionsDTO(teacherId, null));
     }
 
-    // ---------------- PERFIL / LOGOUT ----------------
+    /* ===================== VER RESPOSTAS POR CÓDIGO ===================== */
+
+    public void onViewAnswers() {
+        TextInputDialog dialog = new TextInputDialog();
+        dialog.setTitle("Ver Respostas");
+        dialog.setHeaderText("Ver respostas de uma pergunta");
+        dialog.setContentText("Código da pergunta:");
+        dialog.showAndWait().ifPresent(code -> {
+            if (code == null || code.trim().isEmpty()) return;
+
+            String trimmed = code.trim();
+            Integer teacherId = clientManager.getUserId();
+            if (teacherId == null) {
+                AlertUtils.showError(getCurrentOwnerWindow(),
+                        "Erro", "Sessão inválida. Faça login novamente.");
+                return;
+            }
+
+            Question q = findQuestionByCode(trimmed);
+            if (q == null) {
+                AlertUtils.showError(getCurrentOwnerWindow(),
+                        "Erro", "Pergunta não encontrada ou não é sua.");
+                return;
+            }
+
+            if (!"EXPIRED".equalsIgnoreCase(q.getState().name())) {
+                AlertUtils.showError(getCurrentOwnerWindow(),
+                        "Respostas indisponíveis",
+                        "As respostas só podem ser consultadas quando a pergunta estiver expirada.");
+                return;
+            }
+
+            pendingViewQuestion = q;
+            awaitingViewAnswers = true;
+            clientManager.getAnswerService()
+                    .viewAnswersForTeacher(new ViewAnswersDTO(q.getId(), teacherId));
+        });
+    }
+
+    private Question findQuestionByCode(String accessCode) {
+        if (accessCode == null || accessCode.isBlank()) return null;
+        for (Question q : lastQuestions) {
+            if (accessCode.equalsIgnoreCase(q.getAccessCode())) {
+                return q;
+            }
+        }
+        return null;
+    }
+
+    /* ===================== PERFIL / LOGOUT ===================== */
 
     public void onOpenProfile() {
         Dialog<Void> dialog = new Dialog<>();
@@ -948,7 +1010,7 @@ public class TeacherDashboardController implements IDisposableProp {
         application.showAuthentication();
     }
 
-    // ---------------- OWNER WINDOW / AUX ----------------
+    /* ===================== OWNER WINDOW / AUX ===================== */
 
     private Window getCurrentOwnerWindow() {
         try {
@@ -971,7 +1033,7 @@ public class TeacherDashboardController implements IDisposableProp {
         return stage;
     }
 
-    // ---------------- BULK LOAD DE CONTAGEM DE RESPOSTAS ----------------
+    /* ===================== BULK LOAD DE CONTAGEM DE RESPOSTAS ===================== */
 
     private void fetchAnswerCountsSequentially() {
         Integer teacherId = clientManager.getUserId();

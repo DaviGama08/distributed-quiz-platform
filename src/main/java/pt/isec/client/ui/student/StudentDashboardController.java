@@ -28,6 +28,12 @@ import pt.isec.common.model.question.Question;
 import java.beans.PropertyChangeListener;
 import java.util.List;
 
+/**
+ * Controlador do dashboard do estudante. Interage com o servidor para
+ * responder a perguntas e obter histórico, seguindo o modelo de eventos.
+ * Todos os pedidos são enfileirados e as respostas são tratadas via
+ * propriedades do ClientService.
+ */
 public class StudentDashboardController implements IDisposableProp {
 
     private final Stage stage;
@@ -37,6 +43,7 @@ public class StudentDashboardController implements IDisposableProp {
     private String userName;
     private final StudentDashboardView view;
 
+    // Listeners
     private final PropertyChangeListener notificationListener;
     private final PropertyChangeListener joinQuestionListener;
     private final PropertyChangeListener submitAnswerOkListener;
@@ -48,9 +55,10 @@ public class StudentDashboardController implements IDisposableProp {
     private final PropertyChangeListener userEmailListener;
     private final PropertyChangeListener studentNumberListener;
 
-    private volatile boolean awaitingJoinQuestion = false;
-    private volatile boolean awaitingSubmitAnswer = false;
-    private volatile boolean awaitingHistory = false;
+    // Flags de espera
+    private volatile boolean awaitingJoinQuestion   = false;
+    private volatile boolean awaitingSubmitAnswer   = false;
+    private volatile boolean awaitingHistory        = false;
 
     public StudentDashboardController(Stage stage,
                                       ClientManager clientManager,
@@ -67,6 +75,7 @@ public class StudentDashboardController implements IDisposableProp {
         view.createView();
         view.registerHandlers(this);
 
+        // ----------------- Listeners -----------------
         notificationListener = evt -> {
             String notification = (String) evt.getNewValue();
             if (notification != null) {
@@ -87,6 +96,9 @@ public class StudentDashboardController implements IDisposableProp {
                 if (q == null) {
                     showErrorAlert("Código inválido ou pergunta não existente.");
                     view.addNotification("Falha ao carregar pergunta para o código indicado.");
+                } else if (!q.isActive()) {
+                    showErrorAlert("Não é possivel responder à pergunta.");
+                    view.addNotification("Pergunta " + q.getAccessCode() + " não está ativa para resposta.");
                 } else {
                     view.addNotification("Pergunta " + q.getAccessCode() + " carregada para resposta.");
                     openQuestionDialog(q);
@@ -128,8 +140,10 @@ public class StudentDashboardController implements IDisposableProp {
         updateProfileOkListener = evt -> {
             AuthResponseDTO dto = (AuthResponseDTO) evt.getNewValue();
             UiUtils.runOnUiThread(() -> {
+                // Update local fields
                 this.userName = dto.name();
                 this.userEmail = dto.email();
+                // Update view
                 view.updateUserInfo(this.userName, this.userEmail);
 
                 AlertUtils.showInfo(getOwnerWindow(),
@@ -161,17 +175,20 @@ public class StudentDashboardController implements IDisposableProp {
         };
 
         studentNumberListener = evt -> {
-            // apenas actualiza estado interno no ClientManager, sem UI
+            // No direct UI update needed for student number in the main dashboard view,
+            // mas garante que estado interno no ClientManager/Service é atualizado.
         };
 
         setupPropertyChangeListeners();
     }
 
+    /** Exibe o dashboard do estudante */
     public void show() {
         stage.setScene(view.getScene());
         stage.setMaximized(true);
     }
 
+    /** Regista listeners para eventos do ClientService */
     private void setupPropertyChangeListeners() {
         ClientService service = clientManager.getService();
 
@@ -206,8 +223,10 @@ public class StudentDashboardController implements IDisposableProp {
         try { view.hideLoading(); } catch (Exception ignored) {}
     }
 
-    // ---------------- PERFIL (só ver, não editável) ----------------
-    
+    // ----------------------------------------------------------
+    // PERFIL (apenas ver)
+    // ----------------------------------------------------------
+
     public void onOpenProfile() {
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Perfil do Estudante");
@@ -219,13 +238,23 @@ public class StudentDashboardController implements IDisposableProp {
         StackPane avatarCircle = new StackPane();
         avatarCircle.getStyleClass().add("profile-avatar-circle");
 
+        String nameForInitials =
+                clientManager.getService().getUserName() != null
+                        ? clientManager.getService().getUserName()
+                        : clientManager.getService().getUserEmail();
+
         Label initials = new Label(
-                UiUtils.getInitials(clientManager.getService().getUserName())
+                UiUtils.getInitials(nameForInitials)
         );
         initials.getStyleClass().add("profile-avatar-initials");
         avatarCircle.getChildren().add(initials);
 
-        Label nameLabel = new Label(clientManager.getService().getUserName());
+        String nameLabelValue =
+                clientManager.getService().getUserName() != null
+                        ? clientManager.getService().getUserName()
+                        : clientManager.getService().getUserEmail();
+
+        Label nameLabel = new Label(nameLabelValue);
         nameLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
 
         Label roleLabel = new Label("Estudante");
@@ -251,8 +280,11 @@ public class StudentDashboardController implements IDisposableProp {
         dialog.showAndWait();
     }
 
-    // ---------------- RESPONDER PERGUNTA ----------------
+    // ----------------------------------------------------------
+    // RESPONDER PERGUNTA
+    // ----------------------------------------------------------
 
+    /** Handler para solicitar uma pergunta (insere código e envia JoinQuestion) */
     public void onAnswerQuestion() {
         StudentDialogs.showEnterQuestionCodeDialog(getOwnerWindow(), code -> {
             Integer studentId = clientManager.getUserId();
@@ -276,6 +308,7 @@ public class StudentDashboardController implements IDisposableProp {
         });
     }
 
+    /** Abre a janela com a pergunta e envia a resposta seleccionada */
     private void openQuestionDialog(Question question) {
         Integer studentId = clientManager.getUserId();
         if (studentId == null) {
@@ -288,7 +321,7 @@ public class StudentDashboardController implements IDisposableProp {
                 getOwnerWindow(),
                 question,
                 studentId,
-                dto -> {
+                (SubmitAnswerDTO dto) -> {
                     awaitingSubmitAnswer = true;
                     try {
                         clientManager.getAnswerService().submitAnswer(dto);
@@ -301,8 +334,11 @@ public class StudentDashboardController implements IDisposableProp {
                 });
     }
 
-    // ---------------- HISTÓRICO ----------------
+    // ----------------------------------------------------------
+    // HISTÓRICO
+    // ----------------------------------------------------------
 
+    /** Handler para solicitar o histórico de respostas */
     public void onShowHistory() {
         Integer studentId = clientManager.getUserId();
         if (studentId == null) {
@@ -321,8 +357,11 @@ public class StudentDashboardController implements IDisposableProp {
         }
     }
 
-    // ---------------- PERFIL (edição) ----------------
+    // ----------------------------------------------------------
+    // PERFIL (edição de dados + password)
+    // ----------------------------------------------------------
 
+    /** Edição do perfil do estudante */
     public void onProfile() {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle("Perfil do Estudante");
@@ -386,6 +425,7 @@ public class StudentDashboardController implements IDisposableProp {
                         (newPw == null || newPw.isBlank()) ? null : newPw
                 );
                 clientManager.getAuthService().updateStudent(dto);
+                // feedback vem via updateProfileListeners
                 view.addNotification("Pedido de atualização de perfil enviado.");
             } catch (NumberFormatException nfe) {
                 showErrorAlert("Número de estudante inválido.");
@@ -396,7 +436,9 @@ public class StudentDashboardController implements IDisposableProp {
         });
     }
 
-    // ---------------- LOGOUT ----------------
+    // ----------------------------------------------------------
+    // LOGOUT
+    // ----------------------------------------------------------
 
     public void onLogout() {
         boolean confirm = AlertUtils.showConfirmation(
@@ -417,7 +459,9 @@ public class StudentDashboardController implements IDisposableProp {
         application.showAuthentication();
     }
 
-    // ---------------- HELPERS ----------------
+    // ----------------------------------------------------------
+    // HELPERS
+    // ----------------------------------------------------------
 
     private Window getOwnerWindow() {
         if (view != null && view.getScene() != null) {

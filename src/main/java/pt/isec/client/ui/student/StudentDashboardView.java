@@ -9,21 +9,33 @@ import javafx.scene.layout.*;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 
+/**
+ * Dashboard do estudante com tema escuro. Usa dashboard.css para estilos.
+ */
 public class StudentDashboardView {
     private String userName;
-    private final String userEmail;
+    private String userEmail;        // mutável para poder ser atualizado
+
     private Scene scene;
 
-    private Label profileNameLabel;
+    // Header
     private Label welcomeLabel;
     private Label headerEmailLabel;
+
+    // Notificações
     private TextArea notificationArea;
 
+    // Sidebar / perfil
+    private Label profileNameLabel;      // nome no cartão de perfil
+    private Label avatarInitialsLabel;   // iniciais no avatar
+    private VBox profileCard;
+
+    // Botões do menu
     private Button answerQuestionBtn;
     private Button historyBtn;
     private Button logoutBtn;
 
-    private VBox profileCard;
+    // Loading overlay leve no header
     private HBox loadingBox;
 
     public StudentDashboardView(String userName, String userEmail) {
@@ -48,6 +60,8 @@ public class StudentDashboardView {
         } catch (Exception ignored) { }
     }
 
+    /* =================== HEADER =================== */
+
     private VBox createHeader() {
         VBox header = new VBox(10);
         header.getStyleClass().add("dashboard-header-dark");
@@ -57,9 +71,10 @@ public class StudentDashboardView {
         welcomeLabel.setFont(Font.font("Arial", FontWeight.NORMAL, 24));
         welcomeLabel.getStyleClass().add("header-welcome");
 
-        headerEmailLabel = new Label(userEmail);
+        headerEmailLabel = new Label(userEmail != null ? userEmail : "");
         headerEmailLabel.getStyleClass().add("header-email-dark");
 
+        // loading box (invisível por defeito) para indicar operações assíncronas não-modais
         loadingBox = new HBox(8);
         loadingBox.setAlignment(Pos.CENTER_LEFT);
         loadingBox.setPadding(new Insets(4, 0, 0, 0));
@@ -88,6 +103,8 @@ public class StudentDashboardView {
         Platform.runLater(() -> loadingBox.setVisible(false));
     }
 
+    /* =================== SIDEBAR / PERFIL =================== */
+
     private VBox createSidebar() {
         VBox sidebar = new VBox(12);
         sidebar.getStyleClass().add("dashboard-sidebar-dark");
@@ -102,12 +119,17 @@ public class StudentDashboardView {
         historyBtn = createMenuButton("Histórico");
         logoutBtn = createMenuButton("Logout");
 
+        // Empurra logout para baixo
+        Region spacer = new Region();
+        VBox.setVgrow(spacer, Priority.ALWAYS);
+
         sidebar.getChildren().addAll(
                 menuLabel,
                 new Separator(),
                 profileCard,
                 answerQuestionBtn,
                 historyBtn,
+                spacer,
                 logoutBtn
         );
 
@@ -122,9 +144,9 @@ public class StudentDashboardView {
         StackPane avatarCircle = new StackPane();
         avatarCircle.getStyleClass().add("profile-avatar-circle");
 
-        Label initials = new Label(getInitials(userName != null ? userName : userEmail));
-        initials.getStyleClass().add("profile-avatar-initials");
-        avatarCircle.getChildren().add(initials);
+        avatarInitialsLabel = new Label(getInitials(userName != null ? userName : userEmail));
+        avatarInitialsLabel.getStyleClass().add("profile-avatar-initials");
+        avatarCircle.getChildren().add(avatarInitialsLabel);
 
         profileNameLabel = new Label(userName != null ? userName : "Utilizador");
         profileNameLabel.getStyleClass().add("profile-name-label");
@@ -152,11 +174,17 @@ public class StudentDashboardView {
             profileNameLabel.setText(name);
         if (welcomeLabel != null)
             welcomeLabel.setText("Bem-vindo, " + name + "!");
+        // atualizar iniciais também
+        if (avatarInitialsLabel != null) {
+            avatarInitialsLabel.setText(getInitials(name));
+        }
     }
 
     public String getProfileName() {
         return profileNameLabel != null ? profileNameLabel.getText() : userName;
     }
+
+    /* =================== MAIN AREA =================== */
 
     private VBox createMainArea() {
         VBox mainArea = new VBox(20);
@@ -210,15 +238,60 @@ public class StudentDashboardView {
         return btn;
     }
 
+    /* =================== API PÚBLICA =================== */
+
     public Scene getScene() {
         return scene;
     }
 
+    /** Actualizar texto de boas-vindas com o nome do aluno */
     public void setWelcomeName(String name) {
+        if (welcomeLabel == null)
+            return;
+
         if (name == null || name.trim().isEmpty()) {
             welcomeLabel.setText("Bem-vindo, Estudante!");
         } else {
             welcomeLabel.setText("Bem-vindo, " + name + "!");
+        }
+    }
+
+    private String deriveNameFromEmail(String email) {
+        if (email == null || !email.contains("@"))
+            return "Estudante";
+        String part = email.substring(0, email.indexOf('@'));
+        if (part.isEmpty()) return "Estudante";
+        return Character.toUpperCase(part.charAt(0)) + part.substring(1);
+    }
+
+    /**
+     * Usado pelo StudentDashboardController para manter nome/email
+     * sincronizados com o servidor (header + perfil + avatar).
+     */
+    public void updateUserInfo(String name, String email) {
+        // atualiza nome (perfil + header)
+        if (name != null && !name.isBlank()) {
+            setProfileName(name); // já actualiza welcomeLabel e iniciais
+        } else if ((this.userName == null || this.userName.isBlank()) && email != null) {
+            // se não tiver nome, pode derivar de email
+            String derived = deriveNameFromEmail(email);
+            setProfileName(derived);
+        }
+
+        // atualiza email no header
+        if (email != null && !email.isBlank()) {
+            this.userEmail = email;
+            if (headerEmailLabel != null) {
+                headerEmailLabel.setText(email);
+            }
+        }
+
+        // atualiza iniciais com base no melhor texto disponível
+        String baseForInitials = (this.userName != null && !this.userName.isBlank())
+                ? this.userName
+                : (this.userEmail != null ? this.userEmail : null);
+        if (baseForInitials != null && avatarInitialsLabel != null) {
+            avatarInitialsLabel.setText(getInitials(baseForInitials));
         }
     }
 
@@ -227,6 +300,7 @@ public class StudentDashboardView {
         historyBtn.setOnAction(e -> controller.onShowHistory());
         logoutBtn.setOnAction(e -> controller.onLogout());
 
+        // clicar no cartão de perfil abre o diálogo de edição de perfil
         if (profileCard != null) {
             profileCard.setOnMouseClicked(e -> controller.onProfile());
         }
@@ -242,30 +316,5 @@ public class StudentDashboardView {
                 java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss")
         );
         notificationArea.appendText("[" + timestamp + "] " + message + "\n");
-    }
-
-    /** Atualiza nome/email em todo o dashboard (header + perfil) */
-    public void updateUserInfo(String name, String email) {
-        this.userName = name;
-        if (profileNameLabel != null && name != null && !name.isBlank()) {
-            profileNameLabel.setText(name);
-        }
-        if (welcomeLabel != null) {
-            setWelcomeName(name);
-        }
-        if (headerEmailLabel != null && email != null && !email.isBlank()) {
-            headerEmailLabel.setText(email);
-        }
-
-        // atualizar iniciais do avatar
-        if (profileCard != null && !profileCard.getChildren().isEmpty()) {
-            if (profileCard.getChildren().get(0) instanceof StackPane avatar &&
-                    !avatar.getChildren().isEmpty() &&
-                    avatar.getChildren().get(0) instanceof Label initials) {
-
-                String base = (name != null && !name.isBlank()) ? name : email;
-                initials.setText(getInitials(base));
-            }
-        }
     }
 }

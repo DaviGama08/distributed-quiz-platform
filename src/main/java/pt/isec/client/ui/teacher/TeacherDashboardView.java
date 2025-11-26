@@ -8,11 +8,15 @@ import javafx.scene.layout.*;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 
+/**
+ * Dashboard do docente (tema escuro).
+ */
 public class TeacherDashboardView {
     private String userEmail;
     private String userName;
 
     private Label profileNameLabel;
+    private Label avatarInitialsLabel;
     private VBox profileCard;
 
     private Label totalQuestionsValueLabel;
@@ -21,17 +25,17 @@ public class TeacherDashboardView {
 
     private Scene scene;
     private Label welcomeLabel;
+    private Label emailLabel;
     private Label headerEmailLabel;
     private TextArea notificationArea;
     private VBox mainContentArea;
 
-    private Button profileBtn;
+    // botões
     private Button createQuestionBtn;
-    private Button manageQuestionsBtn;
+    private Button listQuestionsBtn; // usado para "Gerir Perguntas"
     private Button logoutBtn;
-
-    private Label emailLabel;
-
+    private Button manageQuestionsBtn;
+    private Button profileBtn;
     public TeacherDashboardView(String userName, String userEmail) {
         this.userName = userName;
         this.userEmail = userEmail;
@@ -68,15 +72,14 @@ public class TeacherDashboardView {
         welcomeLabel.setFont(Font.font("Arial", FontWeight.NORMAL, 24));
         welcomeLabel.getStyleClass().add("header-welcome");
 
-        // guardar em campo para podermos atualizar depois
-        emailLabel = new Label(userEmail);
+        emailLabel = new Label(userEmail != null ? userEmail : "");
         emailLabel.getStyleClass().add("header-email-dark");
 
         header.getChildren().addAll(welcomeLabel, emailLabel);
         return header;
     }
 
-      private VBox createProfileCard() {
+    private VBox createProfileCard() {
         VBox box = new VBox(8);
         box.getStyleClass().add("profile-card");
         box.setAlignment(Pos.CENTER);
@@ -108,10 +111,10 @@ public class TeacherDashboardView {
         Label menuLabel = new Label("MENU");
         menuLabel.getStyleClass().add("sidebar-title-dark");
 
-        profileBtn = createMenuButton("Perfil");
+        profileBtn        = createMenuButton("Perfil");
         createQuestionBtn = createMenuButton("Criar Pergunta");
         manageQuestionsBtn = createMenuButton("Gerir Perguntas");
-        logoutBtn = createMenuButton("Logout");
+        logoutBtn         = createMenuButton("Logout");
 
         sidebar.getChildren().addAll(
                 profileCard,
@@ -121,7 +124,7 @@ public class TeacherDashboardView {
                 profileBtn,
                 createQuestionBtn,
                 manageQuestionsBtn,
-                logoutBtn
+                logoutBtn // <- sem spacer, tudo junto
         );
 
         return sidebar;
@@ -134,13 +137,21 @@ public class TeacherDashboardView {
         return btn;
     }
 
-    private String getInitials(String name) {
-        if (name == null || name.isBlank())
+    private String getInitials(String text) {
+        if (text == null || text.isBlank())
             return "?";
-        String[] parts = name.trim().split("\\s+");
+        String[] parts = text.trim().split("\\s+");
         if (parts.length == 1)
             return parts[0].substring(0, 1).toUpperCase();
         return (parts[0].substring(0, 1) + parts[parts.length - 1].substring(0, 1)).toUpperCase();
+    }
+
+    private String deriveNameFromEmail(String email) {
+        if (email == null || !email.contains("@"))
+            return "Docente";
+        String part = email.substring(0, email.indexOf('@'));
+        if (part.isEmpty()) return "Docente";
+        return Character.toUpperCase(part.charAt(0)) + part.substring(1);
     }
 
     public void setProfileName(String name) {
@@ -151,6 +162,8 @@ public class TeacherDashboardView {
             profileNameLabel.setText(name);
         if (welcomeLabel != null)
             welcomeLabel.setText("Bem-vindo, " + name + "!");
+        if (avatarInitialsLabel != null)
+            avatarInitialsLabel.setText(getInitials(name));
     }
 
     public String getProfileName() {
@@ -226,6 +239,8 @@ public class TeacherDashboardView {
     }
 
     public void setWelcomeName(String name) {
+        if (welcomeLabel == null)
+            return;
         if (name == null || name.trim().isEmpty()) {
             welcomeLabel.setText("Bem-vindo, Docente!");
         } else {
@@ -249,7 +264,7 @@ public class TeacherDashboardView {
     }
 
     public void update() {
-        // não requerido por enquanto
+        // nada extra por enquanto
     }
 
     public void addNotification(String message) {
@@ -260,23 +275,20 @@ public class TeacherDashboardView {
         notificationArea.appendText("[" + timestamp + "] " + message + "\n");
     }
 
-    /** Atualiza nome/email em todo o dashboard (header + perfil) */
+    /** Atualiza nome/email em todo o dashboard (header + perfil + avatar). */
     public void updateUserInfo(String name, String email) {
         if (name != null && !name.isBlank()) {
             this.userName = name;
-            if (profileNameLabel != null) {
+            if (profileNameLabel != null)
                 profileNameLabel.setText(name);
-            }
-            if (welcomeLabel != null) {
+            if (welcomeLabel != null)
                 welcomeLabel.setText("Bem-vindo, " + name + "!");
-            }
         }
 
         if (email != null && !email.isBlank()) {
             this.userEmail = email;
-            if (emailLabel != null) {
+            if (emailLabel != null)
                 emailLabel.setText(email);
-            }
         }
     }
 

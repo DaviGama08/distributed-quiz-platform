@@ -16,7 +16,7 @@ javac ^
  ..\pt\isec\common\dto\answer\*.java ^
  ..\pt\isec\common\dto\question\*.java ^
  ..\pt\isec\common\model\question\*.java ^
- ..\pt\isec\common\model\user\*.java
+ ..\pt\isec\common\model\user\*.java ^
  ..\pt\isec\common\util\*.java
 
 pause

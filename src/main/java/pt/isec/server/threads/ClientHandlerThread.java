@@ -1,5 +1,4 @@
 package pt.isec.server.threads;
-
 import pt.isec.common.dto.answer.SubmitAnswerDTO;
 import pt.isec.common.dto.answer.ViewAnswersDTO;
 import pt.isec.common.dto.auth.*;
@@ -9,8 +8,8 @@ import pt.isec.common.messages.MessageType;
 import pt.isec.server.core.IServerManager;
 import pt.isec.common.model.question.Question;
 import pt.isec.common.util.Log;
-
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,7 +18,6 @@ import java.util.List;
  * Thread responsável por tratar a comunicação com um cliente.
  */
 public class ClientHandlerThread implements Runnable, AutoCloseable {
-
     private static final int FIRST_MESSAGE_TIMEOUT_SEC = 30;
     private static final Duration NO_TIMEOUT = Duration.ZERO;
 
@@ -37,6 +35,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
     @Override
     public void run() {
         try {
+            //Define timout de 30 segundos de ligação TCP ao cliente
             connection.setReadTimeout(Duration.ofSeconds(FIRST_MESSAGE_TIMEOUT_SEC));
 
             // se o servidor não for primário, rejeita
@@ -47,7 +46,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
 
             // ligação aceite
             connection.sendMessage(new TcpMessage<>(MessageType.ACK, "ok"));
-            connection.setReadTimeout(NO_TIMEOUT);
+            //connection.setReadTimeout(NO_TIMEOUT);
 
             while (threadInfo.isRunning()) {
                 TcpMessage<?> msg = connection.receiveMessage();
@@ -55,8 +54,14 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     break;
                 processMessage(msg);
             }
-        } catch (Exception e) {
-            Log.error(ClientHandlerThread.class, "Client connection closed with exception: " + e.getMessage());
+        }
+        //Quando atingir o timeout de 30 segs
+        catch(SocketTimeoutException e){
+            Log.error(ClientHandlerThread.class, "Timeout de ligação TCP 30s atingido: " + e.getMessage());
+            //e.printStackTrace();
+        }
+        catch (Exception e) {
+            Log.error(ClientHandlerThread.class, "Ligação ao cliente encerrada com exceção: " + e.getMessage());
             e.printStackTrace();
         } finally {
             if (loggerUserId != null) {
@@ -109,7 +114,6 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                             threadInfo.unregisterLogin(userId);
                         }
                     } catch (Exception ignored) { }
-
                     threadInfo.registerLogin(userId, res.sessionId());
                     this.loggerUserId = userId;
                     this.sessionId    = res.sessionId();
@@ -117,6 +121,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     try { threadInfo.registerClientConnection(userId, connection); } catch (Exception ignored) {}
 
                     connection.sendMessage(new TcpMessage<>(MessageType.LOGIN_OK, res, AuthResponseDTO.class));
+                    connection.setReadTimeout(NO_TIMEOUT);
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.LOGIN_FAIL, e.getMessage(), String.class));
                 }
@@ -129,6 +134,9 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     loggerUserId = null;
                     sessionId    = null;
                 }
+                //Define timout de 30 segundos de ligação TCP ao cliente
+                connection.setReadTimeout(Duration.ofSeconds(FIRST_MESSAGE_TIMEOUT_SEC));
+                //envia mensagem ao cliente do logout
                 connection.sendMessage(new TcpMessage<>(MessageType.ACK, "logout-ok", String.class));
             }
 

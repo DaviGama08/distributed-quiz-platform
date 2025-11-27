@@ -12,15 +12,12 @@ import pt.isec.server.threads.ClientListenerThread;
 import pt.isec.server.threads.DirectoryHeartbeatThread;
 import pt.isec.server.threads.NetworkTcpConnection;
 import pt.isec.common.util.Log;
-
-
 import java.io.IOException;
 import java.net.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -110,7 +107,7 @@ public class ServerManager implements IServerManager, IQuestionAnswerContext, Ru
             var addrs = ni.getInetAddresses();
             while (addrs.hasMoreElements()) {
                 InetAddress a = addrs.nextElement();
-                if (a instanceof java.net.Inet4Address) {
+                if (a instanceof Inet4Address) {
                     return ni;
                 }
             }

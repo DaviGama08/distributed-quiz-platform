@@ -66,8 +66,9 @@ public class AuthenticationController implements IDisposableProp {
         service.addPropertyChangeListener(ClientService.PROP_CONNECTION_STATUS, connectionStatusListener);
     }
 
+    //metodo para saber se está ou não autenticado
     private void handleAuthenticationChange(PropertyChangeEvent evt) {
-        boolean authenticated = (boolean) evt.getNewValue();
+        boolean authenticated = (boolean) evt.getNewValue(); //Obtem o valor se foi ou não autenticado
         if (authenticated) {
             UiUtils.runOnUiThread(this::openDashboard);
         }
@@ -141,7 +142,7 @@ public class AuthenticationController implements IDisposableProp {
         service.setUserType(data.userType());
         service.setUserEmail(data.email());
         service.setUserName(data.name());
-        service.setAuthenticated(true);
+        //service.setAuthenticated(true);
 
         UiUtils.runOnUiThread(() -> {
             view.setRegisterStatus(
@@ -162,7 +163,7 @@ public class AuthenticationController implements IDisposableProp {
             mode = Mode.LOGIN;
             view.showLoginMode();
 
-            authBusy = false;
+            authBusy = false; //flag para bloquear os botões
             view.setAuthBusy(false);
         });
     }

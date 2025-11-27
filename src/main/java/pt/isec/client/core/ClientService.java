@@ -9,7 +9,6 @@ import pt.isec.common.dto.question.CreateQuestionResponseDTO;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.Question;
-
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 import java.io.IOException;
@@ -555,7 +554,7 @@ public class ClientService implements IClientService {
     @Override
     public void setPropRegisterOk(AuthResponseDTO dto){
         // reutiliza a lógica do login
-        setPropLoginOk(dto);
+        //setPropLoginOk(dto);
         pcs.firePropertyChange(PROP_REGISTER_OK, null , dto);
     }
 

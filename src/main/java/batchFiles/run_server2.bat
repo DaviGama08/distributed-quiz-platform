@@ -11,7 +11,7 @@ javac -d ..\bin\server.pt.isec ^
   ..\pt\isec\common\dto\auth\*.java ^
   ..\pt\isec\common\dto\question\*.java ^
   ..\pt\isec\common\dto\answer\*.java
-
+ ..\pt\isec\common\util\*.java
 
 pause
 

@@ -14,6 +14,7 @@ import pt.isec.server.threads.NetworkTcpConnection;
 import pt.isec.common.util.Log;
 import java.io.IOException;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -363,6 +364,8 @@ public class ServerManager implements IServerManager, IQuestionAnswerContext, Ru
         if (threadClusterHeartbeat != null)   threadClusterHeartbeat.interrupt();
         if (tDirectoryHeartbeat != null) tDirectoryHeartbeat.interrupt();
         if (threadClientListener != null)     threadClientListener.interrupt();
+
+        sendExitMsg();
     }
 
     // RUNNABLE INTERFACE
@@ -379,5 +382,21 @@ public class ServerManager implements IServerManager, IQuestionAnswerContext, Ru
         threadClusterHeartbeat.start();
         tDirectoryHeartbeat.start();
         threadClientListener.start();
+    }
+
+    public void sendExitMsg(){
+
+        try (DatagramSocket s = new DatagramSocket()) {
+
+            InetAddress dirAddr = InetAddress.getByName(directoryHost());
+            int dirPort = directoryPort();
+
+            // REGISTER
+            String msg =  "TYPE=DEREGISTER|ID=" + id();
+            byte[] data = msg.getBytes(StandardCharsets.UTF_8);
+            s.send(new DatagramPacket(data, data.length, dirAddr, dirPort));
+        } catch (IOException c) {
+            throw new RuntimeException(c);
+        }
     }
 }

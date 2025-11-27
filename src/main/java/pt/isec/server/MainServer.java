@@ -47,6 +47,13 @@ public class MainServer {
         // NÃO usar try-with-resources aqui, para o servidor não fechar logo
         //Cria instancia do serverManager passando IP e Porto da diretoria, MultiCast IP e porto do Client, Porto da BD e Ficheiro do BD
         ServerManager serverManager = new ServerManager(dirHost, dirPort, multicastInterfaceIp, clientPort, dbCopyPort, dbFile);
+
+        //Apanhar o ctrl + c
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try { serverManager.stopRunning(false); } catch (Exception ignored) {}
+            System.out.println("Diretoria terminada.");
+        }));
+
         serverManager.run();
 
         Log.info(MainServer.class, "[LauncherServer] Servidor iniciado. Ctrl+C para terminar.");

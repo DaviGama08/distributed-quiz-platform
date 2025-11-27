@@ -1,6 +1,7 @@
 package pt.isec.server;
 
 import pt.isec.server.core.ServerManager;
+import pt.isec.common.util.Log;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -9,7 +10,7 @@ import java.nio.file.Paths;
 public class MainServer {
     public static void main(String[] args) throws Exception {
         if (args.length != 6) {
-            System.out.println("usage: LauncherServer <dirHost> <dirPort> <dataDir|PROJECT|HOME> <multicastIfIp|AUTO> <clientPort> <dbCopyPort>");
+            Log.error(MainServer.class, "usage: LauncherServer <dirHost> <dirPort> <dataDir|PROJECT|HOME> <multicastIfIp|AUTO> <clientPort> <dbCopyPort>");
             return;
         }
         Class.forName("org.sqlite.JDBC");
@@ -40,14 +41,14 @@ public class MainServer {
         // ficheiro distinto por servidor (evita colisões). Resolve
         Path dbFile = dataDir.resolve("quiz-" + clientPort + ".db");
 
-        System.out.println("[DB] dir : " + dataDir);
-        System.out.println("[DB] file: " + dbFile + " (exists=" + Files.exists(dbFile) + ")");
+        Log.info(MainServer.class, "[DB] dir : " + dataDir);
+        Log.info(MainServer.class, "[DB] file: " + dbFile + " (exists=" + Files.exists(dbFile) + ")");
 
         // NÃO usar try-with-resources aqui, para o servidor não fechar logo
         //Cria instancia do serverManager passando IP e Porto da diretoria, MultiCast IP e porto do Client, Porto da BD e Ficheiro do BD
         ServerManager serverManager = new ServerManager(dirHost, dirPort, multicastInterfaceIp, clientPort, dbCopyPort, dbFile);
         serverManager.run();
 
-        System.out.println("[LauncherServer] Servidor iniciado. Ctrl+C para terminar.");
+        Log.info(MainServer.class, "[LauncherServer] Servidor iniciado. Ctrl+C para terminar.");
     }
 }

@@ -11,6 +11,8 @@ import pt.isec.server.threads.ClusterHeartbeatThread;
 import pt.isec.server.threads.ClientListenerThread;
 import pt.isec.server.threads.DirectoryHeartbeatThread;
 import pt.isec.server.threads.NetworkTcpConnection;
+import pt.isec.common.util.Log;
+
 
 import java.io.IOException;
 import java.net.*;
@@ -83,8 +85,8 @@ public class ServerManager implements IServerManager, IQuestionAnswerContext, Ru
         if (this.multicastInterface == null)
             throw new IllegalArgumentException("Interface de rede inválida para IP/criterio: " + mcIfIp);
 
-        System.out.println("[MC] usando interface: " + multicastInterface.getName());
-        System.out.println("[DB] path inicial=" + dbPath + " (versão=" + dbVersion.get() + ", role=BACKUP)");
+        Log.info(ServerManager.class, "[MC] usando interface: " + multicastInterface.getName());
+        Log.info(ServerManager.class, "[DB] path inicial=" + dbPath + " (versão=" + dbVersion.get() + ", role=BACKUP)");
     }
 
     private static NetworkInterface resolveMulticastInterface(String mcIfIp) throws Exception {
@@ -157,8 +159,7 @@ public class ServerManager implements IServerManager, IQuestionAnswerContext, Ru
         String name = String.format("quiz-%s-%s.db", role, serverIdShort);
 
         this.dbPath = dataDir.resolve(name).toAbsolutePath();
-
-        System.out.println("[DB] agora a usar: " + this.dbPath +
+        Log.info(ServerManager.class, "[DB] agora a usar: " + this.dbPath +
                 " (role=" + (isPrimary ? "PRIMARY" : "BACKUP") +
                 ", v=" + dbVersion.get() + ")");
     }
@@ -181,12 +182,12 @@ public class ServerManager implements IServerManager, IQuestionAnswerContext, Ru
                 this.questionService = new QuestionService(qaContext, dbCommands);
                 this.answerService   = new AnswerService(qaContext, dbCommands);
 
-                System.out.println("[DB] camada de dados inicializada em " + dbPath);
+                Log.info(ServerManager.class, "[DB] camada de dados inicializada em " + dbPath);
                 dbInitialised = true;
                 long v = dbCommands.get_db_version();   // SELECT db_version FROM config WHERE id = 1
                 setDbVersion(v);
             } catch (Exception e) {
-                System.err.println("[DB] erro a inicializar camada de dados: " + e.getMessage());
+                Log.error(ServerManager.class, "[DB] erro a inicializar camada de dados: " + e.getMessage());
                 throw new RuntimeException("Falha a inicializar DB/DAOs/AuthService", e);
             }
         }
@@ -319,7 +320,7 @@ public class ServerManager implements IServerManager, IQuestionAnswerContext, Ru
         try {
             c.sendMessage(msg);
         } catch (Exception e) {
-            System.err.println("[ServerManager] Failed to send message to user " + userId + ": " + e.getMessage());
+            Log.error(ServerManager.class, "[ServerManager] Failed to send message to user " + userId + ": " + e.getMessage());
         }
     }
 

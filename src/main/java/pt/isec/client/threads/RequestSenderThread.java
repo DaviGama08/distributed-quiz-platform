@@ -10,7 +10,7 @@ import java.io.Serializable;
 /**
  * Thread que envia mensagens da fila de pedidos para o servidor via TCP.
  */
-public class RequestSenderThread implements Runnable{
+public class RequestSenderThread implements Runnable {
     private final IClientService service;
 
     public RequestSenderThread(IClientService service) {
@@ -19,20 +19,38 @@ public class RequestSenderThread implements Runnable{
 
     @Override
     public void run() {
-        ObjectOutputStream out = service.getOutputStream();
-
         System.out.println("[RequestSender] Started sending requests...");
 
-        while(service.isRunning()) {
+        while (service.isRunning()) {
+            TcpMessage<? extends Serializable> request = null;
             try {
-                TcpMessage<? extends Serializable> request = service.getRequestQueue().take();
+                // Bloqueia até haver um pedido para enviar
+                request = service.getRequestQueue().take();
+
+                ObjectOutputStream out = service.getOutputStream();
+                if (out == null) {
+                    // Sem stream válido — tenta reconectar e volta a enfileirar o pedido
+                    System.err.println("[RequestSender] No output stream available, requeueing request: " +
+                            request.getType());
+                    service.getRequestQueue().put(request);
+                    service.handleConnectionLost();
+                    break;
+                }
 
                 System.out.println("[RequestSender] Sending: " + request.getType());
                 out.writeObject(request);
                 out.flush();
             } catch (IOException e) {
-                if(service.isRunning()) {
+                if (service.isRunning()) {
                     System.err.println("[RequestSender] Failed to send: " + e.getMessage());
+                    // Tenta não perder o pedido atual
+                    try {
+                        if (request != null) {
+                            service.getRequestQueue().put(request);
+                        }
+                    } catch (InterruptedException ignored) {
+                        Thread.currentThread().interrupt();
+                    }
                     service.handleConnectionLost();
                 }
                 break;

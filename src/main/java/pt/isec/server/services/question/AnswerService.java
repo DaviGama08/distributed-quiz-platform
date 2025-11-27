@@ -2,12 +2,13 @@ package pt.isec.server.services.question;
 
 import pt.isec.common.dto.answer.SubmitAnswerDTO;
 import pt.isec.common.dto.answer.ViewAnswersDTO;
-import pt.isec.server.core.IQuestionAnswerContext;
-import pt.isec.server.db.DbCommands;
+import pt.isec.common.messages.MessageType;
+import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.OptionLetter;
-import pt.isec.common.messages.TcpMessage;
-import pt.isec.common.messages.MessageType;
+import pt.isec.server.core.IQuestionAnswerContext;
+import pt.isec.server.db.DbCommands;
+import pt.isec.common.util.Log;
 
 import java.sql.DriverManager;
 import java.time.LocalDateTime;
@@ -33,19 +34,21 @@ public class AnswerService implements IAnswerService {
      */
     @Override
     public boolean submitAnswer(SubmitAnswerDTO dto) throws Exception {
-        Integer questionId = dto.questionId();
-        Integer studentId = dto.studentId();
+        Integer questionId    = dto.questionId();
+        Integer studentId     = dto.studentId();
         OptionLetter selected = dto.selectedOption();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now     = LocalDateTime.now();
 
-        // valida pergunta
+        // valida pergunta (existência + período activo) e já obtém o teacher_id
         Map<String, Object> q = dbCommands.selectOne(
-                "SELECT correct_option, start_at, end_at FROM question WHERE id = ?",
+                "SELECT teacher_id, correct_option, start_at, end_at FROM question WHERE id = ?",
                 questionId
         );
-        if (q == null) throw new IllegalArgumentException("Pergunta inexistente");
+        if (q == null)
+            throw new IllegalArgumentException("Pergunta inexistente");
+
         LocalDateTime startAt = LocalDateTime.parse((String) q.get("start_at"));
-        LocalDateTime endAt = LocalDateTime.parse((String) q.get("end_at"));
+        LocalDateTime endAt   = LocalDateTime.parse((String) q.get("end_at"));
         if (now.isBefore(startAt) || now.isAfter(endAt)) {
             throw new IllegalStateException("Pergunta fora do período de disponibilidade");
         }
@@ -61,22 +64,29 @@ public class AnswerService implements IAnswerService {
                 studentId + ", " + questionId + ", '" + selected.name() + "', '" + now + "');"));
         // Tenta notificar o docente proprietário da pergunta (se estiver conectado)
         try {
-            Map<String, Object> owner = dbCommands.selectOne("SELECT teacher_id FROM question WHERE id = ?", questionId);
-            if (owner != null && owner.get("teacher_id") != null) {
-                Integer teacherId = ((Number) owner.get("teacher_id")).intValue();
-                // só tenta notificar se o docente estiver autenticado (activeSessions)
-                if (context.isUserLogged(teacherId.longValue())) {
-                    // envia notificação ao docente com o id da pergunta
-                    TcpMessage<Integer> notify = new TcpMessage<>(MessageType.ANSWER_SUBMITTED, questionId, Integer.class);
-                    context.sendToUser(teacherId.longValue(), notify);
-                } else {
-                    // docente não ligado — apenas regista informação de log; o docente verá os updates quando fizer refresh
-                    System.out.println("[AnswerService] Teacher " + teacherId + " not logged; skipping live notify for question " + questionId);
-                }
+            Object rawTeacherId = q.get("teacher_id");
+            Long teacherId = null;
+
+            if (rawTeacherId instanceof Number n) {
+                teacherId = n.longValue();
+            } else if (rawTeacherId instanceof String s && !s.isBlank()) {
+                teacherId = Long.parseLong(s);
+            }
+
+            if (teacherId != null && context.isUserLogged(teacherId)) {
+                // envia notificação ao docente com o id da pergunta
+                TcpMessage<Integer> notify = new TcpMessage<>(MessageType.ANSWER_SUBMITTED, questionId, Integer.class);
+                context.sendToUser(teacherId, notify);
+                Log.info(AnswerService.class, "[AnswerService] Live notify enviado para docente " +
+                        teacherId + " (questionId=" + questionId + ")");
+            } else {
+                // docente não ligado — apenas regista informação de log; o docente verá os updates quando fizer refresh
+                Log.info(AnswerService.class, "[AnswerService] Docente não ligado ou teacher_id nulo; " +
+                        "não há notify em tempo real para questionId=" + questionId);
             }
         } catch (Exception e) {
             // falha a notificar não deve impedir o sucesso da submissão
-            System.err.println("[AnswerService] Failed to notify teacher: " + e.getMessage());
+            Log.error(AnswerService.class, "[AnswerService] Failed to notify teacher: " + e.getMessage());
         }
 
         return true;
@@ -88,18 +98,20 @@ public class AnswerService implements IAnswerService {
     @Override
     public List<Answer> viewAnswers(ViewAnswersDTO dto) throws Exception {
         Integer questionId = dto.questionId();
-        Integer teacherId = dto.teacherId();
+        Integer teacherId  = dto.teacherId();
 
         // verifica docência
         Map<String, Object> rec = dbCommands.selectOne(
                 "SELECT correct_option FROM question WHERE id = ? AND teacher_id = ?",
                 questionId, teacherId
         );
-        if (rec == null) throw new IllegalArgumentException("Pergunta não encontrada ou não pertence ao docente");
+        if (rec == null)
+            throw new IllegalArgumentException("Pergunta não encontrada ou não pertence ao docente");
+
         OptionLetter correct = OptionLetter.valueOf((String) rec.get("correct_option"));
 
         List<Answer> out = new ArrayList<>();
-        try (var con = java.sql.DriverManager.getConnection(dbCommands.getUrl());
+        try (var con = DriverManager.getConnection(dbCommands.getUrl());
              var ps = con.prepareStatement(
                      "SELECT a.student_id, a.chosen_option, a.created_at, " +
                              "s.name AS student_name, s.email AS student_email, s.student_number " +
@@ -115,8 +127,8 @@ public class AnswerService implements IAnswerService {
                     LocalDateTime at = LocalDateTime.parse(rs.getString("created_at"));
                     boolean isCorrect = sel.equals(correct);
 
-                    String studentName = rs.getString("student_name");
-                    String studentEmail = rs.getString("student_email");
+                    String studentName   = rs.getString("student_name");
+                    String studentEmail  = rs.getString("student_email");
                     Integer studentNumber = rs.getInt("student_number");
 
                     out.add(new Answer(
@@ -138,7 +150,7 @@ public class AnswerService implements IAnswerService {
     }
 
     /**
-     * Histórico de respostas de um estudante. Calcula isCorrect pelo correcto_option da pergunta.
+     * Histórico de respostas de um estudante. Calcula isCorrect pelo correct_option da pergunta.
      */
     @Override
     public List<Answer> getStudentHistory(Integer studentId) throws Exception {
@@ -158,7 +170,7 @@ public class AnswerService implements IAnswerService {
                     OptionLetter sel = OptionLetter.valueOf(rs.getString("chosen_option"));
                     LocalDateTime at = LocalDateTime.parse(rs.getString("created_at"));
 
-                    String stmt = rs.getString("statement");
+                    String stmt    = rs.getString("statement");
                     String corrStr = rs.getString("correct_option");
                     boolean isCorrect = false;
                     if (corrStr != null) {
@@ -174,9 +186,9 @@ public class AnswerService implements IAnswerService {
                             sel,
                             at,
                             isCorrect,
-                            null,              // studentName
-                            null,              // studentEmail
-                            stmt               // questionStatement
+                            null,  // studentName
+                            null,  // studentEmail
+                            stmt   // questionStatement
                     ));
                 }
             }

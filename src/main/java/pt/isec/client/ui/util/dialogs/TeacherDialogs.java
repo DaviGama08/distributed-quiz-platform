@@ -21,10 +21,48 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
 
 public final class TeacherDialogs {
+
+    //------ Feedbak visual de campos ccom erros -------
+    private static final String ERROR_STYLE =
+            "-fx-border-color: #e74c3c; -fx-border-width: 2; -fx-border-radius: 4; -fx-background-insets: 0;";
+
+    //Destaca a vermelho os campos com erros
+    private static void markError(Control c) {
+        if (c != null) {
+            // mantém estilos anteriores se existirem (sobrepor)
+            String prev = c.getStyle();
+            if (prev == null) prev = "";
+            if (!prev.contains("-fx-border-color")) {
+                c.setStyle(prev + ";" + ERROR_STYLE);
+            } else {
+                c.setStyle(ERROR_STYLE); // garante destaque consistente
+            }
+        }
+    }
+
+    //Para limpar o destaque a vermelho
+    private static void clearError(Control c) {
+        if (c != null) {
+            // limpa o estilo de erro (simples)
+            String s = c.getStyle();
+            if (s == null || s.isEmpty()) return;
+            // remove a substring exacta do ERROR_STYLE
+            c.setStyle(s.replace(ERROR_STYLE, "").replaceAll("^;|;$", ""));
+        }
+    }
+
+    //Para limpar os destaques a vermelho de vários campos
+    private static void clearErrors(Control... controls) {
+        for (Control c : controls) clearError(c);
+    }
+
+    //---------------------------------------------------------------
 
     private TeacherDialogs() { }
 
@@ -94,14 +132,14 @@ public final class TeacherDialogs {
         Label periodLabel = new Label("Período de Disponibilidade:");
         periodLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
         HBox periodBox = new HBox(8);
-        DatePicker startDate = new DatePicker();
+        DatePicker startDate = new DatePicker(LocalDate.now());
         startDate.setPromptText("Data início");
         Spinner<Integer> startHour = new Spinner<>(0, 23, 9);
         startHour.setPrefWidth(70);
         Spinner<Integer> startMinute = new Spinner<>(0, 59, 0);
         startMinute.setPrefWidth(70);
         Label toLabel = new Label(" até ");
-        DatePicker endDate = new DatePicker();
+        DatePicker endDate = new DatePicker(LocalDate.now());
         endDate.setPromptText("Data fim");
         Spinner<Integer> endHour = new Spinner<>(0, 23, 9);
         endHour.setPrefWidth(70);
@@ -131,9 +169,13 @@ public final class TeacherDialogs {
         Button okButton = (Button) dialog.getDialogPane().lookupButton(ButtonType.OK);
         okButton.setText("Criar Pergunta");
         okButton.setOnAction(ev -> {
+            //Limpa destaques vermelhos anteriores
+            clearErrors(statementField, optA, optB, optC, optD, startDate, endDate, startHour, endHour);
+
             String statement = statementField.getText().trim();
             if (statement.isEmpty()) {
                 AlertUtils.showError(owner, "Erro", "O enunciado não pode estar vazio.");
+                markError(statementField);
                 ev.consume();
                 return;
             }
@@ -149,24 +191,46 @@ public final class TeacherDialogs {
             }
             if (filledCount < 2) {
                 AlertUtils.showError(owner, "Erro", "A pergunta deve ter pelo menos duas respostas possíveis.");
+                // destaca todas as options visíveis para ajudar o utilizador
+                for (int i = 0; i < numOptions; i++) markError(allOptions[i]);
                 ev.consume();
                 return;
             }
 
+            //Recolhe os textos e valida se algum está vazio
+            List<String> texts = new ArrayList<>();
             for (int i = 0; i < numOptions; i++) {
                 String optText = allOptions[i].getText().trim();
                 if (optText.isEmpty()) {
                     AlertUtils.showError(owner, "Erro", "Preencha todas as respostas até ao número escolhido.");
+                    for (int j = 0; j < numOptions; j++) markError(allOptions[i]);
                     ev.consume();
                     return;
                 }
-                options.add(new Option(letters[i], optText));
+                texts.add(optText);
+            }
+
+            //Verifica se há respostas duplicadas
+            Set<String> seen = new HashSet<>(); //Hashset para garantir que não há duplicados
+            for(String t : texts) {
+                String normal = t.toLowerCase();
+                if(!seen.add(normal)) {
+                    AlertUtils.showError(owner, "Erro", "As opções não podem conter respostas duplicadas");
+                    ev.consume(); // impede fechar o diálogo / propagação do evento
+                    return;
+                }
+            }
+
+            for (int i=0; i < numOptions; i++) {
+                options.add(new Option(letters[i], texts.get(i)));
             }
 
             LocalDate startD = startDate.getValue();
             LocalDate endD = endDate.getValue();
             if (startD == null || endD == null) {
                 AlertUtils.showError(owner, "Erro", "Datas de início e fim são obrigatórias.");
+                if (startD == null) markError(startDate);
+                if (endD == null) markError(endDate);
                 ev.consume();
                 return;
             }
@@ -180,6 +244,8 @@ public final class TeacherDialogs {
                 if (!endAt.isAfter(startAt)) {
                     AlertUtils.showError(owner, "Erro",
                             "A data/hora de fim deve ser posterior à data/hora de início.");
+                    markError(startDate);
+                    markError(endDate);
                     ev.consume();
                     return;
                 }
@@ -202,6 +268,8 @@ public final class TeacherDialogs {
             } catch (Exception e) {
                 AlertUtils.showError(owner, "Erro",
                         "Formato de hora inválido (utilize HH:MM).");
+                markError(startHour);
+                markError(endHour);
                 ev.consume();
             }
         });
@@ -355,6 +423,7 @@ public final class TeacherDialogs {
                 return;
             }
 
+            List<String> texts = new ArrayList<>();
             for (int i = 0; i < numOptions; i++) {
                 String optText = allOptions[i].getText().trim();
                 if (optText.isEmpty()) {
@@ -362,7 +431,22 @@ public final class TeacherDialogs {
                     ev.consume();
                     return;
                 }
-                options.add(new Option(letters[i], optText));
+                texts.add(optText);
+            }
+
+            Set<String> seen = new HashSet<>();
+            for (String t : texts) {
+                String normal = t.toLowerCase();
+                if(!seen.add(normal)) {
+                    AlertUtils.showError(owner, "Erro", "As opções não podem conter respostas duplicadas");
+                    ev.consume();
+                    return;
+                }
+            }
+
+            //Cria as Option após validações
+            for (int i = 0; i<numOptions; i++){
+                options.add(new Option(letters[i], texts.get(i)));
             }
 
             LocalDate startD = startDate.getValue();

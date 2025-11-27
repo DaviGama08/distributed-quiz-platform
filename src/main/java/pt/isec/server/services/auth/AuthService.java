@@ -3,6 +3,7 @@ package pt.isec.server.services.auth;
 import pt.isec.common.dto.auth.*;
 import pt.isec.server.core.IQuestionAnswerContext;
 import pt.isec.server.db.DbCommands;
+import pt.isec.common.util.Log;
 
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
@@ -71,7 +72,7 @@ public class AuthService implements IAuthService {
         Map<String,Object> row = dbCommands.selectOne("SELECT id FROM teacher where email = ?", email);
         newId = row == null ? -1L : ((Number) row.get("id")).longValue();
 
-        System.out.println("[AUTH SERVICE] newID: " + newId);
+        Log.info(AuthService.class, "[AUTH SERVICE] newID: " + newId);
         String session = newSessionId();
 
         String aux = "INSERT INTO teacher (id, name, email, password_hash, created_at) VALUES (" +
@@ -115,8 +116,8 @@ public class AuthService implements IAuthService {
                 number, name, email, hashPw
         );
 
-        Map<String,Object> row = dbCommands.selectOne("SELECT id FROM student where email = ?", email);
-        long newId = row == null ? -1L : ((Number) row.get("id")).longValue();
+        Map<String,Object> row2 = dbCommands.selectOne("SELECT id FROM student where email = ?", email);
+        long newId = row2 == null ? -1L : ((Number) row2.get("id")).longValue();
         if (newId == -1L) {
             throw new IllegalStateException("Não foi possível obter o ID do novo estudante.");
         }

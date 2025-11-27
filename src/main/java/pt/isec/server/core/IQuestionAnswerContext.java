@@ -2,6 +2,9 @@ package pt.isec.server.core;
 
 import pt.isec.common.messages.TcpMessage;
 
+import java.util.List;
+import java.util.concurrent.BlockingQueue;
+
 /**
  * Interface que expõe apenas as operações do servidor
  * necessárias aos serviços de Perguntas e Respostas:
@@ -10,7 +13,7 @@ import pt.isec.common.messages.TcpMessage;
  * - envio de notificações para utilizadores.
  */
 public interface IQuestionAnswerContext {
-    void recordSqlUpdate(String sql);
+    BlockingQueue<List<String>> queue();
     long dbVersion();
     void setDbVersion(long v);
 

@@ -7,6 +7,7 @@ import pt.isec.common.util.Log;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -17,6 +18,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.BlockingQueue;
 
 /**
  * Thread que emite e recebe heartbeats para sincronização entre servidores.
@@ -62,30 +64,27 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
             while (tInfo.isRunning()) {
                 long now = System.currentTimeMillis();
 
-                // PRIMÁRIO: envia heartbeat
-                if (tInfo.isPrimary() && now - lastSent >= HEARTBEAT_INTERVAL_MS) {
-                    List<String> sqlUpdates = new ArrayList<>();
-                    if (tInfo instanceof ServerManager qs) {
-                        sqlUpdates = qs.pollPendingSqlUpdates();
+
+                if (tInfo.isPrimary()) {
+                    List<String> sqlToSend = null;
+
+                    BlockingQueue<List<String>> q = tInfo.queue();
+                    if (q != null) {
+                        sqlToSend = q.poll();
                     }
-                    String encodedSql = "";
-                    if (!sqlUpdates.isEmpty()) {
-                        String joined = String.join(";;", sqlUpdates);
-                        encodedSql = Base64.getEncoder().encodeToString(joined.getBytes(StandardCharsets.UTF_8));
+
+                    if (sqlToSend != null) {
+                        sendHeartbeat(_ms, grp, sqlToSend);  // heartbeat with SQL
+                        lastSent = now;
+                    } else if (now - lastSent >= HEARTBEAT_INTERVAL_MS) {
+                        sendHeartbeat(_ms, grp, null);       // periodic heartbeat without SQL
+                        lastSent = now;
                     }
-                    String beat = "MC_HB;id=servidor" + tInfo.serverTcpPort() +
-                            ";role=MASTER" +
-                            ";version=" + tInfo.dbVersion() +
-                            ";dbPort=" + tInfo.dbCopyPort() +
-                            ";clientPort=" + tInfo.serverTcpPort() +
-                            ";sql=" + encodedSql;
-                    byte[] data = beat.getBytes(StandardCharsets.UTF_8);
-                    _ms.send(new DatagramPacket(data, data.length, grp, tInfo.multicastPort()));
-                    lastSent = now;
                 }
 
                 // BACKUP: recebe heartbeat e aplica updates
                 if (!tInfo.isPrimary()) {
+
                     try {
                         _ms.receive(pkt);
                         String senderIp = pkt.getAddress().getHostAddress();
@@ -96,42 +95,69 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                             // ignora batimentos que o próprio servidor enviou
                             boolean fromMe = senderIp.equals(tInfo.serverTcpIp()) && rxClientPort == tInfo.serverTcpPort();
                             if (!fromMe) {
+
+                                long rxVersion = extractLong(msg, "version");
+                                boolean versionMismatch;
+
                                 // Aplica SQL updates codificados em base64
                                 String sqlEncoded = extractString(msg, "sql");
                                 if (sqlEncoded != null && !sqlEncoded.isBlank()) {
+                                    System.out.println("Entrei!");
+                                    versionMismatch = rxVersion >= 0 && rxVersion != tInfo.dbVersion() + 1;
+
+                                    if(versionMismatch){
+                                        tInfo.stopRunning(false);
+                                        System.out.println("RECEBI SQL MAS VERSION MAL");
+                                        break;
+                                    }
                                     byte[] bytes = Base64.getDecoder().decode(sqlEncoded);
                                     String joined = new String(bytes, StandardCharsets.UTF_8);
-                                    for (String stmt : joined.split(";;")) {
-                                        if (!stmt.isBlank()) {
-                                            tInfo.getDb().executeUpdate(stmt);
-                                        }
+
+                                    String[] stmts = joined.split(";;");
+                                    for (String s : stmts) {
+                                        s = s.trim();
+                                        if (s.isEmpty())
+                                            continue;
+                                        tInfo.getDb().executeUpdate(s);
+                                        System.out.println("Executei: " + s);
                                     }
+                                    tInfo.setDbVersion(rxVersion);
                                 }
+                                else{
 
-                                long rxVersion = extractLong(msg, "version");
-                                int  rxDbPort  = (int) extractLong(msg, "dbPort");
+                                    int  rxDbPort  = (int) extractLong(msg, "dbPort");
 
-                                boolean missingDb = !Files.exists(tInfo.dbPath());
-                                boolean versionMismatch = rxVersion >= 0 && rxVersion != tInfo.dbVersion();
+                                    boolean missingDb = !Files.exists(tInfo.dbPath());
 
-                                if (missingDb || versionMismatch) {
-                                    Log.error(ClusterHeartbeatThread.class,
-                                            "[%s][MC] pedir cópia: falta=%s versao(local=%d, rx=%d) → %s:%d%n",
-                                            Instant.now(), missingDb, tInfo.dbVersion(), rxVersion, senderIp, rxDbPort);
 
-                                    if (rxDbPort > 0) {
-                                        if (tInfo instanceof ServerManager sn) {
-                                            if (!sn.tryLockCopy()) continue;
-                                            try {
+                                    if (missingDb) {
+                                        System.err.printf("[%s][MC] pedir cópia: falta=%s versao(local=%d, rx=%d) → %s:%d%n",
+                                                Instant.now(), missingDb, tInfo.dbVersion(), rxVersion, senderIp, rxDbPort);
+
+                                        if (rxDbPort > 0) {
+                                            if (tInfo instanceof ServerManager sn) {
+                                                if (!sn.tryLockCopy()) continue;
+                                                try {
+                                                    requestDbCopyFromPrimary(senderIp, rxDbPort, rxVersion);
+                                                } finally {
+                                                    sn.unlockCopy();
+                                                }
+                                            } else {
                                                 requestDbCopyFromPrimary(senderIp, rxDbPort, rxVersion);
-                                            } finally {
-                                                sn.unlockCopy();
                                             }
                                         } else {
-                                            requestDbCopyFromPrimary(senderIp, rxDbPort, rxVersion);
+                                            Log.error(ClusterHeartbeatThread.class, "[MC] heartbeat sem dbPort → não posso pedir cópia.");
                                         }
-                                    } else {
-                                        Log.error(ClusterHeartbeatThread.class, "[MC] heartbeat sem dbPort → não posso pedir cópia.");
+                                        continue;
+                                    }
+
+                                    versionMismatch = rxVersion >= 0 && rxVersion != tInfo.dbVersion();
+
+                                    System.out.println("RX VERSION -> " + rxVersion + "\t MY VERSION -> " + tInfo.dbVersion());
+                                    if(versionMismatch){
+                                        System.out.println("PARA CRL!!");
+                                        tInfo.stopRunning(false);
+                                        break;
                                     }
                                 }
                             }
@@ -163,6 +189,8 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
         }
     }
 
+
+
     private static long extractLong(String payload, String key) {
         String needle = key + "=";
         int i = payload.indexOf(needle);
@@ -174,7 +202,26 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
         catch (Exception e) { return -1; }
     }
 
-    private static String extractString(String payload, String key) {
+
+    private void sendHeartbeat(MulticastSocket ms, InetAddress grp,  List<String> sql) throws IOException {
+        String encodedSql = "";
+        if (sql != null && !sql.isEmpty()) {
+            String joined = String.join(";;", sql);
+            encodedSql = Base64.getEncoder()
+                    .encodeToString(joined.getBytes(StandardCharsets.UTF_8));
+        }
+
+        String beat = "MC_HB;id=servidor" + tInfo.serverTcpPort() +
+                ";role=MASTER" +
+                ";version=" + tInfo.dbVersion() +
+                ";dbPort=" + tInfo.dbCopyPort() +
+                ";clientPort=" + tInfo.serverTcpPort() +
+                ";sql=" + encodedSql;
+
+        byte[] data = beat.getBytes(StandardCharsets.UTF_8);
+        ms.send(new DatagramPacket(data, data.length, grp, tInfo.multicastPort()));
+    }
+        private static String extractString(String payload, String key) {
         String needle = key + "=";
         int i = payload.indexOf(needle);
         if (i < 0) return null;

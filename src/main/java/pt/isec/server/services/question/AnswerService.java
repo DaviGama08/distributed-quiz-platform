@@ -13,6 +13,7 @@ import pt.isec.common.util.Log;
 import java.sql.DriverManager;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -58,13 +59,9 @@ public class AnswerService implements IAnswerService {
                 studentId, questionId, selected.name(), now.toString()
         );
 
-        // replicação
-        context.recordSqlUpdate(
-                "INSERT INTO answer (student_id, question_id, chosen_option, created_at) VALUES (" +
-                        studentId + ", " + questionId + ", '" + selected.name() + "', '" + now + "');"
-        );
-        context.setDbVersion(context.dbVersion() + 1);
 
+        context.queue().add(Collections.singletonList("INSERT INTO answer (student_id, question_id, chosen_option, created_at) VALUES (" +
+                studentId + ", " + questionId + ", '" + selected.name() + "', '" + now + "');"));
         // Tenta notificar o docente proprietário da pergunta (se estiver conectado)
         try {
             Object rawTeacherId = q.get("teacher_id");

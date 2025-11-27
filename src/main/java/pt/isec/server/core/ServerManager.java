@@ -13,11 +13,17 @@ import pt.isec.server.threads.DirectoryHeartbeatThread;
 import pt.isec.server.threads.NetworkTcpConnection;
 import pt.isec.common.util.Log;
 
+
+import java.io.IOException;
 import java.net.*;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -30,10 +36,11 @@ public class ServerManager implements IServerManager, IQuestionAnswerContext, Ru
     private IQuestionService questionService;
     private IAnswerService answerService;
 
-    private final List<String> pendingSqlUpdates = Collections.synchronizedList(new ArrayList<>());
     private final Map<Long, String> activeSessions = new ConcurrentHashMap<>();
+    private final BlockingQueue<List<String>> sqlToBroadcast = new LinkedBlockingQueue<>();
 
     private final String id;
+    private final String serverIdShort;
     private final String ip;
     private final int clientPort;
     private final int dbCopyPort;
@@ -61,6 +68,7 @@ public class ServerManager implements IServerManager, IQuestionAnswerContext, Ru
     public ServerManager(String dirHost, int dirPort, String mcIfIp,
                          int clientPort, int dbCopyPort, Path initialDbPath) throws Exception {
         this.id = UUID.randomUUID().toString(); //gera um identificador único aleatório e atribui-o como uma string
+        this.serverIdShort = id.substring(0, 8);
         this.ip = InetAddress.getLocalHost().getHostAddress(); //IP local desta máquina
         this.clientPort = clientPort;
         this.dbCopyPort = dbCopyPort;
@@ -72,7 +80,6 @@ public class ServerManager implements IServerManager, IQuestionAnswerContext, Ru
                 : Paths.get(".").toAbsolutePath();
 
         this.isPrimary = false;
-        refreshDbPath();
 
         this.multicastInterface = resolveMulticastInterface(mcIfIp);
         if (this.multicastInterface == null)
@@ -111,11 +118,46 @@ public class ServerManager implements IServerManager, IQuestionAnswerContext, Ru
         return null;
     }
 
+    private static Path findNewestDbInDir(Path dir) throws IOException {
+        try (var stream = Files.list(dir)) {
+            return stream
+                    .filter(p -> p.toString().endsWith(".db"))
+                    .max(Comparator.comparingLong(p -> p.toFile().lastModified()))
+                    .orElse(null);
+        }
+    }
+
+    public synchronized void initDbPathAsPrincipalOnStartup() throws IOException {
+        if (this.dbPath != null)
+            return; // already chosen
+
+        Path newest = findNewestDbInDir(dataDir);
+        if (newest != null) {
+            this.dbPath = newest.toAbsolutePath();
+            System.out.println("[DB] PRINCIPAL: usar BD mais recente no diretório: " + this.dbPath);
+        } else {
+            String name = String.format("quiz-%s.db", serverIdShort);
+            this.dbPath = dataDir.resolve(name).toAbsolutePath();
+            System.out.println("[DB] PRINCIPAL: nenhuma BD encontrada, nova será: " + this.dbPath);
+        }
+    }
+
+    public synchronized void initDbPathAsBackupOnStartup() {
+        if (this.dbPath != null)
+            return; // already chosen
+
+        String name = String.format("quiz-%s.db", serverIdShort);
+        this.dbPath = dataDir.resolve(name).toAbsolutePath();
+        System.out.println("[DB] BACKUP: BD local deste servidor será: " + this.dbPath);
+    }
+
     //atualiza o caminho para o ficheiro da base de dados, construindo um novo nome que inclui a versão
     // da base de dados e se é a principal ou uma cópia de segurança.
     private synchronized void refreshDbPath() {
-        String versionStr = String.format("%02d", dbVersion.get());
-        String name = "quiz-" + versionStr + (isPrimary ? ".db" : "-backup.db");
+        // One file per server + role. You can even ignore role if you prefer.
+        String role = isPrimary ? "primary" : "backup";
+        String name = String.format("quiz-%s-%s.db", role, serverIdShort);
+
         this.dbPath = dataDir.resolve(name).toAbsolutePath();
         Log.info(ServerManager.class, "[DB] agora a usar: " + this.dbPath +
                 " (role=" + (isPrimary ? "PRIMARY" : "BACKUP") +
@@ -131,17 +173,19 @@ public class ServerManager implements IServerManager, IQuestionAnswerContext, Ru
                 return;
             try {
                 DbCreate.createIfMissing(this.dbPath, "/db/schema.sql");
-                this.dbCommands = new DbCommands("jdbc:sqlite:" + this.dbPath.toAbsolutePath());
-
-                // serviços concretos, mas guardados como interfaces
-                this.authService = new AuthService(dbCommands);
-
+                this.dbCommands = new DbCommands("jdbc:sqlite:" + this.dbPath.toAbsolutePath(), this::setDbVersion);
                 IQuestionAnswerContext qaContext = this;
+                // serviços concretos, mas guardados como interfaces
+                this.authService = new AuthService(qaContext, dbCommands);
+
+
                 this.questionService = new QuestionService(qaContext, dbCommands);
                 this.answerService   = new AnswerService(qaContext, dbCommands);
 
                 Log.info(ServerManager.class, "[DB] camada de dados inicializada em " + dbPath);
                 dbInitialised = true;
+                long v = dbCommands.get_db_version();   // SELECT db_version FROM config WHERE id = 1
+                setDbVersion(v);
             } catch (Exception e) {
                 Log.error(ServerManager.class, "[DB] erro a inicializar camada de dados: " + e.getMessage());
                 throw new RuntimeException("Falha a inicializar DB/DAOs/AuthService", e);
@@ -163,25 +207,6 @@ public class ServerManager implements IServerManager, IQuestionAnswerContext, Ru
         return answerService; //retorna referencia do serviço de respostas
     }
 
-    //Para adicionar tarefas SQL à lista de pendentes
-    @Override
-    public void recordSqlUpdate(String sql) {
-        if (sql != null && !sql.isBlank())
-            //Adiciona à lista tarefas com a segurança da concorrência (syncronizedList)
-            pendingSqlUpdates.add(sql);
-    }
-
-    //Para retornar as tarefas da lista de pendentes
-    @Override
-    public List<String> pollPendingSqlUpdates() {
-        //Bloqueia para concorrência
-        synchronized (pendingSqlUpdates) {
-            //Faz copia da lista
-            List<String> copy = new ArrayList<>(pendingSqlUpdates);
-            pendingSqlUpdates.clear();//limpa a lista para receber novos pedidos
-            return copy; //retorna a cópia da lista
-        }
-    }
 
     @Override
     public boolean isUserLogged(long id) {
@@ -246,12 +271,8 @@ public class ServerManager implements IServerManager, IQuestionAnswerContext, Ru
     @Override
     public void stopRunning(boolean v) throws Exception {
         running = v;
-        threadClientListener.join();
-        Log.info(ServerManager.class, "[QuizServer] tClientListener encerrada");
-        threadClusterHeartbeat.join();
-        Log.info(ServerManager.class, "[QuizServer] tClusterHeartbeat  encerrada");
-        Log.info(ServerManager.class, "[QuizServer] tDirectoryHeartbeat encerrada");
-        close();
+        if(!v)
+            close();
     }
 
     @Override
@@ -323,19 +344,22 @@ public class ServerManager implements IServerManager, IQuestionAnswerContext, Ru
         boolean newIsPrimary = this.ip.equals(ip) && this.clientPort == port;
         if (this.isPrimary != newIsPrimary) {
             this.isPrimary = newIsPrimary;
-            refreshDbPath();
-        } else {
-            this.isPrimary = newIsPrimary;
+            System.out.println("[ServerManager] role changed to " +
+                    (isPrimary ? "PRIMARY" : "BACKUP"));
+            // no refreshDbPath here – keep using the same db file
         }
     }
 
     @Override
     public void setDbVersion(long v) {
-        if (v < 0) v = 0;
         long old = dbVersion.getAndSet(v);
-        if (old != v) refreshDbPath();
+        if (old != v) {
+            System.out.printf("[ServerManager] dbVersion changed: %d -> %d%n", old, v);
+        }
     }
 
+    @Override
+    public BlockingQueue<List<String>> queue(){return sqlToBroadcast;}
     // CLOSEABLE INTERFACE
     @Override
     public void close() throws Exception {

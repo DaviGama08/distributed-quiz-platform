@@ -1,6 +1,7 @@
 package pt.isec.server.services.auth;
 
 import pt.isec.common.dto.auth.*;
+import pt.isec.server.core.IQuestionAnswerContext;
 import pt.isec.server.db.DbCommands;
 import pt.isec.common.util.Log;
 
@@ -9,6 +10,7 @@ import javax.crypto.spec.PBEKeySpec;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 
@@ -18,13 +20,15 @@ import java.util.UUID;
 public class AuthService implements IAuthService {
 
     private final DbCommands dbCommands;
+    private final IQuestionAnswerContext context;
     private static final int ITERATIONS = 210_000;
     private static final int KEY_LENGTH  = 256;
     private static final String ALGORITHM = "PBKDF2WithHmacSHA256";
 
     private volatile String teacherCodeHashCache;
 
-    public AuthService(DbCommands dbCommands) {
+    public AuthService(IQuestionAnswerContext context,DbCommands dbCommands) {
+        this.context = context;
         this.dbCommands = dbCommands;
     }
 
@@ -70,6 +74,12 @@ public class AuthService implements IAuthService {
 
         Log.info(AuthService.class, "[AUTH SERVICE] newID: " + newId);
         String session = newSessionId();
+
+        String aux = "INSERT INTO teacher (id, name, email, password_hash, created_at) VALUES (" +
+                newId + ", '" + escape(name) + "', '" + escape(email) + "', '" + escape(hashPw) + "', datetime('now'));";
+
+        context.queue().add(Collections.singletonList(aux));
+
         return new AuthResponseDTO(session, String.valueOf(newId), null, "TEACHER", name, email);
     }
 
@@ -113,6 +123,11 @@ public class AuthService implements IAuthService {
         }
 
         String session = newSessionId();
+
+        String aux = "INSERT INTO student (id, student_number, name, email, password_hash, created_at) VALUES (" +
+                newId + ", " + number + ", '" + escape(name) + "', '" + escape(email) + "', '" + escape(hashPw) + "', datetime('now'));";
+
+        context.queue().add(Collections.singletonList(aux));
         return new AuthResponseDTO(session, String.valueOf(newId), number, "STUDENT", name, email);
     }
 
@@ -209,6 +224,7 @@ public class AuthService implements IAuthService {
 
     @Override
     public AuthResponseDTO updateStudent(UpdateStudentDTO dto) throws Exception {
+        String sql;
         if (dto == null) throw new IllegalArgumentException("Dados em falta");
         Integer userId = dto.userId();
         Integer studentNumber = dto.studentNumber();
@@ -250,10 +266,23 @@ public class AuthService implements IAuthService {
             String newHash = hashPassword(newPw);
             dbCommands.executeUpdate("UPDATE student SET student_number = ?, name = ?, email = ?, password_hash = ? WHERE id = ?",
                     studentNumber, name, email, newHash, userId);
+
+            sql = "UPDATE student SET student_number=" + studentNumber +
+                    ", name='" + escape(name) + "'" +
+                    ", email='" + escape(email) + "'" +
+                    ", password_hash='" + escape(newHash) + "'" +
+                    " WHERE id=" + userId + ";";
+
         } else {
             // apenas atualizar nome/email/numero
+
             dbCommands.executeUpdate("UPDATE student SET student_number = ?, name = ?, email = ? WHERE id = ?",
                     studentNumber, name, email, userId);
+
+            sql = "UPDATE student SET student_number=" + studentNumber +
+                    ", name='" + escape(name) + "'" +
+                    ", email='" + escape(email) + "'" +
+                    " WHERE id=" + userId + ";";
         }
 
         // Fetch updated student details
@@ -261,6 +290,8 @@ public class AuthService implements IAuthService {
                 "SELECT id, student_number, name, email FROM student WHERE id = ?", userId
         );
         if (updatedStudent == null) throw new IllegalStateException("Estudante atualizado não encontrado.");
+
+        context.queue().add(Collections.singletonList(sql));
 
         return new AuthResponseDTO(
                 null, // Session ID is not updated here
@@ -274,6 +305,7 @@ public class AuthService implements IAuthService {
 
     @Override
     public AuthResponseDTO updateTeacher(UpdateTeacherDTO dto) throws Exception {
+        String sql;
         if (dto == null) throw new IllegalArgumentException("Dados em falta");
         Integer teacherId = dto.teacherId();
         String name = dto.name();
@@ -302,9 +334,18 @@ public class AuthService implements IAuthService {
             String newHash = hashPassword(newPw);
             dbCommands.executeUpdate("UPDATE teacher SET password_hash = ?, name = ?, email = ? WHERE id = ?",
                     newHash, name, email, teacherId);
+            sql = "UPDATE teacher SET password_hash='" + escape(newHash) + "'" +
+                    ", name='" + escape(name) + "'" +
+                    ", email='" + escape(email) + "'" +
+                    " WHERE id=" + teacherId + ";";
         } else {
             dbCommands.executeUpdate("UPDATE teacher SET name = ?, email = ? WHERE id = ?",
                     name, email, teacherId);
+
+
+            sql = "UPDATE teacher SET name='" + escape(name) + "'" +
+                    ", email='" + escape(email) + "'" +
+                    " WHERE id=" + teacherId + ";";
         }
 
         // Fetch updated teacher details
@@ -313,6 +354,7 @@ public class AuthService implements IAuthService {
         );
         if (updatedTeacher == null) throw new IllegalStateException("Docente atualizado não encontrado.");
 
+        context.queue().add(Collections.singletonList(sql));
         return new AuthResponseDTO(
                 null, // Session ID is not updated here
                 String.valueOf(((Number) updatedTeacher.get("id")).longValue()),
@@ -390,4 +432,9 @@ public class AuthService implements IAuthService {
         }
         return diff == 0;
     }
+    private static String escape(String s) {
+        return s == null ? "" : s.replace("'", "''");
+
+    }
+
 }

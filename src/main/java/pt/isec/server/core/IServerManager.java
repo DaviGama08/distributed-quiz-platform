@@ -8,6 +8,7 @@ import pt.isec.server.threads.NetworkTcpConnection;
 import java.net.NetworkInterface;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.BlockingQueue;
 
 public interface IServerManager {
     String id();
@@ -41,8 +42,7 @@ public interface IServerManager {
     // Agora expõe apenas interfaces
     IQuestionService getQuestionService();
     IAnswerService getAnswerService();
-    void recordSqlUpdate(String sql);
-    List<String> pollPendingSqlUpdates();
+
 
     boolean isUserLogged(long userId);
     void registerLogin(long userId, String sessionId);
@@ -54,4 +54,6 @@ public interface IServerManager {
     void registerClientConnection(long userId, NetworkTcpConnection conn);
     void unregisterClientConnection(long userId);
     void sendToUser(long userId, pt.isec.common.messages.TcpMessage<?> msg);
+
+    BlockingQueue<List<String>> queue();
 }

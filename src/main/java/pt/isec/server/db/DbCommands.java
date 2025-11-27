@@ -2,8 +2,11 @@
 package pt.isec.server.db;
 
 import java.sql.*;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * Db — camada fininha para SQLite via JDBC, com nomes claros e fluxo didático.
@@ -19,15 +22,59 @@ public final class DbCommands {
 
     /** URL JDBC da BD, ex.: "jdbc:sqlite:/abs/path/quiz.db". */
     private final String url;
+    private Consumer<Long> onVersionChange;
 
+    public DbCommands(String url,
+                      Consumer<Long> onVersionChange) {
+        this.url = url;
+        this.onVersionChange = onVersionChange;
+    }
+
+
+    private void notifyVersionChange(long newVersion) {
+        if (onVersionChange != null) {
+            onVersionChange.accept(newVersion);
+        }
+    }
     /** Constrói o helper apontando para o ficheiro .db. */
-    public DbCommands(String url) { this.url = url; }
+    public DbCommands(String url) {
+        this.url = url;
+    }
 
     /** Expor a URL quando precisarmos abrir uma Connection direta noutro ponto. */
     public String getUrl() { return url; }
 
     /* ========================= 1) OPERAÇÕES UNITÁRIAS ========================= */
 
+    public long get_db_version(){
+
+        String sql = "SELECT db_version FROM config WHERE id = 1";
+        try (Connection c = openConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) return -1L;
+                long v = rs.getLong("db_version");
+                if (rs.wasNull()) return -1L;
+                return v;
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private long get_db_version(Connection c){
+
+        String sql = "SELECT db_version FROM config WHERE id = 1";
+        try (PreparedStatement ps = c.prepareStatement(sql)) {
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) return -1L;
+                long v = rs.getLong("db_version");
+                if (rs.wasNull()) return -1L;
+                return v;
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
     /** Executa INSERT/UPDATE/DELETE/DDL usando ligação própria. */
     public int executeUpdate(String sql, Object... args) {
         //Connection é a class para fazer a ligação à base de dados
@@ -35,8 +82,10 @@ public final class DbCommands {
         try (Connection c = openConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             bind(ps, args); //bind está a
             int x = ps.executeUpdate();
-            if(x > 0)
+            if(x > 0){
                 update_db_version(c);
+            }
+
             return x;
         } catch (SQLException e) {
             throw new RuntimeException(e);
@@ -61,6 +110,8 @@ public final class DbCommands {
         String sql = "UPDATE config SET db_version = db_version + 1 WHERE id = 1";
         try (PreparedStatement ps = c.prepareStatement(sql)) {
             ps.executeUpdate();
+            long v = get_db_version(c);
+            notifyVersionChange(v);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -72,9 +123,11 @@ public final class DbCommands {
         try (Connection c = openConnection()) {
             c.setAutoCommit(false);
             try {
-                work.run(new Transaction(c));
+                Transaction tx = new Transaction(c);
+                work.run(tx);
                 update_db_version(c);
                 c.commit();
+
             } catch (Exception e) {
                 c.rollback();
                 throw e;
@@ -87,14 +140,21 @@ public final class DbCommands {
     public interface TransactionWork { void run(Transaction tx) throws Exception; }
 
     /** Contexto de transação (usa a MESMA Connection). */
-    public static final class Transaction {
+    public final class Transaction {
         private final Connection connection;
+        private String executedSql;
+
         private Transaction(Connection connection) { this.connection = connection; }
 
         public int executeUpdate(String sql, Object... args) {
             try (PreparedStatement ps = connection.prepareStatement(sql)) {
                 bind(ps, args);
-                return ps.executeUpdate();
+                int x = ps.executeUpdate();
+                if (x > 0) {
+                    executedSql = sql;  // regista para notificar depois do commit
+                }
+                return x;
+
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }
@@ -120,6 +180,9 @@ public final class DbCommands {
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }
+        }
+        String getExecutedSql() {
+            return executedSql;
         }
     }
 
@@ -159,4 +222,5 @@ public final class DbCommands {
         }
         return row;
     }
+
 }

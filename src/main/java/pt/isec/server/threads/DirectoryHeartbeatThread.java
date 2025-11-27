@@ -58,21 +58,26 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                 }
             }
 
-            if (iAmPrimary) {
-                try {
-                    // garantir que estamos a usar o ServerNode concreto
-                    if (managerTheardInfo instanceof ServerManager node) {
+            if (managerTheardInfo instanceof ServerManager node) {
+                if (iAmPrimary) {
+                    try {
+                        // 1) principal escolhe BD: mais recente ou nova
+                        node.initDbPathAsPrincipalOnStartup();
+                        // 2) cria/abre BD e schema
                         node.initDatabaseLayerIfNeeded();
-                    } else {
-                        System.err.println("[DB] tInfo não é ServerNode — não consigo inicializar BD/Auth.");
+                    } catch (Exception e) {
+                        System.err.println("[DB] erro a inicializar base de dados (principal): " + e.getMessage());
                     }
-                } catch (Exception e) {
-                    System.err.println("[DB] erro a inicializar base de dados: " + e.getMessage());
+                } else {
+                    // backup: define já o caminho onde vai ficar a sua cópia
+                    node.initDbPathAsBackupOnStartup();
+
+                    if (!Files.exists(node.dbPath())) {
+                        System.out.println("[DB] backup sem base de dados local; vai aguardar heartbeat multicast para copiar.");
+                    }
                 }
             } else {
-                if (!Files.exists(managerTheardInfo.dbPath())) {
-                    System.out.println("[DB] backup sem base de dados local; vai aguardar heartbeat multicast para copiar.");
-                }
+                System.err.println("[DB] managerTheardInfo não é ServerManager.");
             }
 
             System.out.printf("[DIR] principal %s:%d | souPrimario=%s | versao=%d%n",

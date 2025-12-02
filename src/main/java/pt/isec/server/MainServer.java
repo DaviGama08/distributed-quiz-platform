@@ -10,7 +10,7 @@ import java.nio.file.Paths;
 public class MainServer {
     public static void main(String[] args) throws Exception {
         if (args.length != 6) {
-            Log.error(MainServer.class, "usage: LauncherServer <dirHost> <dirPort> <dataDir|PROJECT|HOME> <multicastIfIp|AUTO> <clientPort> <dbCopyPort>");
+            Log.error(MainServer.class, "usage: MainServer <dirHost> <dirPort> <dataDir|PROJECT|HOME> <multicastIfIp|AUTO> <clientPort> <dbCopyPort>");
             return;
         }
         Class.forName("org.sqlite.JDBC");
@@ -50,12 +50,11 @@ public class MainServer {
 
         //Apanhar o ctrl + c
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            try { serverManager.stopRunning(false); } catch (Exception ignored) {}
-            System.out.println("Diretoria terminada.");
+            try { serverManager.shutdownServer(); } catch (Exception ignored) {}
+            System.out.println("Servidor terminado.");
         }));
 
         serverManager.run();
-
-        Log.info(MainServer.class, "[LauncherServer] Servidor iniciado. Ctrl+C para terminar.");
+        Log.info(MainServer.class, "[MainServer] Servidor iniciado. Ctrl+C para terminar.");
     }
 }

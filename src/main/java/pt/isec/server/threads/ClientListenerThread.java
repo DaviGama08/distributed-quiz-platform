@@ -54,6 +54,7 @@ public class ClientListenerThread implements Runnable, AutoCloseable {
                 Log.error(ClientListenerThread.class, "[ACCEPT] erro: " + e.getMessage());
             }
         } finally {
+            Log.info(ClientListenerThread.class, "ClientListenerThread terminada.");
             try {
                 close();
             } catch (Exception ignore) {}

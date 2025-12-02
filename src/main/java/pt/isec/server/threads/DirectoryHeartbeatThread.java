@@ -44,7 +44,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             Endpoint reply = waitPrincipal(s);
             if (reply == null) {
                 Log.error(DirectoryHeartbeatThread.class, "[DIR] sem resposta da diretoria");
-                managerTheardInfo.stopRunning(false); // running=false e interrompe threads
+                managerTheardInfo.shutdownServer(); // running=false e interrompe threads
                 return;
             }
 
@@ -119,6 +119,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             if (managerTheardInfo.isRunning())
                 Log.error(DirectoryHeartbeatThread.class, "[DIR] erro: " + e.getMessage());
         }finally {
+            Log.info(DirectoryHeartbeatThread.class, "DirectoryHeartbeatThread terminada.");
             try {
                 close();
             }catch (Exception ignore){}
@@ -167,7 +168,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             }
             //Depois passar 17segs sem heartbeat(TTL), a diretoria envia ordem para encerrar servidor
             if (resp.startsWith("SHUTDOWN") || resp.startsWith("404 NO_PRINCIPAL")){
-                managerTheardInfo.stopRunning(false);
+                managerTheardInfo.shutdownServer();
                 Log.info(DirectoryHeartbeatThread.class, "ENCERREI");
                 return null;
             }

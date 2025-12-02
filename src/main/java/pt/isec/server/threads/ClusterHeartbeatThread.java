@@ -15,7 +15,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -106,7 +105,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                                     versionMismatch = rxVersion >= 0 && rxVersion != tInfo.dbVersion() + 1;
 
                                     if(versionMismatch){
-                                        tInfo.stopRunning(false);
+                                        tInfo.shutdownServer();
                                         System.out.println("RECEBI SQL MAS VERSION MAL");
                                         break;
                                     }
@@ -156,7 +155,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                                     System.out.println("RX VERSION -> " + rxVersion + "\t MY VERSION -> " + tInfo.dbVersion());
                                     if(versionMismatch){
                                         System.out.println("PARA CRL!!");
-                                        tInfo.stopRunning(false);
+                                        tInfo.shutdownServer();
                                         break;
                                     }
                                 }
@@ -187,6 +186,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
             if (tInfo.isRunning())
                 Log.error(ClusterHeartbeatThread.class, "[MC-LOOP] erro: " + e.getMessage());
         }
+        Log.info(ClusterHeartbeatThread.class, "ClusterHeartbeatThread terminada.");
     }
 
 

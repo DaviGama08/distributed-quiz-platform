@@ -24,7 +24,7 @@ public interface IServerManager {
     NetworkInterface multicastInterface();
 
     boolean isRunning();
-    void stopRunning(boolean v) throws Exception;
+    void shutdownServer() throws Exception;
 
     boolean isPrimary();
     void setPrimary(String ip, int port);
@@ -42,7 +42,6 @@ public interface IServerManager {
     // Agora expõe apenas interfaces
     IQuestionService getQuestionService();
     IAnswerService getAnswerService();
-
 
     boolean isUserLogged(long userId);
     void registerLogin(long userId, String sessionId);

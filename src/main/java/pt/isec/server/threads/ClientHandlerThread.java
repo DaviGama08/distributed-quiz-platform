@@ -9,6 +9,7 @@ import pt.isec.server.core.IServerManager;
 import pt.isec.common.model.question.Question;
 import pt.isec.common.util.Log;
 import java.io.IOException;
+import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -57,13 +58,33 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
         }
         //Quando atingir o timeout de 30 segs
         catch(SocketTimeoutException e){
-            Log.error(ClientHandlerThread.class, "Timeout de ligação TCP 30s atingido: " + e.getMessage());
-            //e.printStackTrace();
+            if (!threadInfo.isRunning()) {
+                // Timeout porque estamos em shutdown – terminar silenciosamente
+                Log.info(ClientHandlerThread.class,
+                        "Ligação ao cliente terminada devido a shutdown do servidor.");
+            } else {
+                Log.error(ClientHandlerThread.class,
+                        "Timeout de ligação TCP atingido: " + e.getMessage());
+                // aqui podes decidir se queres cair fora ou continuar;
+                // se mantiveres o while(threadInfo.isRunning()), ele vai repetir até haver mensagem ou shutdown
+            }
+        }
+        catch (SocketException e) {
+            if (!threadInfo.isRunning()) {
+                // socket foi fechado durante o shutdown – comportamento esperado
+                Log.info(ClientHandlerThread.class,
+                        "Socket TCP fechado durante shutdown do servidor.");
+            } else {
+                Log.error(ClientHandlerThread.class,
+                        "Ligação ao cliente encerrada (socket): " + e.getMessage());
+                // aqui, se quiseres, podes fazer e.printStackTrace();
+            }
         }
         catch (Exception e) {
             Log.error(ClientHandlerThread.class, "Ligação ao cliente encerrada com exceção: " + e.getMessage());
             e.printStackTrace();
         } finally {
+            Log.info(ClientHandlerThread.class, "ClientHandlerThread terminada.");
             if (loggerUserId != null) {
                 try { threadInfo.unregisterClientConnection(loggerUserId); } catch (Exception ignored) {}
                 threadInfo.unregisterLogin(loggerUserId);

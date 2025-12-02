@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -267,11 +268,7 @@ public class ServerManager implements IServerManager, IQuestionAnswerContext, Ru
     }
 
     @Override
-    public void stopRunning(boolean v) throws Exception {
-        running = v;
-        if(!v)
-            close();
-    }
+    public void shutdownServer() throws Exception {close();}
 
     @Override
     public boolean isRunning() {
@@ -361,11 +358,33 @@ public class ServerManager implements IServerManager, IQuestionAnswerContext, Ru
     // CLOSEABLE INTERFACE
     @Override
     public void close() throws Exception {
-        if (threadClusterHeartbeat != null)   threadClusterHeartbeat.interrupt();
-        if (tDirectoryHeartbeat != null) tDirectoryHeartbeat.interrupt();
-        if (threadClientListener != null)     threadClientListener.interrupt();
+        // 1) sinal global – todas as threads vão começar a terminar
+        running = false;
 
-        sendExitMsg();
+        // 2) reduzir o timeout de leitura das ligações TCP activas
+        //    Isto não fecha o socket; apenas faz com que o readObject()
+        //    lance SocketTimeoutException em vez de ficar bloqueado para sempre.
+        for (NetworkTcpConnection conn : activeClientConnections.values()) {
+            try {
+                conn.setReadTimeout(Duration.ofSeconds(1)); // timeout pequeno
+            } catch (IOException ignored) {}
+        }
+
+        // 3) verificamos qual foi a thread que chamou o close()
+        Thread current = Thread.currentThread();
+
+        if (tDirectoryHeartbeat != null && current != tDirectoryHeartbeat) {
+            try { tDirectoryHeartbeat.join(); } catch (InterruptedException ignored) {}
+        }
+
+        if (threadClusterHeartbeat != null && current != threadClusterHeartbeat) {
+            try { threadClusterHeartbeat.join(); } catch (InterruptedException ignored) {}
+        }
+
+        if (threadClientListener != null && current != threadClientListener) {
+            try { threadClientListener.join(); } catch (InterruptedException ignored) {}
+        }
+        Log.info(ServerManager.class, "Shutdown completo.");
     }
 
     // RUNNABLE INTERFACE
@@ -382,21 +401,5 @@ public class ServerManager implements IServerManager, IQuestionAnswerContext, Ru
         threadClusterHeartbeat.start();
         tDirectoryHeartbeat.start();
         threadClientListener.start();
-    }
-
-    public void sendExitMsg(){
-
-        try (DatagramSocket s = new DatagramSocket()) {
-
-            InetAddress dirAddr = InetAddress.getByName(directoryHost());
-            int dirPort = directoryPort();
-
-            // REGISTER
-            String msg =  "TYPE=DEREGISTER|ID=" + id();
-            byte[] data = msg.getBytes(StandardCharsets.UTF_8);
-            s.send(new DatagramPacket(data, data.length, dirAddr, dirPort));
-        } catch (IOException c) {
-            throw new RuntimeException(c);
-        }
     }
 }

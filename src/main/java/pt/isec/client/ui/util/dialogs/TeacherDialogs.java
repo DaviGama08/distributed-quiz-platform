@@ -1,4 +1,5 @@
 package pt.isec.client.ui.util.dialogs;
+
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
@@ -16,6 +17,7 @@ import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.Option;
 import pt.isec.common.model.question.OptionLetter;
 import pt.isec.common.model.question.Question;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -26,49 +28,37 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
 
+/**
+ * Utility class that provides modal dialogs used by the teacher UI:
+ * <ul>
+ *     <li>Create question dialog</li>
+ *     <li>Edit question dialog</li>
+ *     <li>Question answers/details dialog</li>
+ * </ul>
+ */
 public final class TeacherDialogs {
 
-    //------ Feedbak visual de campos ccom erros -------
+    /**
+     * CSS style used to visually mark fields with validation errors.
+     */
     private static final String ERROR_STYLE =
             "-fx-border-color: #e74c3c; -fx-border-width: 2; -fx-border-radius: 4; -fx-background-insets: 0;";
 
-    //Destaca a vermelho os campos com erros
-    private static void markError(Control c) {
-        if (c != null) {
-            // mantém estilos anteriores se existirem (sobrepor)
-            String prev = c.getStyle();
-            if (prev == null) prev = "";
-            if (!prev.contains("-fx-border-color")) {
-                c.setStyle(prev + ";" + ERROR_STYLE);
-            } else {
-                c.setStyle(ERROR_STYLE); // garante destaque consistente
-            }
-        }
+    private TeacherDialogs() {
+        // utility class
     }
-
-    //Para limpar o destaque a vermelho
-    private static void clearError(Control c) {
-        if (c != null) {
-            // limpa o estilo de erro (simples)
-            String s = c.getStyle();
-            if (s == null || s.isEmpty()) return;
-            // remove a substring exacta do ERROR_STYLE
-            c.setStyle(s.replace(ERROR_STYLE, "").replaceAll("^;|;$", ""));
-        }
-    }
-
-    //Para limpar os destaques a vermelho de vários campos
-    private static void clearErrors(Control... controls) {
-        for (Control c : controls) clearError(c);
-    }
-
-    //---------------------------------------------------------------
-
-    private TeacherDialogs() { }
 
     // --------------------------------------------------------------
-    //  CRIAR PERGUNTA
+    //  CREATE QUESTION
     // --------------------------------------------------------------
+
+    /**
+     * Shows a dialog for creating a new question.
+     *
+     * @param owner    owner window (may be {@code null})
+     * @param teacherId current teacher id (used for the DTO)
+     * @param onSubmit callback invoked with the created {@link CreateQuestionDTO} if the user confirms
+     */
     public static void showCreateQuestionDialog(Window owner,
                                                 Integer teacherId,
                                                 Consumer<CreateQuestionDTO> onSubmit) {
@@ -101,27 +91,47 @@ public final class TeacherDialogs {
         Label optionsLabel = new Label("Opções:");
         optionsLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
         VBox optionsBox = new VBox(10);
-        TextField optA = new TextField(); optA.setPromptText("Opção A");
-        TextField optB = new TextField(); optB.setPromptText("Opção B");
-        TextField optC = new TextField(); optC.setPromptText("Opção C");
-        TextField optD = new TextField(); optD.setPromptText("Opção D");
+        TextField optA = new TextField();
+        optA.setPromptText("Opção A");
+        TextField optB = new TextField();
+        optB.setPromptText("Opção B");
+        TextField optC = new TextField();
+        optC.setPromptText("Opção C");
+        TextField optD = new TextField();
+        optD.setPromptText("Opção D");
         optionsBox.getChildren().addAll(optA, optB, optC, optD);
 
         numOptionsSpinner.valueProperty().addListener((obs, oldVal, newVal) -> {
             int n = newVal == null ? 2 : newVal;
             optionsBox.getChildren().clear();
-            if (n >= 1) optionsBox.getChildren().add(optA);
-            if (n >= 2) optionsBox.getChildren().add(optB);
-            if (n >= 3) optionsBox.getChildren().add(optC);
-            if (n >= 4) optionsBox.getChildren().add(optD);
+            if (n >= 1) {
+                optionsBox.getChildren().add(optA);
+            }
+            if (n >= 2) {
+                optionsBox.getChildren().add(optB);
+            }
+            if (n >= 3) {
+                optionsBox.getChildren().add(optC);
+            }
+            if (n >= 4) {
+                optionsBox.getChildren().add(optD);
+            }
         });
 
         int init = numOptionsSpinner.getValue();
         optionsBox.getChildren().clear();
-        if (init >= 1) optionsBox.getChildren().add(optA);
-        if (init >= 2) optionsBox.getChildren().add(optB);
-        if (init >= 3) optionsBox.getChildren().add(optC);
-        if (init >= 4) optionsBox.getChildren().add(optD);
+        if (init >= 1) {
+            optionsBox.getChildren().add(optA);
+        }
+        if (init >= 2) {
+            optionsBox.getChildren().add(optB);
+        }
+        if (init >= 3) {
+            optionsBox.getChildren().add(optC);
+        }
+        if (init >= 4) {
+            optionsBox.getChildren().add(optD);
+        }
 
         Label correctLabel = new Label("Resposta Correta:");
         correctLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
@@ -169,7 +179,7 @@ public final class TeacherDialogs {
         Button okButton = (Button) dialog.getDialogPane().lookupButton(ButtonType.OK);
         okButton.setText("Criar Pergunta");
         okButton.setOnAction(ev -> {
-            //Limpa destaques vermelhos anteriores
+            // Clear previous error highlights
             clearErrors(statementField, optA, optB, optC, optD, startDate, endDate, startHour, endHour);
 
             String statement = statementField.getText().trim();
@@ -187,41 +197,47 @@ public final class TeacherDialogs {
 
             int filledCount = 0;
             for (int i = 0; i < numOptions; i++) {
-                if (!allOptions[i].getText().trim().isEmpty()) filledCount++;
+                if (!allOptions[i].getText().trim().isEmpty()) {
+                    filledCount++;
+                }
             }
             if (filledCount < 2) {
                 AlertUtils.showError(owner, "Erro", "A pergunta deve ter pelo menos duas respostas possíveis.");
-                // destaca todas as options visíveis para ajudar o utilizador
-                for (int i = 0; i < numOptions; i++) markError(allOptions[i]);
+                // highlight all visible options
+                for (int i = 0; i < numOptions; i++) {
+                    markError(allOptions[i]);
+                }
                 ev.consume();
                 return;
             }
 
-            //Recolhe os textos e valida se algum está vazio
+            // Collect text and validate empties
             List<String> texts = new ArrayList<>();
             for (int i = 0; i < numOptions; i++) {
                 String optText = allOptions[i].getText().trim();
                 if (optText.isEmpty()) {
                     AlertUtils.showError(owner, "Erro", "Preencha todas as respostas até ao número escolhido.");
-                    for (int j = 0; j < numOptions; j++) markError(allOptions[i]);
+                    for (int j = 0; j < numOptions; j++) {
+                        markError(allOptions[i]);
+                    }
                     ev.consume();
                     return;
                 }
                 texts.add(optText);
             }
 
-            //Verifica se há respostas duplicadas
-            Set<String> seen = new HashSet<>(); //Hashset para garantir que não há duplicados
-            for(String t : texts) {
+            // Check for duplicated answers (case-insensitive)
+            Set<String> seen = new HashSet<>();
+            for (String t : texts) {
                 String normal = t.toLowerCase();
-                if(!seen.add(normal)) {
+                if (!seen.add(normal)) {
                     AlertUtils.showError(owner, "Erro", "As opções não podem conter respostas duplicadas");
-                    ev.consume(); // impede fechar o diálogo / propagação do evento
+                    ev.consume();
                     return;
                 }
             }
 
-            for (int i=0; i < numOptions; i++) {
+            for (int i = 0; i < numOptions; i++) {
                 options.add(new Option(letters[i], texts.get(i)));
             }
 
@@ -229,8 +245,12 @@ public final class TeacherDialogs {
             LocalDate endD = endDate.getValue();
             if (startD == null || endD == null) {
                 AlertUtils.showError(owner, "Erro", "Datas de início e fim são obrigatórias.");
-                if (startD == null) markError(startDate);
-                if (endD == null) markError(endDate);
+                if (startD == null) {
+                    markError(startDate);
+                }
+                if (endD == null) {
+                    markError(endDate);
+                }
                 ev.consume();
                 return;
             }
@@ -264,7 +284,7 @@ public final class TeacherDialogs {
                 if (onSubmit != null) {
                     onSubmit.accept(dto);
                 }
-                // deixa o diálogo fechar
+                // let dialog close
             } catch (Exception e) {
                 AlertUtils.showError(owner, "Erro",
                         "Formato de hora inválido (utilize HH:MM).");
@@ -278,8 +298,17 @@ public final class TeacherDialogs {
     }
 
     // --------------------------------------------------------------
-    //  EDITAR PERGUNTA
+    //  EDIT QUESTION
     // --------------------------------------------------------------
+
+    /**
+     * Shows a dialog for editing an existing question.
+     *
+     * @param owner     owner window (may be {@code null})
+     * @param q         question to edit
+     * @param teacherId current teacher id (used for the DTO)
+     * @param onSubmit  callback invoked with the created {@link EditQuestionDTO} if the user confirms
+     */
     public static void showEditQuestionDialog(Window owner,
                                               Question q,
                                               Integer teacherId,
@@ -315,34 +344,56 @@ public final class TeacherDialogs {
         Label optionsLabel = new Label("Opções:");
         optionsLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
         VBox optionsBox = new VBox(10);
-        TextField optA = new TextField(); optA.setPromptText("Opção A");
-        TextField optB = new TextField(); optB.setPromptText("Opção B");
-        TextField optC = new TextField(); optC.setPromptText("Opção C");
-        TextField optD = new TextField(); optD.setPromptText("Opção D");
+        TextField optA = new TextField();
+        optA.setPromptText("Opção A");
+        TextField optB = new TextField();
+        optB.setPromptText("Opção B");
+        TextField optC = new TextField();
+        optC.setPromptText("Opção C");
+        TextField optD = new TextField();
+        optD.setPromptText("Opção D");
         optionsBox.getChildren().addAll(optA, optB, optC, optD);
 
         numOptionsSpinner.valueProperty().addListener((obs, oldVal, newVal) -> {
             int n = newVal == null ? 2 : newVal;
             optionsBox.getChildren().clear();
-            if (n >= 1) optionsBox.getChildren().add(optA);
-            if (n >= 2) optionsBox.getChildren().add(optB);
-            if (n >= 3) optionsBox.getChildren().add(optC);
-            if (n >= 4) optionsBox.getChildren().add(optD);
+            if (n >= 1) {
+                optionsBox.getChildren().add(optA);
+            }
+            if (n >= 2) {
+                optionsBox.getChildren().add(optB);
+            }
+            if (n >= 3) {
+                optionsBox.getChildren().add(optC);
+            }
+            if (n >= 4) {
+                optionsBox.getChildren().add(optD);
+            }
         });
 
         int init = numOptionsSpinner.getValue();
         optionsBox.getChildren().clear();
-        if (init >= 1) optionsBox.getChildren().add(optA);
-        if (init >= 2) optionsBox.getChildren().add(optB);
-        if (init >= 3) optionsBox.getChildren().add(optC);
-        if (init >= 4) optionsBox.getChildren().add(optD);
+        if (init >= 1) {
+            optionsBox.getChildren().add(optA);
+        }
+        if (init >= 2) {
+            optionsBox.getChildren().add(optB);
+        }
+        if (init >= 3) {
+            optionsBox.getChildren().add(optC);
+        }
+        if (init >= 4) {
+            optionsBox.getChildren().add(optD);
+        }
 
-        // Preenche opções existentes
+        // Fill existing options
         List<Option> existingOptions = q.getOptions();
         if (existingOptions != null) {
             int i = 0;
             for (Option opt : existingOptions) {
-                if (i >= optionsBox.getChildren().size()) break;
+                if (i >= optionsBox.getChildren().size()) {
+                    break;
+                }
                 TextField tf = (TextField) optionsBox.getChildren().get(i);
                 tf.setText(opt.getText());
                 i++;
@@ -415,7 +466,9 @@ public final class TeacherDialogs {
 
             int filledCount = 0;
             for (int i = 0; i < numOptions; i++) {
-                if (!allOptions[i].getText().trim().isEmpty()) filledCount++;
+                if (!allOptions[i].getText().trim().isEmpty()) {
+                    filledCount++;
+                }
             }
             if (filledCount < 2) {
                 AlertUtils.showError(owner, "Erro", "A pergunta deve ter pelo menos duas respostas possíveis.");
@@ -437,15 +490,15 @@ public final class TeacherDialogs {
             Set<String> seen = new HashSet<>();
             for (String t : texts) {
                 String normal = t.toLowerCase();
-                if(!seen.add(normal)) {
+                if (!seen.add(normal)) {
                     AlertUtils.showError(owner, "Erro", "As opções não podem conter respostas duplicadas");
                     ev.consume();
                     return;
                 }
             }
 
-            //Cria as Option após validações
-            for (int i = 0; i<numOptions; i++){
+            // Create options after validations
+            for (int i = 0; i < numOptions; i++) {
                 options.add(new Option(letters[i], texts.get(i)));
             }
 
@@ -484,7 +537,7 @@ public final class TeacherDialogs {
                 if (onSubmit != null) {
                     onSubmit.accept(dto);
                 }
-                // deixa o diálogo fechar
+                // let dialog close
             } catch (Exception e) {
                 AlertUtils.showError(owner, "Erro",
                         "Formato de hora inválido (utilize HH:MM).");
@@ -496,12 +549,19 @@ public final class TeacherDialogs {
     }
 
     // --------------------------------------------------------------
-    //  VER RESPOSTAS DE UMA PERGUNTA (DETALHE)
+    //  VIEW QUESTION ANSWERS
     // --------------------------------------------------------------
+
     /**
-     * Mostra o diálogo com detalhes da pergunta + lista de respostas.
-     * O botão "Eliminar Pergunta" chama o callback onDelete (o controller
-     * é que fala com o serviço).
+     * Shows a dialog with question details and its answers.
+     * <p>
+     * The "Eliminar Pergunta" button triggers the {@code onDelete} callback; the controller is
+     * responsible for communicating with the service layer.
+     *
+     * @param owner    owner window (may be {@code null})
+     * @param q        question to display
+     * @param answers  list of answers for the question
+     * @param onDelete callback invoked when the user confirms the deletion of the question
      */
     public static void showAnswersDialog(Window owner,
                                          Question q,
@@ -522,7 +582,7 @@ public final class TeacherDialogs {
         content.setPadding(new Insets(20));
         content.setPrefWidth(750);
 
-        // ---------- Caixa de informação da pergunta ----------
+        // ---------- Question info box ----------
         VBox infoBox = new VBox(5);
         infoBox.setStyle(
                 "-fx-background-color: #ecf0f1;" +
@@ -543,7 +603,7 @@ public final class TeacherDialogs {
 
         infoBox.getChildren().addAll(questionLabel, correctLabel, periodLabel);
 
-        // ---------- Estatísticas ----------
+        // ---------- Statistics ----------
         HBox statsBox = new HBox(20);
         statsBox.setAlignment(Pos.CENTER);
         statsBox.setPadding(new Insets(15));
@@ -557,7 +617,7 @@ public final class TeacherDialogs {
         long correctCnt = (answers == null ? 0 : answers.stream().filter(Answer::isCorrect).count());
         int wrongCnt = total - (int) correctCnt;
         double correctPerc = total == 0 ? 0 : (100.0 * correctCnt / total);
-        double wrongPerc   = total == 0 ? 0 : (100.0 * wrongCnt / total);
+        double wrongPerc = total == 0 ? 0 : (100.0 * wrongCnt / total);
 
         VBox totalBox = new VBox(5);
         totalBox.setAlignment(Pos.CENTER);
@@ -587,7 +647,7 @@ public final class TeacherDialogs {
 
         statsBox.getChildren().addAll(totalBox, correctBox, wrongBox);
 
-        // ---------- Tabela de respostas ----------
+        // ---------- Answers table ----------
         TableView<Answer> table = new TableView<>();
         table.setPrefHeight(250);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
@@ -632,14 +692,14 @@ public final class TeacherDialogs {
         ButtonType deleteButtonType = new ButtonType("Eliminar Pergunta", ButtonBar.ButtonData.LEFT);
         dialog.getDialogPane().getButtonTypes().addAll(exportButtonType, deleteButtonType, ButtonType.CLOSE);
 
-        // Exportar CSV
+        // Export CSV
         Button exportButton = (Button) dialog.getDialogPane().lookupButton(exportButtonType);
         exportButton.setOnAction(ev -> {
             CsvExportUtils.exportAnswersToCsv(owner, q, answers);
-            ev.consume(); // mantemos o diálogo aberto
+            ev.consume(); // keep dialog open
         });
 
-        // Eliminar Pergunta – deixa a responsabilidade no controller
+        // Delete question – delegate actual action to controller via callback
         Button deleteButton = (Button) dialog.getDialogPane().lookupButton(deleteButtonType);
         deleteButton.setOnAction(ev -> {
             boolean confirm = AlertUtils.showConfirmation(
@@ -655,5 +715,54 @@ public final class TeacherDialogs {
         });
 
         dialog.showAndWait();
+    }
+
+    // --------------------------------------------------------------
+    //  PRIVATE HELPER METHODS (validation styling)
+    // --------------------------------------------------------------
+
+    /**
+     * Highlights a control with the error style.
+     *
+     * @param c control to highlight
+     */
+    private static void markError(Control c) {
+        if (c != null) {
+            String prev = c.getStyle();
+            if (prev == null) {
+                prev = "";
+            }
+            if (!prev.contains("-fx-border-color")) {
+                c.setStyle(prev + ";" + ERROR_STYLE);
+            } else {
+                c.setStyle(ERROR_STYLE);
+            }
+        }
+    }
+
+    /**
+     * Removes error highlighting from a control.
+     *
+     * @param c control to clear
+     */
+    private static void clearError(Control c) {
+        if (c != null) {
+            String s = c.getStyle();
+            if (s == null || s.isEmpty()) {
+                return;
+            }
+            c.setStyle(s.replace(ERROR_STYLE, "").replaceAll("^;|;$", ""));
+        }
+    }
+
+    /**
+     * Removes error highlighting from several controls.
+     *
+     * @param controls controls to clear
+     */
+    private static void clearErrors(Control... controls) {
+        for (Control c : controls) {
+            clearError(c);
+        }
     }
 }

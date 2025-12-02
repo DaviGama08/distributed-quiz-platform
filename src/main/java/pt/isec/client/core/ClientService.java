@@ -9,6 +9,8 @@ import pt.isec.common.dto.question.CreateQuestionResponseDTO;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.Question;
+import pt.isec.common.util.Log;
+
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 import java.io.IOException;
@@ -26,45 +28,47 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Serviço central de gestão de rede: descoberta, conexão TCP,
- * filas de envio/receptão e propriedades observáveis.
- *
- * Implementa o protocolo de handshake na ligação e um fluxo de
- * reconexão que segue rigorosamente as regras descritas no enunciado.
+ * Central network service: server discovery, TCP connection,
+ * send/receive queues and observable properties.
+ * <p>
+ * Implements the connection handshake protocol and an advanced
+ * reconnection flow that follows the rules defined in the assignment.
  */
 public class ClientService implements IClientService {
-    // Propriedades / estados
 
-    public static final String PROP_AUTHENTICATED      = "authenticated";
-    public static final String PROP_NOTIFICATION       = "notification";
-    public static final String PROP_USER_TYPE          = "userType";
-    public static final String PROP_USER_EMAIL         = "userEmail";
-    public static final String PROP_USER_NAME          = "userName";
-    public static final String PROP_STUDENT_NUMBER     = "studentNumber";
-    public static final String PROP_CONNECTION_STATUS  = "connectionStatus";
+    // Observable property names
 
-    public static final String STATUS_CONNECTED             = "CONNECTED";
-    public static final String STATUS_RECONNECTING          = "RECONNECTING";
+    public static final String PROP_AUTHENTICATED = "authenticated";
+    public static final String PROP_NOTIFICATION = "notification";
+    public static final String PROP_USER_TYPE = "userType";
+    public static final String PROP_USER_EMAIL = "userEmail";
+    public static final String PROP_USER_NAME = "userName";
+    public static final String PROP_STUDENT_NUMBER = "studentNumber";
+    public static final String PROP_CONNECTION_STATUS = "connectionStatus";
+
+    // Connection status values
+    public static final String STATUS_CONNECTED = "CONNECTED";
+    public static final String STATUS_RECONNECTING = "RECONNECTING";
     public static final String STATUS_DISCONNECTED_PERMANENT = "DISCONNECTED_PERMANENT";
 
-    // Propriedades específicas para eventos de autenticação
-    public static final String PROP_LOGIN_OK    = "loginOK";
-    public static final String PROP_LOGIN_FAIL  = "loginFail";
+    // Authentication-related events
+    public static final String PROP_LOGIN_OK = "loginOK";
+    public static final String PROP_LOGIN_FAIL = "loginFail";
     public static final String PROP_REGISTER_OK = "registerOK";
 
-    // Propriedades para operações de perguntas/respostas
+    // Question/answer events
     public static final String PROP_CREATE_QUESTION_RESPONSE = "createQuestionResponse";
     public static final String PROP_UPDATE_QUESTION_RESPONSE = "editQuestionResponse";
-    public static final String PROP_LIST_QUESTIONS_RESPONSE  = "listQuestionsResponse";
-    public static final String PROP_JOIN_QUESTION_RESPONSE   = "joinQuestionResponse";
-    public static final String PROP_SUBMIT_ANSWER_OK         = "submitAnswerOk";
-    public static final String PROP_SUBMIT_ANSWER_FAIL       = "submitAnswerFail";
-    public static final String PROP_VIEW_ANSWERS_RESPONSE    = "viewAnswersResponse";
-    public static final String PROP_LIST_ANSWERED_RESPONSE   = "listAnsweredResponse";
-    public static final String PROP_ANSWER_SUBMITTED         = "answerSubmitted";
+    public static final String PROP_LIST_QUESTIONS_RESPONSE = "listQuestionsResponse";
+    public static final String PROP_JOIN_QUESTION_RESPONSE = "joinQuestionResponse";
+    public static final String PROP_SUBMIT_ANSWER_OK = "submitAnswerOk";
+    public static final String PROP_SUBMIT_ANSWER_FAIL = "submitAnswerFail";
+    public static final String PROP_VIEW_ANSWERS_RESPONSE = "viewAnswersResponse";
+    public static final String PROP_LIST_ANSWERED_RESPONSE = "listAnsweredResponse";
+    public static final String PROP_ANSWER_SUBMITTED = "answerSubmitted";
     public static final String PROP_DELETE_QUESTION_RESPONSE = "deleteQuestionResponse";
-    public static final String PROP_UPDATE_PROFILE_OK        = "updateProfileOk";
-    public static final String PROP_UPDATE_PROFILE_FAIL      = "updateProfileFail";
+    public static final String PROP_UPDATE_PROFILE_OK = "updateProfileOk";
+    public static final String PROP_UPDATE_PROFILE_FAIL = "updateProfileFail";
 
     private final PropertyChangeSupport pcs = new PropertyChangeSupport(this);
 
@@ -81,9 +85,9 @@ public class ClientService implements IClientService {
     private int serverTcpPort;
     private String serverTcpHost;
 
-    private static final int DATAGRAM_PACKET_SIZE   = 1024;
-    private static final int DISCOVERY_TIMEOUT_MS   = 5000;
-    private static final int CONNECTION_TIMEOUT_MS  = 10000;
+    private static final int DATAGRAM_PACKET_SIZE = 1024;
+    private static final int DISCOVERY_TIMEOUT_MS = 5000;
+    private static final int CONNECTION_TIMEOUT_MS = 10000;
 
     private Thread tListener, tSender, tHandler;
     private DatagramSocket udpSocket;
@@ -91,45 +95,54 @@ public class ClientService implements IClientService {
     private ObjectOutputStream out;
     private ObjectInputStream in;
 
-    private final BlockingQueue<TcpMessage<? extends Serializable>> requestQueue  = new LinkedBlockingQueue<>();
-    private final BlockingQueue<TcpMessage<? extends Serializable>> responseQueue = new LinkedBlockingQueue<>();
+    private final BlockingQueue<TcpMessage<? extends Serializable>> requestQueue =
+            new LinkedBlockingQueue<>();
+    private final BlockingQueue<TcpMessage<? extends Serializable>> responseQueue =
+            new LinkedBlockingQueue<>();
 
     private volatile boolean running = false;
 
     private final ClientManager manager;
 
-    // Controlo de reconexão “avançado”
+    // Advanced reconnection control
     private final Object reconLock = new Object();
     private volatile boolean reconInProgress = false;
 
-    // Suporte para eventual reautenticação após reconexão
+    // Support for potential re-authentication after reconnection
     private volatile String sessionIdForReauth = null;
 
+    /**
+     * Creates a new client service.
+     *
+     * @param manager          client manager
+     * @param directoryUdpPort UDP port of the directory service
+     * @param directoryHost    host of the directory service
+     */
     public ClientService(ClientManager manager, int directoryUdpPort, String directoryHost) {
         this.manager = manager;
         this.directoryUdpPort = directoryUdpPort;
         this.directoryHost = directoryHost;
     }
 
-    /* ==================== Gestão de Observadores ==================== */
+    /* ==================== Observer Management ==================== */
 
-    public void addPropertyChangeListener(PropertyChangeListener l){
+    public void addPropertyChangeListener(PropertyChangeListener l) {
         pcs.addPropertyChangeListener(l);
     }
 
-    public void addPropertyChangeListener(String prop, PropertyChangeListener l){
+    public void addPropertyChangeListener(String prop, PropertyChangeListener l) {
         pcs.addPropertyChangeListener(prop, l);
     }
 
-    public void removePropertyChangeListener(String prop, PropertyChangeListener l){
+    public void removePropertyChangeListener(String prop, PropertyChangeListener l) {
         pcs.removePropertyChangeListener(prop, l);
     }
 
-    public void pushNotification(String text){
+    public void pushNotification(String text) {
         pcs.firePropertyChange(PROP_NOTIFICATION, null, text);
     }
 
-    /* ==================== Fila de Mensagens ==================== */
+    /* ==================== Message Queues ==================== */
 
     @Override
     public BlockingQueue<TcpMessage<? extends Serializable>> getRequestQueue() {
@@ -141,45 +154,69 @@ public class ClientService implements IClientService {
         return responseQueue;
     }
 
-    /** Enfileira uma mensagem para ser enviada pela thread RequestSenderThread. */
+    /**
+     * Enqueues a message to be sent by {@link RequestSenderThread}.
+     *
+     * @param tcpMessage message to send
+     */
     public void sendMessage(TcpMessage<? extends Serializable> tcpMessage) {
         try {
             requestQueue.put(tcpMessage);
         } catch (InterruptedException e) {
-            System.err.println("[ClientService] Failed to queue message: " + e.getMessage());
+            Log.error(ClientService.class, "Failed to queue message: " + e.getMessage(), e);
             Thread.currentThread().interrupt();
         }
     }
 
-    /** Bloqueia até obter uma resposta da fila. */
+    /**
+     * Blocks until a response is available in the response queue.
+     *
+     * @return next response message
+     * @throws InterruptedException if interrupted while waiting
+     */
     public TcpMessage<? extends Serializable> waitForResponse() throws InterruptedException {
         return responseQueue.take();
     }
 
-    /** Bloqueia até obter uma resposta da fila durante um determinado timeout. */
+    /**
+     * Blocks until a response is available in the response queue or timeout expires.
+     *
+     * @param timeoutMs timeout in milliseconds
+     * @return response message or {@code null} on timeout
+     * @throws InterruptedException if interrupted while waiting
+     */
     public TcpMessage<? extends Serializable> waitForResponse(long timeoutMs) throws InterruptedException {
         return responseQueue.poll(timeoutMs, TimeUnit.MILLISECONDS);
     }
 
-    /* ==================== Ciclo de Vida ==================== */
+    /* ==================== Lifecycle ==================== */
 
-    public boolean run(){
+    /**
+     * Starts the discovery and connection process and, if successful,
+     * launches the listener/sender/handler threads.
+     *
+     * @return {@code true} if the initial connection succeeds
+     */
+    public boolean run() {
         pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "DIRECTORY_CONNECTING");
         boolean discovered = false;
-        for (int i = 0; i < 3 && !discovered; i++)
+        for (int i = 0; i < 3 && !discovered; i++) {
             discovered = discoverServer();
+        }
 
-        if (!discovered){
+        if (!discovered) {
             pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "DIRECTORY_ERROR");
             return false;
         }
 
         pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "SERVER_CONNECTING");
-        if (!connectToServer()){
+        if (!connectToServer()) {
             pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "SERVER_ERROR");
             try {
                 Thread.sleep(3000);
-            } catch (InterruptedException ignored) { }
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            }
             return false;
         }
 
@@ -189,21 +226,34 @@ public class ClientService implements IClientService {
         return true;
     }
 
-    public void stop(){
+    /**
+     * Stops the service, interrupts threads and closes connections.
+     */
+    public void stop() {
         running = false;
 
-        if (tListener != null) tListener.interrupt();
-        if (tSender   != null) tSender.interrupt();
-        if (tHandler  != null) tHandler.interrupt();
+        if (tListener != null) {
+            tListener.interrupt();
+        }
+        if (tSender != null) {
+            tSender.interrupt();
+        }
+        if (tHandler != null) {
+            tHandler.interrupt();
+        }
 
         closeConnection();
 
-        if (udpSocket != null && !udpSocket.isClosed())
+        if (udpSocket != null && !udpSocket.isClosed()) {
             udpSocket.close();
+        }
 
         pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "DISCONNECTED");
     }
 
+    /**
+     * Clears authentication-related data.
+     */
     public void logout() {
         setAuthenticated(false);
         setUserType(null);
@@ -213,12 +263,18 @@ public class ClientService implements IClientService {
         setUserName(null);
     }
 
-    /* ==================== Descoberta de Servidor via UDP ==================== */
+    /* ==================== Server Discovery via UDP ==================== */
 
+    /**
+     * Discovers the principal server via the directory (UDP).
+     *
+     * @return {@code true} if the server was discovered successfully
+     */
     private boolean discoverServer() {
         try {
-            if (udpSocket == null || udpSocket.isClosed())
+            if (udpSocket == null || udpSocket.isClosed()) {
                 udpSocket = new DatagramSocket();
+            }
 
             udpSocket.setSoTimeout(DISCOVERY_TIMEOUT_MS);
 
@@ -235,41 +291,49 @@ public class ClientService implements IClientService {
             udpSocket.receive(receive);
 
             String msg = new String(receive.getData(), 0, receive.getLength()).trim();
-            if (!msg.startsWith("200 PRINCIPAL"))
+            if (!msg.startsWith("200 PRINCIPAL")) {
                 return false;
+            }
 
             String target = msg.substring("200 PRINCIPAL ".length()).trim();
             int idx = target.lastIndexOf(':');
-            if (idx <= 0) return false;
+            if (idx <= 0) {
+                return false;
+            }
 
             serverTcpHost = target.substring(0, idx);
             serverTcpPort = Integer.parseInt(target.substring(idx + 1));
             return true;
 
-        } catch (Exception e){
-            System.err.println("[ClientService] Discovery failed: " + e.getMessage());
+        } catch (Exception e) {
+            Log.error(ClientService.class, "Discovery failed: " + e.getMessage(), e);
             return false;
         }
     }
 
-    /* ==================== Conexão TCP ao Servidor (Handshake) ==================== */
+    /* ==================== TCP Connection & Handshake ==================== */
 
+    /**
+     * Establishes a TCP connection to the server and performs the handshake.
+     *
+     * @return {@code true} if the handshake succeeds
+     */
     private boolean connectToServer() {
         try {
             tcpSocket = new Socket();
             tcpSocket.connect(new InetSocketAddress(serverTcpHost, serverTcpPort), CONNECTION_TIMEOUT_MS);
 
-            // Cria streams temporários para o handshake
+            // Create temporary streams for handshake
             ObjectOutputStream tmpOut = new ObjectOutputStream(tcpSocket.getOutputStream());
             tmpOut.flush();
             ObjectInputStream tmpIn = new ObjectInputStream(tcpSocket.getInputStream());
 
-            // timeout apenas para fase de handshake
+            // Temporary timeout for handshake phase
             tcpSocket.setSoTimeout(CONNECTION_TIMEOUT_MS);
             try {
                 Object obj = tmpIn.readObject();
                 if (!(obj instanceof TcpMessage<?>)) {
-                    System.err.println("[ClientService] Unexpected handshake object: " + obj);
+                    Log.error(ClientService.class, "Unexpected handshake object: " + obj);
                     tmpIn.close();
                     tmpOut.close();
                     tcpSocket.close();
@@ -279,21 +343,23 @@ public class ClientService implements IClientService {
                 TcpMessage<?> handshake = (TcpMessage<?>) obj;
                 switch (handshake.getType()) {
                     case ACK -> {
-                        // Handshake OK: usamos estes streams como definitivos
+                        // Handshake OK: use these streams as final
                         out = tmpOut;
-                        in  = tmpIn;
-                        tcpSocket.setSoTimeout(0); // volta para blocking normal
+                        in = tmpIn;
+                        tcpSocket.setSoTimeout(0); // back to normal blocking
                         return true;
                     }
                     case NACK -> {
-                        System.err.println("[ClientService] Server refused connection: " + handshake.getData());
+                        Log.error(ClientService.class,
+                                "Server refused connection: " + handshake.getData());
                         tmpIn.close();
                         tmpOut.close();
                         tcpSocket.close();
                         return false;
                     }
                     default -> {
-                        System.err.println("[ClientService] Unexpected handshake message: " + handshake.getType());
+                        Log.error(ClientService.class,
+                                "Unexpected handshake message: " + handshake.getType());
                         tmpIn.close();
                         tmpOut.close();
                         tcpSocket.close();
@@ -301,7 +367,7 @@ public class ClientService implements IClientService {
                     }
                 }
             } catch (ClassNotFoundException e) {
-                System.err.println("[ClientService] Handshake failed: " + e.getMessage());
+                Log.error(ClientService.class, "Handshake failed: " + e.getMessage(), e);
                 tmpIn.close();
                 tmpOut.close();
                 tcpSocket.close();
@@ -309,54 +375,99 @@ public class ClientService implements IClientService {
             }
 
         } catch (IOException e) {
-            System.err.println("[ClientService] Error connecting TCP: " + e.getMessage());
+            Log.error(ClientService.class, "Error connecting TCP: " + e.getMessage(), e);
             closeConnection();
             return false;
         }
     }
 
-    private void closeConnection(){
-        try { if (in != null) in.close(); }  catch (Exception ignored) {}
-        try { if (out != null) out.close(); } catch (Exception ignored) {}
+    /**
+     * Closes the TCP connection and associated streams.
+     */
+    private void closeConnection() {
         try {
-            if (tcpSocket != null && !tcpSocket.isClosed())
+            if (in != null) {
+                in.close();
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            if (out != null) {
+                out.close();
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            if (tcpSocket != null && !tcpSocket.isClosed()) {
                 tcpSocket.close();
-        } catch (Exception ignored) {}
+            }
+        } catch (Exception ignored) {
+        }
 
         in = null;
         out = null;
         tcpSocket = null;
     }
 
-    private void startThreads(){
-        tListener = new Thread(new ClientListenerThread(this),  "ClientListener");
-        tSender   = new Thread(new RequestSenderThread(this),   "RequestSender");
-        tHandler  = new Thread(new ResponseHandlerThread(this), "ResponseHandler");
+    /**
+     * Starts listener, sender and handler threads.
+     */
+    private void startThreads() {
+        tListener = new Thread(new ClientListenerThread(this), "ClientListener");
+        tSender = new Thread(new RequestSenderThread(this), "RequestSender");
+        tHandler = new Thread(new ResponseHandlerThread(this), "ResponseHandler");
 
         tListener.start();
         tSender.start();
         tHandler.start();
     }
 
+    /**
+     * Attempts to stop threads gracefully.
+     */
     private void stopThreadsGracefully() {
-        if (tSender != null) tSender.interrupt();
-        if (tListener != null) tListener.interrupt();
-        if (tHandler != null) tHandler.interrupt();
-        try { if (tSender != null) tSender.join(1000); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
-        try { if (tListener != null) tListener.join(1000); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
-        try { if (tHandler != null) tHandler.join(1000); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+        if (tSender != null) {
+            tSender.interrupt();
+        }
+        if (tListener != null) {
+            tListener.interrupt();
+        }
+        if (tHandler != null) {
+            tHandler.interrupt();
+        }
+        try {
+            if (tSender != null) {
+                tSender.join(1000);
+            }
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+        }
+        try {
+            if (tListener != null) {
+                tListener.join(1000);
+            }
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+        }
+        try {
+            if (tHandler != null) {
+                tHandler.join(1000);
+            }
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+        }
         tSender = null;
         tListener = null;
         tHandler = null;
     }
 
-    /* ==================== Reconexão (fluxo avançado) ==================== */
+    /* ==================== Advanced Reconnection Flow ==================== */
 
     @Override
     public void handleConnectionLost() {
         synchronized (reconLock) {
             if (reconInProgress) {
-                System.out.println("[ClientService] Reconnection already in progress");
+                Log.info(ClientService.class, "Reconnection already in progress");
                 return;
             }
             reconInProgress = true;
@@ -367,6 +478,16 @@ public class ClientService implements IClientService {
         worker.start();
     }
 
+    /**
+     * Implements the reconnection logic:
+     * <ul>
+     *     <li>Stops threads and closes current connection</li>
+     *     <li>Rediscovers server via directory</li>
+     *     <li>Decides whether server address changed</li>
+     *     <li>Attempts reconnection within specific time windows</li>
+     * </ul>
+     * If all attempts fail, notifies permanent disconnection and stops the client.
+     */
     private void doReconnectionFlow() {
         try {
             pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, STATUS_RECONNECTING);
@@ -374,14 +495,18 @@ public class ClientService implements IClientService {
             String oldHost = serverTcpHost;
             int oldPort = serverTcpPort;
 
-            // parar threads e fechar ligação atual
+            // Stop threads and close current connection
             stopThreadsGracefully();
             closeConnection();
 
-            // 1) perguntar à diretoria de novo
+            // 1) Ask directory again
             boolean discovered = discoverServer();
             if (!discovered) {
-                try { Thread.sleep(20_000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                try {
+                    Thread.sleep(20_000);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
                 discovered = discoverServer();
                 if (!discovered) {
                     pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, STATUS_DISCONNECTED_PERMANENT);
@@ -396,16 +521,21 @@ public class ClientService implements IClientService {
                             oldPort != serverTcpPort;
 
             if (hostChanged) {
-                // servidor mudou: tenta ligar ao novo até 17s
-                if (attemptReconnectWindow(17_000))
-                    return; // se der, threads são reiniciadas dentro de attemptReconnectWindow
+                // Server changed: try to connect to the new one for up to 17s
+                if (attemptReconnectWindow(17_000)) {
+                    return;
+                }
                 pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, STATUS_DISCONNECTED_PERMANENT);
                 manager.stop();
                 return;
             }
 
-            // mesmo servidor: espera 20s e tenta de novo descobrir
-            try { Thread.sleep(20_000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+            // Same server: wait 20s and try discovery again
+            try {
+                Thread.sleep(20_000);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+            }
             discovered = discoverServer();
             if (!discovered) {
                 pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, STATUS_DISCONNECTED_PERMANENT);
@@ -419,16 +549,18 @@ public class ClientService implements IClientService {
                             oldPort != serverTcpPort;
 
             if (nowChanged) {
-                if (attemptReconnectWindow(17_000))
+                if (attemptReconnectWindow(17_000)) {
                     return;
+                }
                 pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, STATUS_DISCONNECTED_PERMANENT);
                 manager.stop();
                 return;
             }
 
-            // ainda o mesmo: tenta ligar ao mesmo servidor até 17s
-            if (attemptReconnectWindow(17_000))
+            // Still the same: try to connect to the same server for 17s
+            if (attemptReconnectWindow(17_000)) {
                 return;
+            }
 
             pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, STATUS_DISCONNECTED_PERMANENT);
             manager.stop();
@@ -437,61 +569,96 @@ public class ClientService implements IClientService {
         }
     }
 
+    /**
+     * Attempts to reconnect within a maximum time window.
+     *
+     * @param maxMillis maximum time allowed for reconnection attempts
+     * @return {@code true} if reconnection succeeds within the time window
+     */
     private boolean attemptReconnectWindow(long maxMillis) {
         final long deadline = System.currentTimeMillis() + maxMillis;
         while (System.currentTimeMillis() < deadline && !Thread.currentThread().isInterrupted()) {
             if (connectToServer()) {
-                // aqui poderias tentar uma reautenticação automática se o servidor suportar
-                attemptReauth(); // atualmente faz sempre "true" (stub)
+                // Here we could attempt transparent re-authentication if supported by the server
+                attemptReauth(); // current stub always returns true
                 pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, STATUS_CONNECTED);
                 running = true;
                 startThreads();
                 return true;
             }
-            try { Thread.sleep(500); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                break;
+            }
         }
         return false;
     }
 
-    /* ==================== Reauth suporte (otimista) ==================== */
+    /* ==================== Re-auth Support (optimistic) ==================== */
 
-    // Por enquanto é só um stub, o servidor ainda não tem mensagem explícita de REAUTH
+    /**
+     * Stub for future transparent re-authentication using {@code sessionIdForReauth}.
+     *
+     * @return {@code true} (currently a no-op)
+     */
     private boolean attemptReauth() {
-        // aqui no futuro podes usar sessionIdForReauth para uma mensagem de re-login transparente
+        // In the future this could use sessionIdForReauth to perform a transparent re-login
         return true;
     }
 
-    /* ==================== Implementação de IClientService ==================== */
+    /* ==================== IClientService Implementation ==================== */
 
     @Override
-    public ObjectInputStream getInputStream() { return in; }
+    public ObjectInputStream getInputStream() {
+        return in;
+    }
 
     @Override
-    public ObjectOutputStream getOutputStream() { return out; }
+    public ObjectOutputStream getOutputStream() {
+        return out;
+    }
 
     @Override
-    public boolean isRunning() { return running; }
+    public boolean isRunning() {
+        return running;
+    }
 
     @Override
-    public Socket getTcpSocket() { return tcpSocket; }
+    public Socket getTcpSocket() {
+        return tcpSocket;
+    }
 
     @Override
-    public boolean isAuthenticated(){ return authenticated; }
+    public boolean isAuthenticated() {
+        return authenticated;
+    }
 
     @Override
-    public Integer getUserId() { return userId; }
+    public Integer getUserId() {
+        return userId;
+    }
 
     @Override
-    public Integer getStudentNumber() { return studentNumber; }
+    public Integer getStudentNumber() {
+        return studentNumber;
+    }
 
     @Override
-    public String  getUserType(){ return userType; }
+    public String getUserType() {
+        return userType;
+    }
 
     @Override
-    public String  getUserEmail(){ return userEmail; }
+    public String getUserEmail() {
+        return userEmail;
+    }
 
     @Override
-    public String getUserName() { return userName; }
+    public String getUserName() {
+        return userName;
+    }
 
     @Override
     public void setUserName(String n) {
@@ -501,7 +668,9 @@ public class ClientService implements IClientService {
     }
 
     @Override
-    public void setUserId(Integer id) { this.userId = id; }
+    public void setUserId(Integer id) {
+        this.userId = id;
+    }
 
     @Override
     public void setStudentNumber(Integer number) {
@@ -511,28 +680,28 @@ public class ClientService implements IClientService {
     }
 
     @Override
-    public void setAuthenticated(boolean auth){
+    public void setAuthenticated(boolean auth) {
         boolean old = this.authenticated;
         this.authenticated = auth;
         pcs.firePropertyChange(PROP_AUTHENTICATED, old, auth);
     }
 
     @Override
-    public void setUserType(String t){
+    public void setUserType(String t) {
         String old = this.userType;
         this.userType = t;
         pcs.firePropertyChange(PROP_USER_TYPE, old, t);
     }
 
     @Override
-    public void setUserEmail(String e){
+    public void setUserEmail(String e) {
         String old = this.userEmail;
         this.userEmail = e;
         pcs.firePropertyChange(PROP_USER_EMAIL, old, e);
     }
 
     @Override
-    public void setPropLoginOk(AuthResponseDTO dto){
+    public void setPropLoginOk(AuthResponseDTO dto) {
         setAuthenticated(true);
         setUserId(Integer.parseInt(dto.userId()));
         setUserType(dto.userType());
@@ -541,62 +710,61 @@ public class ClientService implements IClientService {
         if ("STUDENT".equals(dto.userType())) {
             setStudentNumber(dto.studentNumber());
         }
-        // guarda sessionId para futura reauth
+        // store sessionId for potential re-authentication
         sessionIdForReauth = dto.sessionId();
-        pcs.firePropertyChange(PROP_LOGIN_OK, null , dto);
+        pcs.firePropertyChange(PROP_LOGIN_OK, null, dto);
     }
 
     @Override
-    public void setPropError(String s){
-        pcs.firePropertyChange(PROP_LOGIN_FAIL, null , s);
+    public void setPropError(String s) {
+        pcs.firePropertyChange(PROP_LOGIN_FAIL, null, s);
     }
 
     @Override
-    public void setPropRegisterOk(AuthResponseDTO dto){
-        // reutiliza a lógica do login
-        //setPropLoginOk(dto);
-        pcs.firePropertyChange(PROP_REGISTER_OK, null , dto);
+    public void setPropRegisterOk(AuthResponseDTO dto) {
+        // Do not automatically authenticate; just notify the registration
+        pcs.firePropertyChange(PROP_REGISTER_OK, null, dto);
     }
 
-    /* ======= Eventos para perguntas/respostas ======= */
+    /* ======= Question/Answer Events ======= */
 
     @Override
-    public void setPropCreateQuestionResponse(CreateQuestionResponseDTO dto){
+    public void setPropCreateQuestionResponse(CreateQuestionResponseDTO dto) {
         pcs.firePropertyChange(PROP_CREATE_QUESTION_RESPONSE, null, dto);
     }
 
     @Override
-    public void setPropEditQuestionResponse(String message){
+    public void setPropEditQuestionResponse(String message) {
         pcs.firePropertyChange(PROP_UPDATE_QUESTION_RESPONSE, null, message);
     }
 
     @Override
-    public void setPropListQuestionsResponse(List<Question> questions){
+    public void setPropListQuestionsResponse(List<Question> questions) {
         pcs.firePropertyChange(PROP_LIST_QUESTIONS_RESPONSE, null, questions);
     }
 
     @Override
-    public void setPropJoinQuestionResponse(Question question){
+    public void setPropJoinQuestionResponse(Question question) {
         pcs.firePropertyChange(PROP_JOIN_QUESTION_RESPONSE, null, question);
     }
 
     @Override
-    public void setPropSubmitAnswerOk(String message){
+    public void setPropSubmitAnswerOk(String message) {
         pcs.firePropertyChange(PROP_SUBMIT_ANSWER_OK, null, message);
     }
 
     @Override
-    public void setPropSubmitAnswerFail(String message){
+    public void setPropSubmitAnswerFail(String message) {
         pcs.firePropertyChange(PROP_SUBMIT_ANSWER_FAIL, null, message);
     }
 
     @Override
-    public void setPropViewAnswersResponse(List<Answer> answers){
+    public void setPropViewAnswersResponse(List<Answer> answers) {
         pcs.firePropertyChange(PROP_VIEW_ANSWERS_RESPONSE, null, answers);
     }
 
     @Override
-    public void setPropListAnsweredResponse(List<Answer> answers){
+    public void setPropListAnsweredResponse(List<Answer> answers) {
         pcs.firePropertyChange(PROP_LIST_ANSWERED_RESPONSE, null, answers);
     }
 

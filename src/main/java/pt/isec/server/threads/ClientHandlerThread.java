@@ -1,4 +1,5 @@
 package pt.isec.server.threads;
+
 import pt.isec.common.dto.answer.SubmitAnswerDTO;
 import pt.isec.common.dto.answer.ViewAnswersDTO;
 import pt.isec.common.dto.auth.*;
@@ -8,6 +9,7 @@ import pt.isec.common.messages.MessageType;
 import pt.isec.server.core.IServerManager;
 import pt.isec.common.model.question.Question;
 import pt.isec.common.util.Log;
+
 import java.io.IOException;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
@@ -16,7 +18,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Thread responsável por tratar a comunicação com um cliente.
+ * Thread responsible for handling all communication with a single client
+ * for the duration of its TCP session.
  */
 public class ClientHandlerThread implements Runnable, AutoCloseable {
     private static final int FIRST_MESSAGE_TIMEOUT_SEC = 30;
@@ -26,80 +29,104 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
     private final NetworkTcpConnection connection;
 
     private Long loggerUserId = null;
-    private String sessionId  = null;
+    private String sessionId = null;
 
+    /**
+     * Creates a new handler for a given client connection.
+     *
+     * @param threadInfo server manager context
+     * @param connection TCP connection with the client
+     */
     public ClientHandlerThread(IServerManager threadInfo, NetworkTcpConnection connection) {
         this.threadInfo = threadInfo;
         this.connection = connection;
     }
 
+    /**
+     * Main loop:
+     * <ul>
+     *     <li>Applies an initial timeout for the first message</li>
+     *     <li>Refuses the connection if this node is not the primary</li>
+     *     <li>Otherwise, sends an ACK and processes incoming messages</li>
+     * </ul>
+     * Handles timeouts, socket errors and closes the connection on exit.
+     */
     @Override
     public void run() {
         try {
-            //Define timout de 30 segundos de ligação TCP ao cliente
+            // Initial 30-second timeout for the first client message
             connection.setReadTimeout(Duration.ofSeconds(FIRST_MESSAGE_TIMEOUT_SEC));
 
-            // se o servidor não for primário, rejeita
+            // If server is not primary, refuse connection
             if (!threadInfo.isPrimary()) {
                 connection.sendMessage(new TcpMessage<>(MessageType.NACK, "not-primary"));
                 return;
             }
 
-            // ligação aceite
+            // Connection accepted
             connection.sendMessage(new TcpMessage<>(MessageType.ACK, "ok"));
-            //connection.setReadTimeout(NO_TIMEOUT);
+            // connection.setReadTimeout(NO_TIMEOUT);
 
             while (threadInfo.isRunning()) {
                 TcpMessage<?> msg = connection.receiveMessage();
-                if (msg == null)
+                if (msg == null) {
                     break;
+                }
                 processMessage(msg);
             }
-        }
-        //Quando atingir o timeout de 30 segs
-        catch(SocketTimeoutException e){
+        } catch (SocketTimeoutException e) {
             if (!threadInfo.isRunning()) {
-                // Timeout porque estamos em shutdown – terminar silenciosamente
+                // Timeout during shutdown – expected behavior
                 Log.info(ClientHandlerThread.class,
-                        "Ligação ao cliente terminada devido a shutdown do servidor.");
+                        "[TCP] Client connection terminated due to server shutdown.");
             } else {
                 Log.error(ClientHandlerThread.class,
-                        "Timeout de ligação TCP atingido: " + e.getMessage());
-                // aqui podes decidir se queres cair fora ou continuar;
-                // se mantiveres o while(threadInfo.isRunning()), ele vai repetir até haver mensagem ou shutdown
+                        "[TCP] Read timeout on client connection: %s", e.getMessage());
             }
-        }
-        catch (SocketException e) {
+        } catch (SocketException e) {
             if (!threadInfo.isRunning()) {
-                // socket foi fechado durante o shutdown – comportamento esperado
+                // Socket closed during shutdown
                 Log.info(ClientHandlerThread.class,
-                        "Socket TCP fechado durante shutdown do servidor.");
+                        "[TCP] Client socket closed during server shutdown.");
             } else {
                 Log.error(ClientHandlerThread.class,
-                        "Ligação ao cliente encerrada (socket): " + e.getMessage());
-                // aqui, se quiseres, podes fazer e.printStackTrace();
+                        "[TCP] Client connection closed due to socket error: %s", e.getMessage());
             }
-        }
-        catch (Exception e) {
-            Log.error(ClientHandlerThread.class, "Ligação ao cliente encerrada com exceção: " + e.getMessage());
+        } catch (Exception e) {
+            Log.error(ClientHandlerThread.class,
+                    "[TCP] Client connection closed due to unexpected exception: %s", e.getMessage());
             e.printStackTrace();
         } finally {
-            Log.info(ClientHandlerThread.class, "ClientHandlerThread terminada.");
+            Log.info(ClientHandlerThread.class,
+                    "Client handler thread terminated (client connection closed).");
             if (loggerUserId != null) {
-                try { threadInfo.unregisterClientConnection(loggerUserId); } catch (Exception ignored) {}
+                try {
+                    threadInfo.unregisterClientConnection(loggerUserId);
+                } catch (Exception ignored) {
+                }
                 threadInfo.unregisterLogin(loggerUserId);
             }
-            try { connection.close(); } catch (IOException ignored) {}
+            try {
+                connection.close();
+            } catch (IOException ignored) {
+            }
         }
     }
 
-    // Recebe mensagens do cliente
+    /**
+     * Receives and processes messages from the client according to their {@link MessageType}.
+     *
+     * @param tcpMessage message received from the client
+     * @throws Exception if a service call fails
+     */
     private void processMessage(TcpMessage<?> tcpMessage) throws Exception {
-        if (tcpMessage == null) return;
+        if (tcpMessage == null) {
+            return;
+        }
 
         switch (tcpMessage.getType()) {
 
-            /* ========= AUTENTICAÇÃO ========= */
+            /* ========= AUTH ========= */
 
             case REGISTER_STUDENT -> {
                 try {
@@ -128,18 +155,24 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
 
                     long userId = Long.parseLong(res.userId());
 
-                    // Se já houver sessão registada para este user, limpa-a mas NÃO recusa o login
+                    // If a session is already registered for this user, clear it but do NOT refuse login
                     try {
                         if (threadInfo.isUserLogged(userId)) {
                             threadInfo.unregisterClientConnection(userId);
                             threadInfo.unregisterLogin(userId);
                         }
-                    } catch (Exception ignored) { }
+                    } catch (Exception ignored) {
+                    }
+
                     threadInfo.registerLogin(userId, res.sessionId());
                     this.loggerUserId = userId;
-                    this.sessionId    = res.sessionId();
-                    // regista também a conexão activa para permitir notificações do servidor a este cliente
-                    try { threadInfo.registerClientConnection(userId, connection); } catch (Exception ignored) {}
+                    this.sessionId = res.sessionId();
+
+                    // Also register active connection to allow server-to-client notifications
+                    try {
+                        threadInfo.registerClientConnection(userId, connection);
+                    } catch (Exception ignored) {
+                    }
 
                     connection.sendMessage(new TcpMessage<>(MessageType.LOGIN_OK, res, AuthResponseDTO.class));
                     connection.setReadTimeout(NO_TIMEOUT);
@@ -150,18 +183,21 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
 
             case LOGOUT -> {
                 if (loggerUserId != null) {
-                    try { threadInfo.unregisterClientConnection(loggerUserId); } catch (Exception ignored) {}
+                    try {
+                        threadInfo.unregisterClientConnection(loggerUserId);
+                    } catch (Exception ignored) {
+                    }
                     threadInfo.unregisterLogin(loggerUserId);
                     loggerUserId = null;
-                    sessionId    = null;
+                    sessionId = null;
                 }
-                //Define timout de 30 segundos de ligação TCP ao cliente
+                // Apply 30-second timeout again for a possible new session
                 connection.setReadTimeout(Duration.ofSeconds(FIRST_MESSAGE_TIMEOUT_SEC));
-                //envia mensagem ao cliente do logout
+                // Send logout confirmation
                 connection.sendMessage(new TcpMessage<>(MessageType.ACK, "logout-ok", String.class));
             }
 
-            /* ========= PERGUNTAS (DOCENTE) ========= */
+            /* ========= QUESTIONS (TEACHER) ========= */
 
             case CREATE_QUESTION -> {
                 try {
@@ -197,7 +233,8 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                             ok ? "delete-ok" : "delete-fail",
                             String.class
                     ));
-                } catch (IllegalStateException e) { // pergunta com respostas, etc.
+                } catch (IllegalStateException e) {
+                    // question with answers, etc.
                     connection.sendMessage(new TcpMessage<>(MessageType.NACK, e.getMessage(), String.class));
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
@@ -220,22 +257,23 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                 }
             }
 
-            /* ========= PERGUNTAS (ALUNO) ========= */
+            /* ========= QUESTIONS (STUDENT) ========= */
 
             case JOIN_QUESTION -> {
                 try {
                     JoinQuestionDTO dto = tcpMessage.getDataAs(JoinQuestionDTO.class);
                     Question q = threadInfo.getQuestionService().joinQuestion(dto);
-                    if (q == null)
+                    if (q == null) {
                         connection.sendMessage(new TcpMessage<>(MessageType.NACK, "invalid-code", String.class));
-                    else
+                    } else {
                         connection.sendMessage(new TcpMessage<>(MessageType.QUESTION_DETAILS, q, Question.class));
+                    }
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
                 }
             }
 
-            /* ========= RESPOSTAS ========= */
+            /* ========= ANSWERS ========= */
 
             case SUBMIT_ANSWER -> {
                 try {
@@ -267,7 +305,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                 }
             }
 
-            /* ========= PERFIL ========= */
+            /* ========= PROFILE ========= */
 
             case UPDATE_STUDENT -> {
                 try {
@@ -313,11 +351,14 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
         }
     }
 
-    // Encerra o servidor depois da diretoria terminar. Impede que fique preso no connection
+    /**
+     * Closes the underlying TCP connection of this handler.
+     */
     @Override
     public void close() {
         try {
             connection.close();
-        } catch (IOException ignored) {}
+        } catch (IOException ignored) {
+        }
     }
 }

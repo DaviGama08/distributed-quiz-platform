@@ -19,9 +19,14 @@ pergunta durante o respetivo período"
 3)
 O professor pode: "Eliminar uma pergunta, desde que ainda não tenha qualquer resposta associada;"
 Logo precisamos de um código associado a esse professor --teacherId--
-* */
+*/
+
+/**
+ * Represents a multiple choice question with a time window and access code.
+ */
 public final class Question implements Serializable {
     private static final long serialVersionUID = 1L;
+
     private Integer id;
     private QuestionState state;
     private String statement;
@@ -32,8 +37,22 @@ public final class Question implements Serializable {
     private Integer teacherId;
     private List<Option> options;
 
+    /**
+     * Default constructor (for serialization frameworks).
+     */
     public Question() {}
 
+    /**
+     * Constructs a new question without an id.
+     *
+     * @param statement     question text
+     * @param teacherId     teacher owner id
+     * @param options       list of options (at least two, unique letters)
+     * @param startAt       start date/time
+     * @param endAt         end date/time (must be after start)
+     * @param correctOption correct option letter
+     * @param accessCode    access code (may be {@code null})
+     */
     public Question(String statement, Integer teacherId, List<Option> options,
                     LocalDateTime startAt, LocalDateTime endAt,
                     OptionLetter correctOption, String accessCode) {
@@ -41,7 +60,7 @@ public final class Question implements Serializable {
         this.id = null;
         this.statement = statement;
         this.teacherId = teacherId;
-        this.options = List.copyOf(options); // evita modificação externa
+        this.options = List.copyOf(options); // avoid external modification
         this.startAt = startAt;
         this.endAt = endAt;
         this.correctOption = correctOption;
@@ -49,11 +68,25 @@ public final class Question implements Serializable {
         this.state = computeState(startAt, endAt, LocalDateTime.now());
     }
 
+    /**
+     * Constructs a question with an id.
+     *
+     * @param id            question id (must be &gt; 0 if not {@code null})
+     * @param statement     question text
+     * @param teacherId     teacher owner id
+     * @param options       list of options
+     * @param startAt       start date/time
+     * @param endAt         end date/time
+     * @param correctOption correct option letter
+     * @param accessCode    access code (may be {@code null})
+     */
     public Question(Integer id, String statement, Integer teacherId, List<Option> options,
                     LocalDateTime startAt, LocalDateTime endAt,
                     OptionLetter correctOption, String accessCode) {
         validate(statement, teacherId, options, startAt, endAt, correctOption, accessCode);
-        if (id != null && id <= 0) throw new IllegalArgumentException("id must be > 0 if provided");
+        if (id != null && id <= 0) {
+            throw new IllegalArgumentException("id must be > 0 if provided");
+        }
         this.id = id;
         this.statement = statement;
         this.teacherId = teacherId;
@@ -65,66 +98,83 @@ public final class Question implements Serializable {
         this.state = computeState(startAt, endAt, LocalDateTime.now());
     }
 
-    //gets/sets
+    // setters with validation
+
     public void setAccessCode(String accessCode) {
-        if (accessCode != null && accessCode.isBlank())
+        if (accessCode != null && accessCode.isBlank()) {
             throw new IllegalArgumentException("accessCode cannot be blank if provided");
+        }
         this.accessCode = accessCode;
     }
 
     public void setStartAt(LocalDateTime startAt) {
-        if (startAt == null) throw new IllegalArgumentException("startAt cannot be null");
-        if (this.endAt != null && !this.endAt.isAfter(startAt))
+        if (startAt == null) {
+            throw new IllegalArgumentException("startAt cannot be null");
+        }
+        if (this.endAt != null && !this.endAt.isAfter(startAt)) {
             throw new IllegalArgumentException("endAt must be after startAt");
+        }
         this.startAt = startAt;
         refreshState();
     }
 
     public void setEndAt(LocalDateTime endAt) {
-        if (endAt == null) throw new IllegalArgumentException("endAt cannot be null");
-        if (this.startAt != null && !endAt.isAfter(this.startAt))
+        if (endAt == null) {
+            throw new IllegalArgumentException("endAt cannot be null");
+        }
+        if (this.startAt != null && !endAt.isAfter(this.startAt)) {
             throw new IllegalArgumentException("endAt must be after startAt");
+        }
         this.endAt = endAt;
         refreshState();
     }
 
     public void setOptions(List<Option> options) {
-        // reusa parte da validação relevante
-        if (options == null || options.size() < 2)
+        if (options == null || options.size() < 2) {
             throw new IllegalArgumentException("there must be at least two options");
+        }
         Set<OptionLetter> seen = new HashSet<>();
         for (Option o : options) {
-            if (o == null || o.getLetter() == null)
+            if (o == null || o.getLetter() == null) {
                 throw new IllegalArgumentException("each option must have a non-null letter");
-            if (!seen.add(o.getLetter()))
+            }
+            if (!seen.add(o.getLetter())) {
                 throw new IllegalArgumentException("duplicate option letter: " + o.getLetter());
+            }
         }
         if (this.correctOption != null &&
-                options.stream().noneMatch(o -> o.getLetter() == this.correctOption))
+                options.stream().noneMatch(o -> o.getLetter() == this.correctOption)) {
             throw new IllegalArgumentException("current correctOption is not present in new options");
+        }
 
         this.options = List.copyOf(options);
     }
 
     public void setCorrectOption(OptionLetter correctOption) {
-        if (correctOption == null) throw new IllegalArgumentException("correctOption cannot be null");
+        if (correctOption == null) {
+            throw new IllegalArgumentException("correctOption cannot be null");
+        }
         if (this.options != null &&
-                this.options.stream().noneMatch(o -> o.getLetter() == correctOption))
+                this.options.stream().noneMatch(o -> o.getLetter() == correctOption)) {
             throw new IllegalArgumentException("correctOption must exist in the options");
+        }
         this.correctOption = correctOption;
     }
 
     public void setStatement(String statement) {
-        if (statement == null || statement.isBlank())
+        if (statement == null || statement.isBlank()) {
             throw new IllegalArgumentException("statement cannot be null or blank");
+        }
         this.statement = statement;
     }
 
     public void setTeacherId(Integer teacherId) {
-        if (teacherId == null || teacherId <= 0)
+        if (teacherId == null || teacherId <= 0) {
             throw new IllegalArgumentException("teacherId must be a positive integer");
+        }
         this.teacherId = teacherId;
     }
+
     public Integer getId() {return id;}
     public QuestionState getState() {return state;}
     public String getStatement() {return statement;}
@@ -140,7 +190,9 @@ public final class Question implements Serializable {
     }
 
     /**
-     * Verifica se a questão está ativa no momento atual
+     * Checks whether the question is currently active.
+     *
+     * @return {@code true} if active
      */
     public boolean isActive() {
         refreshState();
@@ -148,7 +200,9 @@ public final class Question implements Serializable {
     }
 
     /**
-     * Verifica se a questão já expirou
+     * Checks whether the question has already expired.
+     *
+     * @return {@code true} if expired
      */
     public boolean isExpired() {
         refreshState();
@@ -156,7 +210,9 @@ public final class Question implements Serializable {
     }
 
     /**
-     * Verifica se a questão é futura
+     * Checks whether the question is in the future.
+     *
+     * @return {@code true} if future
      */
     public boolean isFuture() {
         refreshState();
@@ -164,7 +220,10 @@ public final class Question implements Serializable {
     }
 
     /**
-     * Verifica se uma resposta está correta
+     * Checks whether a given answer is correct.
+     *
+     * @param answer chosen option letter
+     * @return {@code true} if it matches {@link #correctOption}
      */
     public boolean isCorrectAnswer(OptionLetter answer) {
         return correctOption.equals(answer);
@@ -176,50 +235,65 @@ public final class Question implements Serializable {
         return QuestionState.ACTIVE;
     }
 
+    /**
+     * Refreshes the {@link QuestionState} based on {@link #startAt}, {@link #endAt} and current time.
+     */
     public void refreshState() {
         this.state = computeState(this.startAt, this.endAt, LocalDateTime.now());
     }
 
+    /**
+     * Validates question data used by constructors.
+     */
     private static void validate(String statement, Integer teacherId, List<Option> options,
                                  LocalDateTime startAt, LocalDateTime endAt,
                                  OptionLetter correctOption, String accessCode) {
 
-        if (statement == null || statement.isBlank())
+        if (statement == null || statement.isBlank()) {
             throw new IllegalArgumentException("statement (question text) cannot be null or blank");
-
-        if (teacherId == null || teacherId <= 0)
-            throw new IllegalArgumentException("teacherId must be a positive integer");
-
-        if (options == null || options.size() < 2)
-            throw new IllegalArgumentException("there must be at least two options");
-
-        // letras únicas (coerente com UNIQUE (pergunta_id, letra) na BD)
-        Set<OptionLetter> seen = new HashSet<>();
-        for (Option o : options) {
-            if (o == null || o.getLetter() == null)
-                throw new IllegalArgumentException("each option must have a non-null letter");
-            if (!seen.add(o.getLetter()))
-                throw new IllegalArgumentException("duplicate option letter: " + o.getLetter());
         }
 
-        if (correctOption == null)
+        if (teacherId == null || teacherId <= 0) {
+            throw new IllegalArgumentException("teacherId must be a positive integer");
+        }
+
+        if (options == null || options.size() < 2) {
+            throw new IllegalArgumentException("there must be at least two options");
+        }
+
+        // unique letters (consistent with UNIQUE(question_id, letter) in DB)
+        Set<OptionLetter> seen = new HashSet<>();
+        for (Option o : options) {
+            if (o == null || o.getLetter() == null) {
+                throw new IllegalArgumentException("each option must have a non-null letter");
+            }
+            if (!seen.add(o.getLetter())) {
+                throw new IllegalArgumentException("duplicate option letter: " + o.getLetter());
+            }
+        }
+
+        if (correctOption == null) {
             throw new IllegalArgumentException("correctOption cannot be null");
+        }
 
         boolean containsCorrect = options.stream().anyMatch(o -> o.getLetter() == correctOption);
-        if (!containsCorrect)
+        if (!containsCorrect) {
             throw new IllegalArgumentException("correctOption must exist in the provided options list");
+        }
 
-        if (startAt == null || endAt == null)
+        if (startAt == null || endAt == null) {
             throw new IllegalArgumentException("startAt and endAt cannot be null");
+        }
 
-        if (!endAt.isAfter(startAt))
+        if (!endAt.isAfter(startAt)) {
             throw new IllegalArgumentException("endAt must be after startAt");
+        }
 
-        if (accessCode != null && accessCode.isBlank())
+        if (accessCode != null && accessCode.isBlank()) {
             throw new IllegalArgumentException("accessCode cannot be blank if provided");
+        }
     }
 
-    //toString
     @Override
     public String toString() {
         return "Question{id=" + id + ", statement=" + statement + ", accessCode='" + accessCode + '\'' +
@@ -227,7 +301,6 @@ public final class Question implements Serializable {
                 ", teacherId=" + teacherId + ", options=" + (options == null ? "[]" : options.size() + " itens") + '}';
     }
 
-    //equals/hashCode
     @Override
     public boolean equals(Object o) {
         if(o == this) return true;

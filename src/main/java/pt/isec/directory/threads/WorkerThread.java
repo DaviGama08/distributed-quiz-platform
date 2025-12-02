@@ -1,6 +1,7 @@
 package pt.isec.directory.threads;
 
 import pt.isec.common.messages.UdpMessage;
+import pt.isec.common.util.Log;
 import pt.isec.directory.IDirectoryManager;
 import pt.isec.directory.ServerInfo;
 
@@ -11,27 +12,40 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-public class WorkerThread implements Runnable{
+/**
+ * Worker thread for processing UDP messages from the queue.
+ * <p>
+ * Responsibilities:
+ * <ul>
+ *     <li>Parse incoming protocol messages</li>
+ *     <li>Update server registry (REGISTER/HEARTBEAT/DEREGISTER)</li>
+ *     <li>Handle client LOGIN discovery</li>
+ *     <li>Send textual responses back over UDP</li>
+ * </ul>
+ */
+public class WorkerThread implements Runnable {
     private final IDirectoryManager tInfo;
 
-    public WorkerThread(IDirectoryManager tInfo){this.tInfo = tInfo;}
+    public WorkerThread(IDirectoryManager tInfo) {
+        this.tInfo = tInfo;
+    }
 
     @Override
     public void run() {
-        System.out.println("Worker inicializado...");
+        Log.info(WorkerThread.class, "Worker inicializado...");
         try {
-            // Continua a processar enquanto:
-            //  - o sistema está a correr, OU
-            //  - ainda há mensagens na fila
-            while (tInfo.isRunning() || !tInfo.queue().isEmpty()){
+            // Continue processing as long as:
+            //  - the system is running, OR
+            //  - there are still messages in the queue
+            while (tInfo.isRunning() || !tInfo.queue().isEmpty()) {
                 UdpMessage msg = tInfo.queue().poll(500, TimeUnit.MILLISECONDS);
                 if (msg == null) {
-                    // timeout: voltar ao topo do while e verificar isRunning()
+                    // timeout: re-check isRunning() in the outer loop
                     continue;
                 }
 
                 String payload = new String(msg.data(), 0, msg.length(), StandardCharsets.UTF_8);
-                System.out.println("[Worker] Recebido: " + payload);
+                Log.info(WorkerThread.class, "[Worker] Recebido: %s", payload);
 
                 Map<String, String> kv = parseKv(payload);
 
@@ -45,22 +59,22 @@ public class WorkerThread implements Runnable{
 
                 switch (type) {
                     case "LOGIN" -> {
-                        System.out.println("[Worker] → Cliente pede descoberta de servidor");
+                        Log.info(WorkerThread.class, "[Worker] → Cliente pede descoberta de servidor");
                         reply = handleLogin();
                     }
 
                     case "REGISTER", "HEARTBEAT", "DEREGISTER" -> {
                         reply = switch (type) {
                             case "REGISTER" -> {
-                                System.out.println("[Worker] → Servidor pede registo");
+                                Log.info(WorkerThread.class, "[Worker] → Servidor pede registo");
                                 yield handleRegister(kv, msg.port());
                             }
                             case "HEARTBEAT" -> {
-                                System.out.println("[Worker] → Servidor envia heartbeat");
+                                Log.info(WorkerThread.class, "[Worker] → Servidor envia heartbeat");
                                 yield handleHeartbeat(kv);
                             }
                             case "DEREGISTER" -> {
-                                System.out.println("[Worker] → Servidor pede desregisto");
+                                Log.info(WorkerThread.class, "[Worker] → Servidor pede desregisto");
                                 yield handleDeregister(kv);
                             }
                             default -> "500 INTERNAL_ERROR";
@@ -68,7 +82,7 @@ public class WorkerThread implements Runnable{
                     }
 
                     default -> {
-                        System.out.println("[Worker] → Tipo desconhecido: " + type);
+                        Log.info(WorkerThread.class, "[Worker] → Tipo desconhecido: %s", type);
                         reply = "400 BAD_REQUEST TYPE";
                     }
                 }
@@ -76,29 +90,31 @@ public class WorkerThread implements Runnable{
                 send(msg, reply);
             }
         } catch (InterruptedException e) {
-            // não esperamos usar interrupt, mas se acontecer:
             Thread.currentThread().interrupt();
         } catch (IOException e) {
-            System.err.println("Erro a enviar UDP: " + e.getMessage());
+            Log.error(WorkerThread.class, "Erro a enviar UDP: " + e.getMessage(), e);
         } catch (Exception e) {
-            System.err.println("Erro inesperado no Worker: " + e.getMessage());
+            Log.error(WorkerThread.class, "Erro inesperado no Worker: " + e.getMessage(), e);
         }
 
-        System.out.println("Worker terminou.");
+        Log.info(WorkerThread.class, "Worker terminou.");
     }
 
     /**
-     * Trata pedido de login/descoberta do servidor principal por parte do cliente.
-     *
-     * Protocolo esperado:
-     * REQUEST:  TYPE=LOGIN
-     * RESPONSE: 200 PRINCIPAL <ip>:<port> (servidor principal disponível via TCP)
-     *           404 NO_PRINCIPAL (nenhum servidor registado)
+     * Handles a client login / server discovery request.
+     * <p>
+     * Request:
+     * <pre>TYPE=LOGIN</pre>
+     * Response:
+     * <ul>
+     *     <li>{@code 200 PRINCIPAL <ip>:<port>} – primary server is available</li>
+     *     <li>{@code 404 NO_PRINCIPAL} – no registered server</li>
+     * </ul>
      */
     private String handleLogin() {
         ServerInfo principal;
         synchronized (tInfo.serversLock()) {
-            //vai buscar o servidor mais recente "Master"
+            // pick the "master" server as the first one in insertion order
             var iterator = tInfo.serversOrdered().values().iterator();
             principal = iterator.hasNext() ? iterator.next() : null;
         }
@@ -107,17 +123,20 @@ public class WorkerThread implements Runnable{
     }
 
     /**
-     * Trata pedido de desregisto de um servidor.
-     *
-     * Protocolo esperado:
-     * REQUEST:  TYPE=DEREGISTER|ID=<uuid>
-     * RESPONSE: 200 OK (servidor removido com sucesso)
-     *           400 BAD_REQUEST ID (ID ausente ou vazio)
-     *           409 CONFLICT UNKNOWN_ID (ID desconhecido)
+     * Handles a server deregistration request.
+     * <p>
+     * Request:
+     * <pre>TYPE=DEREGISTER|ID=&lt;uuid&gt;</pre>
+     * Response:
+     * <ul>
+     *     <li>{@code 200 OK}</li>
+     *     <li>{@code 400 BAD_REQUEST ID} – missing/blank ID</li>
+     *     <li>{@code 409 CONFLICT UNKNOWN_ID} – unknown ID</li>
+     * </ul>
      */
     private String handleDeregister(Map<String, String> kv) {
         String id = kv.get("ID");
-        if(id == null || id.isEmpty()) return "400 BAD_REQUEST ID";
+        if (id == null || id.isEmpty()) return "400 BAD_REQUEST ID";
 
         ServerInfo removed = tInfo.servers().remove(id);
         if (removed == null) return "409 CONFLICT UNKNOWN_ID";
@@ -126,18 +145,21 @@ public class WorkerThread implements Runnable{
             tInfo.serversOrdered().remove(id);
         }
 
-
         return "200 OK";
     }
 
     /**
-     * Trata pedido de heartbeat (manter servidor ativo).
-     *
-     * Protocolo esperado:
-     * REQUEST:  TYPE=HEARTBEAT|ID=<uuid>
-     * RESPONSE: 200 OK (heartbeat recebido, timestamp atualizado)
-     *           400 BAD_REQUEST ID (ID ausente ou vazio)
-     *           409 CONFLICT UNKNOWN_ID (ID desconhecido)
+     * Handles a heartbeat request from a server.
+     * <p>
+     * Request:
+     * <pre>TYPE=HEARTBEAT|ID=&lt;uuid&gt;</pre>
+     * Response:
+     * <ul>
+     *     <li>{@code 200 OK <ip>:<port>} – ack + current primary endpoint</li>
+     *     <li>{@code 400 BAD_REQUEST ID}</li>
+     *     <li>{@code 409 CONFLICT UNKNOWN_ID}</li>
+     *     <li>{@code 404 NO_PRINCIPAL}</li>
+     * </ul>
      */
     private String handleHeartbeat(Map<String, String> kv) {
         String id = kv.get("ID");
@@ -160,18 +182,22 @@ public class WorkerThread implements Runnable{
     }
 
     /**
-     * Trata pedido de registo de um novo servidor.
-     *
-     * REQUEST:  TYPE=REGISTER|ID=<uuid>|TCP=<ip>:<port>|DBV=<versão_bd>
-     * RESPONSE: 200 PRINCIPAL <ip>:<port>|DBV=<versão_global_ou_-1>
-     *           400 BAD_REQUEST ID/TCP/TCP_PORT
-     *           404 NO_PRINCIPAL
+     * Handles registration of a new server.
+     * <p>
+     * Request:
+     * <pre>TYPE=REGISTER|ID=&lt;uuid&gt;|TCP=&lt;ip&gt;:&lt;port&gt;|DBV=&lt;dbVersion&gt;</pre>
+     * Response:
+     * <ul>
+     *     <li>{@code 200 OK <ip>:<port>} – OK + current primary endpoint</li>
+     *     <li>{@code 400 BAD_REQUEST ID/TCP/TCP_PORT}</li>
+     *     <li>{@code 404 NO_PRINCIPAL}</li>
+     *     <li>{@code 409 CONFLICT DUP_ENDPOINT}</li>
+     * </ul>
      */
-    // WorkerThread.java
     private String handleRegister(Map<String, String> kv, int udpPort) {
         String id  = kv.get("ID");
         String tcp = kv.get("TCP");
-        String dbv = kv.get("DBV"); // opcional
+        String dbv = kv.get("DBV"); // optional
 
         if (id == null || id.isBlank()) return "400 BAD_REQUEST ID";
         if (tcp == null || !tcp.contains(":")) return "400 BAD_REQUEST TCP";
@@ -186,17 +212,20 @@ public class WorkerThread implements Runnable{
         }
         if (ip.isEmpty() || port <= 0 || port > 65535) return "400 BAD_REQUEST TCP";
 
-        // === regra: não permitir dois servidores no MESMO <ip:port> com IDs diferentes
+        // Rule: do not allow two servers on the same <ip:port> with different IDs
         for (ServerInfo other : tInfo.servers().values()) {
             if (other.getIp().equals(ip) && other.getTcpPort() == port && !other.getId().equals(id)) {
-                System.out.printf("[Diretoria] rejeitado REGISTER: endpoint duplicado %s:%d para ID=%s (já existe %s)%n",
+                Log.info(WorkerThread.class,
+                        "[Diretoria] rejeitado REGISTER: endpoint duplicado %s:%d para ID=%s (já existe %s)",
                         ip, port, id, other.getId());
                 return "409 CONFLICT DUP_ENDPOINT";
             }
         }
 
         int version = 0;
-        try { if (dbv != null && !dbv.isBlank()) version = Integer.parseInt(dbv.trim()); } catch (Exception ignore) {}
+        try {
+            if (dbv != null && !dbv.isBlank()) version = Integer.parseInt(dbv.trim());
+        } catch (Exception ignore) {}
 
         ServerInfo si = tInfo.servers().get(id);
         if (si == null) {
@@ -207,7 +236,7 @@ public class WorkerThread implements Runnable{
                 tInfo.serversOrdered().put(id, si);
             }
         } else {
-            // mesmo ID a voltar: atualiza dados
+            // same ID coming back: update last seen
             si.setLastSeenMillis(System.currentTimeMillis());
         }
 
@@ -218,17 +247,16 @@ public class WorkerThread implements Runnable{
         }
         if (principal == null) return "404 NO_PRINCIPAL";
 
-        // devolve também a versão global se quiseres (opcional). Se não usas, podes remover "|DBV=..."
+        // Optionally send global DB version; kept simple here
         return "200 OK " + principal.tcpEndpoint();
     }
 
-
     /**
-     * Envia resposta UDP de volta ao remetente.
+     * Sends a UDP text response to the sender.
      *
-     * @param to Mensagem UDP original (contém endereço e porta do remetente)
-     * @param text Resposta em formato texto (ex: "200 OK", "404 NO_PRINCIPAL")
-     * @throws IOException se houver erro ao enviar o datagrama
+     * @param to   original UDP message (contains sender address and port)
+     * @param text response text (e.g., "200 OK", "404 NO_PRINCIPAL")
+     * @throws IOException if sending fails
      */
     private void send(UdpMessage to, String text) throws IOException {
         byte[] out        = text.getBytes(StandardCharsets.UTF_8);
@@ -237,13 +265,13 @@ public class WorkerThread implements Runnable{
     }
 
     /**
-     * Faz parsing de uma mensagem no formato KEY=VALUE|KEY=VALUE|...
+     * Parses a message in the form {@code KEY=VALUE|KEY=VALUE|...}.
+     * <p>
+     * Example:
+     * <pre>"TYPE=REGISTER|ID=abc123|TCP=192.168.1.10:9999"</pre>
      *
-     * Exemplo: "TYPE=REGISTER|ID=abc123|TCP=192.168.1.10:9999"
-     * Resultado: Map{"TYPE"->"REGISTER", "ID"->"abc123", "TCP"->"192.168.1.10:9999"}
-     *
-     * @param s String com pares KEY=VALUE separados por pipe '|'
-     * @return Map com os pares chave-valor extraídos
+     * @param s string with key-value pairs separated by pipe {@code '|'}
+     * @return map with extracted key/value pairs
      */
     private static Map<String, String> parseKv(String s){
         Map<String, String> m = new LinkedHashMap<>();

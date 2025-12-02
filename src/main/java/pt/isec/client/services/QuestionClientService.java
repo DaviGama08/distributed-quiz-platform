@@ -6,21 +6,30 @@ import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;
 
 /**
- * Serviço especializado em operações relacionadas com perguntas.
- *
- * Todos os métodos enfileiram uma mensagem de pedido e retornam
- * imediatamente. As respostas serão processadas pela ResponseHandlerThread
- * e notificadas via eventos (propriedades) do ClientService.
+ * Client-side service for question-related operations.
+ * <p>
+ * All methods enqueue a request message on the {@link IClientService} request queue
+ * and return immediately. Responses are processed by {@code ResponseHandlerThread}
+ * and forwarded via property change events in {@code ClientService}.
  */
 public class QuestionClientService {
 
     private final IClientService service;
 
+    /**
+     * Creates a new question client service.
+     *
+     * @param service underlying client service
+     */
     public QuestionClientService(IClientService service) {
         this.service = service;
     }
 
-    /** Envia um pedido para criar uma nova pergunta. */
+    /**
+     * Sends a request to create a new question.
+     *
+     * @param dto create question payload
+     */
     public void createQuestion(CreateQuestionDTO dto) {
         try {
             service.getRequestQueue().put(new TcpMessage<>(MessageType.CREATE_QUESTION, dto));
@@ -29,21 +38,37 @@ public class QuestionClientService {
         }
     }
 
-    /** Backwards-compatible overload: accept UpdateQuestionDTO and convert to EditQuestionDTO. */
+    /**
+     * Backwards-compatible overload: accepts {@link UpdateQuestionDTO} and converts it
+     * to {@link EditQuestionDTO}.
+     *
+     * @param dto update question payload
+     */
     public void updateQuestion(UpdateQuestionDTO dto) {
-        if (dto == null) return;
+        if (dto == null) {
+            return;
+        }
         EditQuestionDTO edit = new EditQuestionDTO(
-                dto.questionId(), dto.teacherId(), dto.statement(), dto.options(), dto.correctOption(), dto.startAt(), dto.endAt()
+                dto.questionId(), dto.teacherId(), dto.statement(),
+                dto.options(), dto.correctOption(), dto.startAt(), dto.endAt()
         );
         updateQuestion(edit);
     }
 
-    /** Convenience method named editQuestion to match server semantics. */
+    /**
+     * Convenience method named {@code editQuestion} to match server semantics.
+     *
+     * @param dto edit question payload
+     */
     public void editQuestion(EditQuestionDTO dto) {
         updateQuestion(dto);
     }
 
-    /** Envia um pedido para editar uma pergunta. */
+    /**
+     * Sends a request to edit an existing question.
+     *
+     * @param dto edit question payload
+     */
     public void updateQuestion(EditQuestionDTO dto) {
         try {
             service.getRequestQueue().put(new TcpMessage<>(MessageType.EDIT_QUESTION, dto));
@@ -52,7 +77,11 @@ public class QuestionClientService {
         }
     }
 
-    /** Envia um pedido para eliminar uma pergunta. */
+    /**
+     * Sends a request to delete a question.
+     *
+     * @param dto delete question payload
+     */
     public void deleteQuestion(DeleteQuestionDTO dto) {
         try {
             service.getRequestQueue().put(new TcpMessage<>(MessageType.DELETE_QUESTION, dto));
@@ -61,7 +90,11 @@ public class QuestionClientService {
         }
     }
 
-    /** Envia um pedido para listar as perguntas de um docente. */
+    /**
+     * Sends a request to list questions for a given teacher.
+     *
+     * @param dto list questions payload
+     */
     public void listQuestions(ListQuestionsDTO dto) {
         try {
             service.getRequestQueue().put(new TcpMessage<>(MessageType.LIST_QUESTIONS, dto));
@@ -70,7 +103,11 @@ public class QuestionClientService {
         }
     }
 
-    /** Envia um pedido para um estudante aderir a uma pergunta através de código. */
+    /**
+     * Sends a request for a student to join a question by access code.
+     *
+     * @param dto join question payload
+     */
     public void joinQuestion(JoinQuestionDTO dto) {
         try {
             service.getRequestQueue().put(new TcpMessage<>(MessageType.JOIN_QUESTION, dto));

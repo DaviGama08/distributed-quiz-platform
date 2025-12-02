@@ -4,8 +4,9 @@ import java.io.Serializable;
 import java.util.*;
 
 /**
- * Estatísticas de respostas para uma questão
- * Mostra quantas respostas foram dadas para cada opção
+ * Statistics of answers for a question.
+ * <p>
+ * Tracks how many answers were given for each option and computes percentages.
  */
 public class AnswerStatistics implements Serializable {
     private static final long serialVersionUID = 1L;
@@ -18,11 +19,20 @@ public class AnswerStatistics implements Serializable {
     private int correctAnswersCount;
     private double correctPercentage;
 
+    /**
+     * Creates an empty statistics object.
+     */
     public AnswerStatistics() {
         this.countByOption = new HashMap<>();
         this.percentageByOption = new HashMap<>();
     }
 
+    /**
+     * Creates an empty statistics object for a given question and correct option.
+     *
+     * @param questionId    question id
+     * @param correctOption correct option letter
+     */
     public AnswerStatistics(Integer questionId, OptionLetter correctOption) {
         this();
         this.questionId = questionId;
@@ -33,7 +43,9 @@ public class AnswerStatistics implements Serializable {
     }
 
     /**
-     * Adiciona uma resposta às estatísticas
+     * Adds a single answer to the statistics.
+     *
+     * @param option chosen option
      */
     public void addAnswer(OptionLetter option) {
         countByOption.put(option, countByOption.getOrDefault(option, 0) + 1);
@@ -47,7 +59,9 @@ public class AnswerStatistics implements Serializable {
     }
 
     /**
-     * Adiciona múltiplas respostas às estatísticas
+     * Adds multiple answers to the statistics.
+     *
+     * @param answers list of answers
      */
     public void addAnswers(List<Answer> answers) {
         for (Answer answer : answers) {
@@ -56,7 +70,7 @@ public class AnswerStatistics implements Serializable {
     }
 
     /**
-     * Recalcula as percentagens
+     * Recomputes percentages based on the current counts.
      */
     private void recalculatePercentages() {
         percentageByOption.clear();
@@ -75,7 +89,9 @@ public class AnswerStatistics implements Serializable {
     }
 
     /**
-     * Define as contagens diretamente (útil ao carregar da BD)
+     * Sets counts for each option directly (useful when loading from DB).
+     *
+     * @param countByOption map of option to answer count
      */
     public void setCountByOption(Map<OptionLetter, Integer> countByOption) {
         this.countByOption = new HashMap<>(countByOption);
@@ -122,21 +138,29 @@ public class AnswerStatistics implements Serializable {
     }
 
     /**
-     * Obtém a contagem para uma opção específica
+     * Gets the count for a specific option.
+     *
+     * @param option option letter
+     * @return number of answers with that option
      */
     public int getCountFor(OptionLetter option) {
         return countByOption.getOrDefault(option, 0);
     }
 
     /**
-     * Obtém a percentagem para uma opção específica
+     * Gets the percentage for a specific option.
+     *
+     * @param option option letter
+     * @return percentage of answers with that option
      */
     public double getPercentageFor(OptionLetter option) {
         return percentageByOption.getOrDefault(option, 0.0);
     }
 
     /**
-     * Retorna a opção mais escolhida
+     * Returns the most chosen option (or {@code null} if none).
+     *
+     * @return option letter or {@code null}
      */
     public OptionLetter getMostChosenOption() {
         return countByOption.entrySet().stream()
@@ -146,7 +170,9 @@ public class AnswerStatistics implements Serializable {
     }
 
     /**
-     * Retorna a opção menos escolhida
+     * Returns the least chosen option (or {@code null} if none).
+     *
+     * @return option letter or {@code null}
      */
     public OptionLetter getLeastChosenOption() {
         return countByOption.entrySet().stream()
@@ -156,7 +182,9 @@ public class AnswerStatistics implements Serializable {
     }
 
     /**
-     * Verifica se há respostas
+     * Checks whether there is at least one answer.
+     *
+     * @return {@code true} if there are answers
      */
     public boolean hasAnswers() {
         return totalAnswers > 0;
@@ -189,38 +217,10 @@ public class AnswerStatistics implements Serializable {
         }
 
         if (!countByOption.isEmpty()) {
-            sb.setLength(sb.length() - 2); // Remove última vírgula
+            sb.setLength(sb.length() - 2); // remove trailing comma
         }
 
         sb.append("}}");
         return sb.toString();
     }
-
-    /**
-     * Retorna uma representação formatada para exibição
-     */
-    public String toDisplayString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("═══════════════════════════════════════\n");
-        sb.append("  ESTATÍSTICAS DA QUESTÃO #").append(questionId).append("\n");
-        sb.append("═══════════════════════════════════════\n");
-        sb.append("Total de Respostas: ").append(totalAnswers).append("\n");
-        sb.append("Taxa de Acerto: ").append(String.format("%.2f", correctPercentage)).append("%\n");
-        sb.append("───────────────────────────────────────\n");
-        sb.append("Distribuição por Opção:\n");
-
-        for (OptionLetter option : OptionLetter.values()) {
-            int count = countByOption.getOrDefault(option, 0);
-            if (count > 0 || option.equals(correctOption)) {
-                double pct = percentageByOption.getOrDefault(option, 0.0);
-                sb.append(String.format("  [%s] %3d respostas (%5.1f%%) %s\n",
-                    option, count, pct,
-                    option.equals(correctOption) ? "✓ CORRETA" : ""));
-            }
-        }
-
-        sb.append("═══════════════════════════════════════\n");
-        return sb.toString();
-    }
 }
-

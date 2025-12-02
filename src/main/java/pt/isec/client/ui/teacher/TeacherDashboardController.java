@@ -33,13 +33,17 @@ import pt.isec.common.dto.question.JoinQuestionDTO;
 import pt.isec.common.dto.question.ListQuestionsDTO;
 import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.Question;
+import pt.isec.common.util.Log;
 
 import java.beans.PropertyChangeListener;
 import java.util.*;
 
 /**
- * Controlador do dashboard do docente. Lida com criação, listagem
- * e visualização de respostas de perguntas em regime assíncrono.
+ * Controller for the teacher dashboard.
+ * <p>
+ * Handles creation, listing, editing and answer visualization for questions
+ * in an asynchronous/event-driven way. All server operations are performed
+ * via client services and results are propagated through property changes.
  */
 public class TeacherDashboardController implements IDisposableProp {
 
@@ -97,6 +101,15 @@ public class TeacherDashboardController implements IDisposableProp {
     // flag para carregamento em massa de contagens de respostas
     private volatile boolean bulkLoadingAnswers = false;
 
+    /**
+     * Creates a new teacher dashboard controller and wires up all listeners.
+     *
+     * @param stage         main application stage
+     * @param clientManager client manager with services
+     * @param application   main application
+     * @param userName      teacher name
+     * @param userEmail     teacher email
+     */
     public TeacherDashboardController(Stage stage,
                                       ClientManager clientManager,
                                       ClientApplication application,
@@ -292,7 +305,10 @@ public class TeacherDashboardController implements IDisposableProp {
             if (v instanceof Integer) {
                 qid = (Integer) v;
             } else if (v instanceof String) {
-                try { qid = Integer.parseInt((String) v); } catch (Exception ignored) {}
+                try {
+                    qid = Integer.parseInt((String) v);
+                } catch (Exception ignored) {
+                }
             }
             if (qid == null) return;
 
@@ -365,7 +381,9 @@ public class TeacherDashboardController implements IDisposableProp {
                     view.addNotification("Pergunta atualizada com sucesso.");
                     refreshQuestions();
                     if (currentDetailsDialog != null) {
-                        try { currentDetailsDialog.close(); } catch (Exception ignored) {}
+                        try {
+                            currentDetailsDialog.close();
+                        } catch (Exception ignored) {}
                         currentDetailsDialog = null;
                     }
                 } else {
@@ -443,6 +461,10 @@ public class TeacherDashboardController implements IDisposableProp {
 
     /* ===================== LIFECYCLE ===================== */
 
+    /**
+     * Shows the teacher dashboard on the main stage and triggers an initial
+     * refresh of stats and questions.
+     */
     public void show() {
         stage.setScene(view.getScene());
         stage.setMaximized(true);
@@ -492,6 +514,10 @@ public class TeacherDashboardController implements IDisposableProp {
 
     /* ===================== MÉTRICAS / DASHBOARD ===================== */
 
+    /**
+     * Updates the top-level dashboard metrics:
+     * total questions, active questions and total answers received.
+     */
     private void updateDashboardStats() {
         int total = lastQuestions.size();
         int active = (int) lastQuestions.stream()
@@ -507,6 +533,10 @@ public class TeacherDashboardController implements IDisposableProp {
 
     /* ===================== CRIAR PERGUNTA ===================== */
 
+    /**
+     * Handler for the "Create Question" action.
+     * Opens the creation dialog and sends the request when confirmed.
+     */
     public void onCreateQuestion() {
         Integer teacherId = clientManager.getUserId();
         if (teacherId == null) {
@@ -525,6 +555,10 @@ public class TeacherDashboardController implements IDisposableProp {
 
     /* ===================== GERIR / LISTAR PERGUNTAS ===================== */
 
+    /**
+     * Opens the "Manage Questions" dialog, showing the teacher's questions,
+     * with context menu actions for viewing answers, editing and deleting.
+     */
     public void onManageQuestions() {
         Dialog<Void> dialog = new Dialog<>();
         try {
@@ -839,6 +873,11 @@ public class TeacherDashboardController implements IDisposableProp {
 
     /* ===================== VER RESPOSTAS POR CÓDIGO ===================== */
 
+    /**
+     * Handler for the "View Answers" by access code.
+     * Requests the corresponding question (if owned by this teacher) and,
+     * if expired, loads and shows its answers.
+     */
     public void onViewAnswers() {
         TextInputDialog dialog = new TextInputDialog();
         dialog.setTitle("Ver Respostas");
@@ -888,6 +927,9 @@ public class TeacherDashboardController implements IDisposableProp {
 
     /* ===================== PERFIL / LOGOUT ===================== */
 
+    /**
+     * Shows a read-only profile dialog for the teacher.
+     */
     public void onOpenProfile() {
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Perfil do Docente");
@@ -932,6 +974,10 @@ public class TeacherDashboardController implements IDisposableProp {
         dialog.showAndWait();
     }
 
+    /**
+     * Opens an editable profile dialog for the teacher and sends an update
+     * request when the user confirms.
+     */
     public void onEditProfile() {
         Dialog<ButtonType> dialog = new Dialog<>();
         currentEditProfileDialog = dialog;
@@ -990,6 +1036,10 @@ public class TeacherDashboardController implements IDisposableProp {
         });
     }
 
+    /**
+     * Handles teacher logout: asks for confirmation, sends the logout request,
+     * clears local state and returns to the authentication screen.
+     */
     public void onLogout() {
         Window owner = getCurrentOwnerWindow();
         boolean confirm = AlertUtils.showConfirmation(
@@ -1035,6 +1085,11 @@ public class TeacherDashboardController implements IDisposableProp {
 
     /* ===================== BULK LOAD DE CONTAGEM DE RESPOSTAS ===================== */
 
+    /**
+     * Fetches answer counts for the teacher's questions in the background,
+     * one by one, in order to keep dashboard metrics updated without blocking
+     * the UI thread.
+     */
     private void fetchAnswerCountsSequentially() {
         Integer teacherId = clientManager.getUserId();
         if (teacherId == null) return;
@@ -1056,8 +1111,11 @@ public class TeacherDashboardController implements IDisposableProp {
                                 .viewAnswersForTeacher(new ViewAnswersDTO(q.getId(), teacherId));
                     } catch (Exception e) {
                         awaitingViewAnswers = false;
-                        System.err.println("[TeacherController] falha a pedir respostas para q=" +
-                                q.getId() + ": " + e.getMessage());
+                        Log.error(
+                                TeacherDashboardController.class,
+                                "Failed to request answers for question " + q.getId() + ": " + e.getMessage(),
+                                e
+                        );
                         continue;
                     }
 

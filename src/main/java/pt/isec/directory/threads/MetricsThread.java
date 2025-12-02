@@ -1,12 +1,22 @@
 package pt.isec.directory.threads;
 
-
+import pt.isec.common.util.Log;
 import pt.isec.directory.IDirectoryManager;
 
-public class MetricsThread implements Runnable{
+/**
+ * Metrics/logging thread.
+ * <p>
+ * Periodically prints simple stats about the directory:
+ * number of servers, current primary, TCP port, etc.
+ */
+public class MetricsThread implements Runnable {
     private final IDirectoryManager tInfo;
     private final long periodMs;
 
+    /**
+     * @param tInfo    directory manager
+     * @param periodMs log interval in milliseconds
+     */
     public MetricsThread(IDirectoryManager tInfo, long periodMs) {
         this.tInfo = tInfo;
         this.periodMs = periodMs;
@@ -22,10 +32,9 @@ public class MetricsThread implements Runnable{
 
                 String masterName = (master == null || port <= 0) ? "NONE" : ("servidor" + port);
 
-                System.out.printf(
+                Log.info(MetricsThread.class,
                         "[Diretoria][Metrics] servers=%d, master=%s, tcpPort=%d",
-                        total, masterName, port
-                );
+                        total, masterName, port);
 
                 Thread.sleep(periodMs);
             } catch (InterruptedException ie) {

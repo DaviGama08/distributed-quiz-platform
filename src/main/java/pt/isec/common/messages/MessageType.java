@@ -1,10 +1,10 @@
 package pt.isec.common.messages;
 
 /**
- * Define os tipos de mensagens trocadas entre clientes e servidor.
+ * Types of messages exchanged between clients and server.
  */
 public enum MessageType {
-    // Autenticação (já existentes)
+    // Authentication
     LOGIN,
     LOGIN_OK,
     LOGIN_FAIL,
@@ -17,18 +17,19 @@ public enum MessageType {
     LOGOUT,
     PONG,
 
-    // Perguntas – professor
+    // Questions – teacher side
     CREATE_QUESTION,
     CREATE_QUESTION_RESPONSE,
     EDIT_QUESTION,
     DELETE_QUESTION,
     LIST_QUESTIONS,
     LIST_QUESTIONS_RESPONSE,
-    // Pergunta – aluno
+
+    // Question – student side
     JOIN_QUESTION,
     QUESTION_DETAILS,
 
-    // Respostas
+    // Answers
     SUBMIT_ANSWER,
     SUBMIT_OK,
     SUBMIT_FAIL,
@@ -37,16 +38,16 @@ public enum MessageType {
     LIST_ANSWERED_QUESTIONS,
     LIST_ANSWERED_RESPONSE,
 
-    // notificação ao docente de resposta submetida
+    // Notification to teacher when an answer is submitted
     ANSWER_SUBMITTED,
 
-    // Perfil
+    // Profile
     UPDATE_STUDENT,
     UPDATE_TEACHER,
     UPDATE_PROFILE_OK,
     UPDATE_PROFILE_FAIL,
 
-    // Replicação incremental via SQL (heartbeat)
+    // Incremental replication via SQL (heartbeat)
     SQL_UPDATE,
     DB_REQUEST_COPY
 }

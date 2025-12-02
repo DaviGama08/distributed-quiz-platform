@@ -1,6 +1,7 @@
 package pt.isec.directory;
 
 import pt.isec.common.messages.UdpMessage;
+import pt.isec.common.util.Log;
 import pt.isec.directory.threads.MetricsThread;
 import pt.isec.directory.threads.ReaperThread;
 import pt.isec.directory.threads.UdpListenerThread;
@@ -15,6 +16,17 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+/**
+ * Directory manager implementation.
+ * <p>
+ * Responsibilities:
+ * <ul>
+ *     <li>Create and manage UDP socket and worker threads</li>
+ *     <li>Maintain a registry of active servers</li>
+ *     <li>Elect a primary server based on insertion order</li>
+ *     <li>Periodically reap inactive servers and log metrics</li>
+ * </ul>
+ */
 public class DirectoryManager implements IDirectoryManager {
     private final int udpPort;
     private final int queueCapacity;
@@ -41,12 +53,30 @@ public class DirectoryManager implements IDirectoryManager {
     private Thread tMetrics;
     private final Thread[] tWorkers;
 
+    /**
+     * Creates a directory manager with default timing parameters and 4 worker threads.
+     *
+     * @param udpPort       UDP port to listen on
+     * @param queueCapacity capacity of the message queue
+     * @param maxPacketSize maximum accepted UDP packet size
+     */
     public DirectoryManager(int udpPort, int queueCapacity, int maxPacketSize) {
         this(udpPort, queueCapacity, maxPacketSize,
                 4,
                 DEFAULT_TTL_MS, DEFAULT_REAPER_EVERY, DEFAULT_METRICS_EVERY);
     }
 
+    /**
+     * Creates a directory manager with full configuration.
+     *
+     * @param udpPort        UDP port to listen on
+     * @param queueCapacity  capacity of the message queue
+     * @param maxPacketSize  maximum accepted UDP packet size
+     * @param maxWorkers     number of worker threads
+     * @param ttlMs          TTL used to remove inactive servers
+     * @param reaperEveryMs  period between reaper checks
+     * @param metricsEveryMs period between metrics log messages
+     */
     public DirectoryManager(int udpPort,
                             int queueCapacity,
                             int maxPacketSize,
@@ -62,8 +92,13 @@ public class DirectoryManager implements IDirectoryManager {
         this.metricsEveryMs= metricsEveryMs;
     }
 
+    /**
+     * Starts the directory: creates socket, queue and all worker threads.
+     * <p>
+     * Does not block; threads run in the background.
+     */
     public void run() {
-        System.out.println("Starting DirectoryService...");
+        Log.info(DirectoryManager.class, "Starting DirectoryService...");
         try {
             this.socket = new DatagramSocket(udpPort);
         } catch (SocketException e) {
@@ -86,10 +121,15 @@ public class DirectoryManager implements IDirectoryManager {
         tMetrics.start();
     }
 
+    /**
+     * Stops the directory and waits for all threads to finish.
+     * <p>
+     * This method is typically invoked from a shutdown hook.
+     */
     public void stop() {
-        //Como as threads da diretoria não chamam este metodo
-        //estamos protegidos dela dá shutdown a si própria
-        running = false; // sinal global para todas as threads
+        // Directory threads do not call this method themselves,
+        // so we are safe from shutting down our own thread here.
+        running = false; // global signal for all threads
 
         try {
             if (tListener != null)
@@ -109,7 +149,7 @@ public class DirectoryManager implements IDirectoryManager {
             Thread.currentThread().interrupt();
         }
 
-        System.out.println("DirectoryManager parado.");
+        Log.info(DirectoryManager.class, "DirectoryManager parado.");
     }
 
 
@@ -154,7 +194,8 @@ public class DirectoryManager implements IDirectoryManager {
                 if (currTime - lastSeen > ttlMs) {
                     it.remove();
                     servers.remove(uuid);
-                    System.out.printf("[Diretoria] Removido inativo (TTL=%d ms): %s%n", ttlMs, uuid);
+                    Log.info(DirectoryManager.class,
+                            "[Diretoria] Removido inativo (TTL=%d ms): %s", ttlMs, uuid);
                 }
             }
         }

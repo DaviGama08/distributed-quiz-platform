@@ -1,4 +1,5 @@
 package pt.isec.client.ui.util.dialogs;
+
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
@@ -10,25 +11,33 @@ import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.Option;
 import pt.isec.common.model.question.OptionLetter;
 import pt.isec.common.model.question.Question;
+
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * Diálogos reutilizáveis para o lado do estudante.
- * O controller apenas passa callbacks (DTOs, etc.).
+ * Reusable dialogs for the student side.
+ * <p>
+ * Controllers only pass callbacks (DTOs, etc.) to these helpers.
  */
 public final class StudentDialogs {
 
-    private StudentDialogs() { }
+    private StudentDialogs() {
+    }
 
     // --------------------------------------------------------------
-    //  PEDIR CÓDIGO DA PERGUNTA
+    //  QUESTION CODE INPUT
     // --------------------------------------------------------------
+
     /**
-     * Mostra um diálogo para inserir o código da pergunta.
-     * Se o utilizador confirmar, chama onCodeEntered com o código (trimado).
+     * Shows a dialog to enter the question access code.
+     * <p>
+     * When the user confirms, {@code onCodeEntered} is called with the trimmed code.
+     *
+     * @param owner         window owner for modality
+     * @param onCodeEntered callback invoked with the entered code
      */
     public static void showEnterQuestionCodeDialog(Window owner,
                                                    Consumer<String> onCodeEntered) {
@@ -57,7 +66,9 @@ public final class StudentDialogs {
         dialog.getDialogPane().getButtonTypes().addAll(searchButtonType, ButtonType.CANCEL);
 
         dialog.showAndWait().ifPresent(bt -> {
-            if (bt != searchButtonType) return;
+            if (bt != searchButtonType) {
+                return;
+            }
             String code = codeField.getText();
             if (code == null || code.trim().isEmpty()) {
                 AlertUtils.showError(owner, "Erro", "Código da pergunta é obrigatório.");
@@ -70,11 +81,19 @@ public final class StudentDialogs {
     }
 
     // --------------------------------------------------------------
-    //  RESPONDER PERGUNTA
+    //  ANSWER QUESTION
     // --------------------------------------------------------------
+
     /**
-     * Mostra a pergunta com as opções para o estudante escolher.
-     * Ao confirmar, chama onSubmit com o DTO populado (questionId, studentId, option).
+     * Shows a question dialog with options for the student to choose.
+     * <p>
+     * On confirmation, calls {@code onSubmit} with a populated {@link SubmitAnswerDTO}
+     * (questionId, studentId, selected option).
+     *
+     * @param owner     window owner
+     * @param question  question to show
+     * @param studentId student identifier
+     * @param onSubmit  callback invoked when the user submits an answer
      */
     public static void showAnswerQuestionDialog(Window owner,
                                                 Question question,
@@ -156,10 +175,14 @@ public final class StudentDialogs {
     }
 
     // --------------------------------------------------------------
-    //  HISTÓRICO DE RESPOSTAS
+    //  ANSWER HISTORY
     // --------------------------------------------------------------
+
     /**
-     * Mostra histórico de respostas do estudante.
+     * Shows a dialog with the student's answer history.
+     *
+     * @param owner   window owner
+     * @param history list of answers to display
      */
     public static void showHistoryDialog(Window owner,
                                          List<Answer> history) {

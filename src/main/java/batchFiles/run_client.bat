@@ -10,7 +10,8 @@ javac ^
  ..\pt\isec\client\ui\student\*.java ^
  ..\pt\isec\client\ui\teacher\*.java ^
  ..\pt\isec\client\ui\util\*.java ^
-  ..\pt\isec\client\ui\util\dialogs\*.java ^
+ ..\pt\isec\client\ui\util\dialogs\*.java ^
+ ..\pt\isec\common\util\*.java ^
  ..\pt\isec\common\messages\*.java ^
  ..\pt\isec\common\dto\auth\*.java ^
  ..\pt\isec\common\dto\answer\*.java ^

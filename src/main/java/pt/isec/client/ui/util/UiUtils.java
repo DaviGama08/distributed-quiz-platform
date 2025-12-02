@@ -2,16 +2,27 @@ package pt.isec.client.ui.util;
 
 import javafx.application.Platform;
 
+/**
+ * Utility helper methods for JavaFX UI-related operations.
+ */
 public final class UiUtils {
 
-    private UiUtils() { }
+    private UiUtils() {
+        // utility class
+    }
 
     /**
-     * Garante que o código corre na JavaFX Application Thread.
+     * Ensures that the given runnable is executed on the JavaFX Application Thread.
+     * <p>
+     * If the current thread is already the JavaFX thread, the runnable is executed
+     * immediately; otherwise it is scheduled via {@link Platform#runLater(Runnable)}.
+     *
+     * @param runnable action to execute on the UI thread (may be {@code null})
      */
     public static void runOnUiThread(Runnable runnable) {
-        if (runnable == null)
+        if (runnable == null) {
             return;
+        }
 
         if (Platform.isFxApplicationThread()) {
             runnable.run();
@@ -21,11 +32,17 @@ public final class UiUtils {
     }
 
     /**
-     * Devolve as iniciais a partir de um nome ou texto.
-     * Exemplos:
-     *  - "João Silva" -> "JS"
-     *  - "Maria"      -> "M"
-     *  - null / vazio -> "?"
+     * Builds initials from a given text or name.
+     * <p>
+     * Examples:
+     * <ul>
+     *     <li>{@code "João Silva" -> "JS"}</li>
+     *     <li>{@code "Maria" -> "M"}</li>
+     *     <li>{@code null / empty -> "?"}</li>
+     * </ul>
+     *
+     * @param text full name or arbitrary text
+     * @return initials, or {@code "?"} if the text is {@code null} or blank
      */
     public static String getInitials(String text) {
         if (text == null || text.isBlank()) {

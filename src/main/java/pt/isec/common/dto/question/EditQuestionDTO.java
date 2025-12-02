@@ -7,6 +7,17 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * Request to edit an existing question (teacher side).
+ *
+ * @param questionId    id of the question to edit
+ * @param teacherId     teacher identifier
+ * @param statement     question statement
+ * @param options       list of options
+ * @param correctOption correct option
+ * @param startAt       availability start date/time
+ * @param endAt         availability end date/time
+ */
 public record EditQuestionDTO(
         Integer questionId,
         Integer teacherId,

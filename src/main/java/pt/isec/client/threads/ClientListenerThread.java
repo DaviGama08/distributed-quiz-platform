@@ -2,31 +2,38 @@ package pt.isec.client.threads;
 
 import pt.isec.client.core.IClientService;
 import pt.isec.common.messages.TcpMessage;
+import pt.isec.common.util.Log;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
 
 /**
- * Thread que escuta continuamente mensagens vindas do servidor via TCP
- * e coloca-as na fila de respostas para serem processadas.
+ * Thread that continuously listens for messages from the server over TCP
+ * and enqueues them into the response queue to be processed.
  */
 public class ClientListenerThread implements Runnable {
+
     private final IClientService service;
 
+    /**
+     * Creates a new client listener thread.
+     *
+     * @param service client service interface
+     */
     public ClientListenerThread(IClientService service) {
         this.service = service;
     }
 
     @Override
     public void run() {
-        System.out.println("[ClientListener] A escuta de mensagens do servidor...");
+        Log.info(ClientListenerThread.class, "Listening for messages from the server...");
 
         while (service.isRunning()) {
             try {
                 ObjectInputStream in = service.getInputStream();
                 if (in == null) {
-                    // Sem stream válido (por ex. durante reconexão); aguarda um pouco
+                    // No valid stream (e.g. during reconnection); wait a bit
                     Thread.sleep(200);
                     continue;
                 }
@@ -36,24 +43,25 @@ public class ClientListenerThread implements Runnable {
                         (TcpMessage<? extends Serializable>) in.readObject();
 
                 if (response != null) {
-                    System.out.println("[ClientListener] Recebido: " + response.getType());
+                    Log.info(ClientListenerThread.class, "Received: " + response.getType());
                     service.getResponseQueue().put(response);
                 }
             } catch (IOException e) {
                 if (service.isRunning()) {
-                    System.err.println("[ClientListener] Ligação perdida: " + e.getMessage());
+                    Log.error(ClientListenerThread.class, "Connection lost: " + e.getMessage(), e);
                     service.handleConnectionLost();
                 }
                 break;
             } catch (ClassNotFoundException e) {
-                System.err.println("[ClientListener] Tipo de mensagem desconhecida: " + e.getMessage());
+                Log.error(ClientListenerThread.class,
+                        "Unknown message type received: " + e.getMessage(), e);
             } catch (InterruptedException e) {
-                System.out.println("[ClientListener] Interrompido");
+                Log.warn(ClientListenerThread.class, "Listener interrupted");
                 Thread.currentThread().interrupt();
                 break;
             }
         }
 
-        System.out.println("[ClientListener] Parado");
+        Log.info(ClientListenerThread.class, "Listener stopped");
     }
 }

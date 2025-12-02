@@ -13,30 +13,33 @@ import javafx.scene.text.TextAlignment;
 import java.util.Objects;
 
 /**
- * View de autenticação. A aparência é definida em authentication.css.
+ * Authentication view (login/register).
+ * <p>
+ * Appearance and styling are defined in {@code authentication.css}.
  */
 public class AuthenticationView {
+
     private Scene scene;
 
-    // alternância login/registo
+    // Toggle login/register
     private Button toggleModeButton;
 
-    // títulos do painel direito
+    // Titles on the right panel
     private Label rightTitleLabel;
     private Label rightSubtitleLabel;
 
-    // formulários
+    // Forms
     private VBox loginFormBox;
     private VBox registerFormBox;
 
-    // componentes do login
+    // Login components
     private TextField loginEmailField;
     private PasswordField loginPasswordField;
     private Button loginButton;
     private ProgressIndicator loginProgress;
     private Label loginStatusLabel;
 
-    // componentes do registo
+    // Register components
     private RadioButton rbStudent;
     private RadioButton rbTeacher;
     private Label registerExtraLabel;
@@ -47,16 +50,19 @@ public class AuthenticationView {
     private Button registerButton;
     private Label registerStatusLabel;
 
-    // overlay semi-transparente para bloquear a interface
+    // Semi-transparent overlay to block the UI
     private StackPane busyOverlay;
     private Label busyLabel;
     private ProgressIndicator busySpinner;
 
+    /**
+     * Creates and configures the full authentication UI.
+     */
     public void createView() {
         BorderPane root = new BorderPane();
         root.getStyleClass().add("auth-root");
 
-        // Painel esquerdo (logo + mensagem)
+        // Left panel (logo + message)
         VBox leftPane = new VBox();
         leftPane.getStyleClass().add("left-pane");
         leftPane.setPrefWidth(380);
@@ -89,7 +95,7 @@ public class AuthenticationView {
         leftInner.getChildren().addAll(logoView, welcomeTitle, welcomeText, toggleModeButton);
         leftPane.getChildren().add(leftInner);
 
-        // Painel direito (formularios)
+        // Right panel (forms)
         VBox rightPane = new VBox();
         rightPane.getStyleClass().add("right-pane");
         rightPane.setAlignment(Pos.CENTER);
@@ -120,11 +126,11 @@ public class AuthenticationView {
         root.setLeft(leftPane);
         root.setCenter(rightPane);
 
-        // ====== STACK ROOT + OVERLAY =======
+        // Root stack with overlay
         StackPane stack = new StackPane();
         stack.getChildren().add(root);
 
-        // === OVERLAY DE LOADING ===
+        // Global loading overlay
         busyOverlay = new StackPane();
         busyOverlay.setVisible(false);
         busyOverlay.setPickOnBounds(true);
@@ -139,25 +145,19 @@ public class AuthenticationView {
                         "-fx-background-radius: 20;"
         );
 
-
         busySpinner = new ProgressIndicator();
         busySpinner.setMaxSize(60, 60);
 
         busyLabel = new Label("Aguarde...");
         busyLabel.getStyleClass().add("status-label");
-
         busyLabel.setWrapText(true);
         busyLabel.setMaxWidth(420);
         busyLabel.setMinWidth(350);
         busyLabel.setPrefWidth(380);
-
         busyLabel.setAlignment(Pos.CENTER);
-
         busyLabel.setTextFill(Color.web("#e0e6f0"));
 
         loadingBox.getChildren().addAll(busySpinner, busyLabel);
-
-        // garantir que a caixa fica MESMO centrada
         busyOverlay.getChildren().add(loadingBox);
         StackPane.setAlignment(loadingBox, Pos.CENTER);
 
@@ -170,14 +170,20 @@ public class AuthenticationView {
 
         try {
             var cssUrl = getClass().getResource("/styles/authentication.css");
-            if (cssUrl != null)
+            if (cssUrl != null) {
                 scene.getStylesheets().add(cssUrl.toExternalForm());
-        } catch (Exception ignored) {}
+            }
+        } catch (Exception ignored) {
+        }
 
         showLoginMode();
     }
 
-    /** Cria o formulário de login */
+    /**
+     * Creates the login form.
+     *
+     * @return login form container
+     */
     private VBox createLoginForm() {
         VBox form = new VBox(12);
         form.getStyleClass().add("auth-form");
@@ -195,7 +201,7 @@ public class AuthenticationView {
         loginButton = new Button("ENTRAR");
         loginButton.getStyleClass().add("primary-pill-button");
         loginButton.setPrefWidth(220);
-        loginButton.setDefaultButton(true);  // Enter acciona login
+        loginButton.setDefaultButton(true);
 
         loginProgress = new ProgressIndicator();
         loginProgress.setMaxSize(30, 30);
@@ -217,38 +223,55 @@ public class AuthenticationView {
         return form;
     }
 
-    /** Mostra overlay em modo "normal" (info) */
+    /**
+     * Shows the global overlay in normal (information) mode.
+     *
+     * @param message message to display
+     */
     public void showGlobalLoading(String message) {
-        if (busyOverlay == null)
+        if (busyOverlay == null) {
             return;
+        }
 
         busySpinner.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
         busyLabel.setText(message != null ? message : "Aguarde...");
-        busyLabel.setTextFill(Color.web("#e0e6f0")); // texto claro
+        busyLabel.setTextFill(Color.web("#e0e6f0"));
         busyOverlay.setVisible(true);
         busyOverlay.toFront();
     }
 
-    /** Mostra overlay em modo erro (texto a vermelho) */
+    /**
+     * Shows the global overlay in error mode (red message).
+     *
+     * @param message error message
+     */
     public void showGlobalError(String message) {
-        if (busyOverlay == null)
+        if (busyOverlay == null) {
             return;
+        }
 
         busySpinner.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
         busyLabel.setText(message != null ? message : "Ocorreu um erro.");
-        busyLabel.setTextFill(Color.web("#e74c3c")); // vermelho
+        busyLabel.setTextFill(Color.web("#e74c3c"));
         busyLabel.setTextAlignment(TextAlignment.CENTER);
         busyOverlay.setVisible(true);
         busyOverlay.toFront();
     }
 
+    /**
+     * Hides the global loading overlay.
+     */
     public void hideGlobalLoading() {
         if (busyOverlay != null) {
             busyOverlay.setVisible(false);
         }
     }
 
-    /** Cria o formulário de registo */
+    /**
+     * Creates the register form.
+     *
+     * @return register form container
+     */
     private VBox createRegisterForm() {
         VBox form = new VBox(12);
         form.getStyleClass().add("auth-form");
@@ -288,7 +311,7 @@ public class AuthenticationView {
         registerButton = new Button("CRIAR CONTA");
         registerButton.getStyleClass().add("primary-pill-button");
         registerButton.setPrefWidth(220);
-        registerButton.setDefaultButton(false); // passa a default no modo de registo
+        registerButton.setDefaultButton(false);
 
         registerStatusLabel = new Label();
         registerStatusLabel.getStyleClass().add("status-label");
@@ -308,7 +331,9 @@ public class AuthenticationView {
         return form;
     }
 
-    /* Alterna para o modo login */
+    /**
+     * Switches the view to login mode.
+     */
     public void showLoginMode() {
         rightTitleLabel.setText("Entrar");
         rightSubtitleLabel.setText("Use o seu email e password.");
@@ -324,7 +349,9 @@ public class AuthenticationView {
         registerButton.setDefaultButton(false);
     }
 
-    /* Alterna para o modo registo */
+    /**
+     * Switches the view to register mode.
+     */
     public void showRegisterMode() {
         rightTitleLabel.setText("Criar Conta");
         rightSubtitleLabel.setText("Use o seu email institucional.");
@@ -340,14 +367,35 @@ public class AuthenticationView {
         registerButton.setDefaultButton(true);
     }
 
-    /* API exposta ao controller */
-    public Scene getScene() { return scene; }
-    public String getLoginEmail() { return loginEmailField.getText().trim(); }
-    public String getLoginPassword() { return loginPasswordField.getText(); }
-    public String getRegisterName() { return registerNameField.getText().trim(); }
-    public String getRegisterEmail() { return registerEmailField.getText().trim(); }
-    public String getRegisterPassword() { return registerPasswordField.getText(); }
-    public String getRegisterExtra() { return registerExtraField.getText().trim(); }
+    /* ===== Public API for the controller ===== */
+
+    public Scene getScene() {
+        return scene;
+    }
+
+    public String getLoginEmail() {
+        return loginEmailField.getText().trim();
+    }
+
+    public String getLoginPassword() {
+        return loginPasswordField.getText();
+    }
+
+    public String getRegisterName() {
+        return registerNameField.getText().trim();
+    }
+
+    public String getRegisterEmail() {
+        return registerEmailField.getText().trim();
+    }
+
+    public String getRegisterPassword() {
+        return registerPasswordField.getText();
+    }
+
+    public String getRegisterExtra() {
+        return registerExtraField.getText().trim();
+    }
 
     public String getSelectedRegisterType() {
         return rbStudent.isSelected() ? "STUDENT" : "TEACHER";
@@ -366,7 +414,9 @@ public class AuthenticationView {
         loginEmailField.setText(email);
     }
 
-    /** Actualiza a mensagem de estado do login, mostra ou oculta o progresso e ajusta o botão */
+    /**
+     * Updates the login status message and progress indicator.
+     */
     public void setLoginStatus(String message, Color color,
                                boolean showProgress, boolean loginButtonEnabled) {
         loginStatusLabel.setText(message == null ? "" : message);
@@ -376,7 +426,9 @@ public class AuthenticationView {
         loginButton.setDefaultButton(loginButtonEnabled);
     }
 
-    /** Actualiza a mensagem de estado do registo e o botão de registo */
+    /**
+     * Updates the register status message.
+     */
     public void setRegisterStatus(String message, Color color, boolean buttonEnabled) {
         registerStatusLabel.setText(message == null ? "" : message);
         registerStatusLabel.setTextFill(color != null ? color : Color.WHITE);
@@ -384,7 +436,9 @@ public class AuthenticationView {
         registerButton.setDefaultButton(buttonEnabled);
     }
 
-    /** Activa ou desactiva todos os campos e mostra/oculta o overlay */
+    /**
+     * Enables/disables all auth fields and shows/hides the overlay.
+     */
     public void setAuthBusy(boolean busy) {
         toggleModeButton.setDisable(busy);
         loginEmailField.setDisable(busy);
@@ -399,10 +453,11 @@ public class AuthenticationView {
     }
 
     public void showBusy(boolean busy) {
-        if (busy)
+        if (busy) {
             showGlobalLoading("Aguarde...");
-        else
+        } else {
             hideGlobalLoading();
+        }
     }
 
     public void clearLoginFields() {
@@ -422,6 +477,11 @@ public class AuthenticationView {
         setRegisterStatus("", Color.WHITE, true);
     }
 
+    /**
+     * Registers handlers that delegate actions to the given controller.
+     *
+     * @param controller authentication controller
+     */
     public void registerHandlers(AuthenticationController controller) {
         toggleModeButton.setOnAction(e -> controller.onToggleMode());
 
@@ -445,7 +505,10 @@ public class AuthenticationView {
         rbTeacher.setOnAction(e -> controller.onRegisterTypeChanged("TEACHER"));
     }
 
+    /**
+     * Hook for future UI updates.
+     */
     public void update() {
-        // não requerido no momento
+        // not required for now
     }
 }

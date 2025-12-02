@@ -12,42 +12,62 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 /**
- * Serviço que trata da criação, edição, listagem e acesso de perguntas.
+ * Service responsible for creating, editing, listing and accessing questions.
  */
 public class QuestionService implements IQuestionService {
     private final IQuestionAnswerContext context;
     private final DbCommands dbCommands;
 
+    /**
+     * Creates a new {@link QuestionService}.
+     *
+     * @param context    question/answer context used for replication
+     * @param dbCommands database access helper
+     */
     public QuestionService(IQuestionAnswerContext context, DbCommands dbCommands) {
         this.context = context;
         this.dbCommands = dbCommands;
     }
 
-    /** Cria uma pergunta para um docente. */
+    /**
+     * Creates a question for a teacher, validates input, inserts it into the database
+     * and enqueues SQL for replication.
+     *
+     * @param dto question creation data
+     * @return response containing the question ID and access code
+     * @throws Exception if validation or DB operations fail
+     */
     @Override
     public CreateQuestionResponseDTO createQuestion(CreateQuestionDTO dto) throws Exception {
-        if (dto == null)
-            throw new IllegalArgumentException("Dados inválidos");
+        if (dto == null) {
+            throw new IllegalArgumentException("Dados da pergunta inválidos");
+        }
 
-        String statement     = dto.statement();
-        Integer teacherId    = dto.teacherId();
-        List<Option> options = dto.options();
-        OptionLetter correct = dto.correctOption();
+        String statement      = dto.statement();
+        Integer teacherId     = dto.teacherId();
+        List<Option> options  = dto.options();
+        OptionLetter correct  = dto.correctOption();
         LocalDateTime startAt = dto.startAt();
         LocalDateTime endAt   = dto.endAt();
 
-        if (statement == null || statement.isBlank())
+        if (statement == null || statement.isBlank()) {
             throw new IllegalArgumentException("Enunciado obrigatório");
-        if (teacherId == null || teacherId <= 0)
+        }
+        if (teacherId == null || teacherId <= 0) {
             throw new IllegalArgumentException("ID do docente inválido");
-        if (options == null || options.size() < 2)
+        }
+        if (options == null || options.size() < 2) {
             throw new IllegalArgumentException("Mínimo de duas opções necessário");
-        if (correct == null)
+        }
+        if (correct == null) {
             throw new IllegalArgumentException("Opção correcta obrigatória");
-        if (options.stream().noneMatch(o -> o.getLetter() == correct))
+        }
+        if (options.stream().noneMatch(o -> o.getLetter() == correct)) {
             throw new IllegalArgumentException("Opção correcta deve constar das opções");
-        if (startAt == null || endAt == null || !endAt.isAfter(startAt))
+        }
+        if (startAt == null || endAt == null || !endAt.isAfter(startAt)) {
             throw new IllegalArgumentException("Período inválido");
+        }
 
         String accessCode = UUID.randomUUID().toString().substring(0, 6).toUpperCase();
 
@@ -67,7 +87,7 @@ public class QuestionService implements IQuestionService {
             }
         });
 
-        // replicação incremental
+        // incremental replication
         long qId = qIdArr[0];
 
         List<String> aux = new ArrayList<>();
@@ -85,7 +105,13 @@ public class QuestionService implements IQuestionService {
         return new CreateQuestionResponseDTO((int) qId, accessCode);
     }
 
-    /** Lista perguntas por docente, com filtro opcional (active, future, expired ou null). */
+    /**
+     * Lists questions for a teacher with an optional filter (active, future, expired or null).
+     *
+     * @param dto list parameters (teacher and filter)
+     * @return list of questions
+     * @throws Exception if DB access fails
+     */
     @Override
     public List<Question> listQuestions(ListQuestionsDTO dto) throws Exception {
         Integer teacherId = dto.teacherId();
@@ -111,7 +137,7 @@ public class QuestionService implements IQuestionService {
             params.add(now.toString());
         }
 
-        List<Map<String,Object>> rows = new ArrayList<>();
+        List<Map<String, Object>> rows = new ArrayList<>();
         try (var con = DriverManager.getConnection(dbCommands.getUrl());
              var ps = con.prepareStatement(sql.toString())) {
             for (int i = 0; i < params.size(); i++) {
@@ -119,7 +145,7 @@ public class QuestionService implements IQuestionService {
             }
             try (var rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    Map<String,Object> m = new LinkedHashMap<>();
+                    Map<String, Object> m = new LinkedHashMap<>();
                     m.put("id", rs.getInt("id"));
                     m.put("statement", rs.getString("statement"));
                     m.put("teacher_id", rs.getInt("teacher_id"));
@@ -133,12 +159,12 @@ public class QuestionService implements IQuestionService {
         }
 
         List<Question> out = new ArrayList<>();
-        for (Map<String,Object> r : rows) {
+        for (Map<String, Object> r : rows) {
             int qId = ((Number) r.get("id")).intValue();
             List<Option> opts = loadOptions(qId);
             OptionLetter corr = OptionLetter.valueOf((String) r.get("correct_option"));
             LocalDateTime startAt = LocalDateTime.parse((String) r.get("start_at"));
-            LocalDateTime endAt   = LocalDateTime.parse((String) r.get("end_at"));
+            LocalDateTime endAt = LocalDateTime.parse((String) r.get("end_at"));
             out.add(new Question(
                     qId,
                     (String) r.get("statement"),
@@ -153,40 +179,30 @@ public class QuestionService implements IQuestionService {
         return out;
     }
 
-    /** Carrega opções de uma pergunta. */
-    private List<Option> loadOptions(int questionId) throws Exception {
-        List<Option> opts = new ArrayList<>();
-        try (var con = java.sql.DriverManager.getConnection(dbCommands.getUrl());
-             var ps = con.prepareStatement(
-                     "SELECT letter, text FROM option WHERE question_id = ? ORDER BY letter")) {
-            ps.setInt(1, questionId);
-            try (var rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    OptionLetter letter = OptionLetter.valueOf(rs.getString("letter"));
-                    String text = rs.getString("text");
-                    opts.add(new Option(letter, text));
-                }
-            }
-        }
-        return opts;
-    }
-
-    /** Acessa pergunta por código. */
+    /**
+     * Retrieves a question by access code for a student joining it.
+     *
+     * @param dto join parameters containing the access code
+     * @return the question, or {@code null} if not found
+     * @throws Exception if DB access fails
+     */
     @Override
     public Question joinQuestion(JoinQuestionDTO dto) throws Exception {
         String access = dto.accessCode();
-        Map<String,Object> r = dbCommands.selectOne(
+        Map<String, Object> r = dbCommands.selectOne(
                 "SELECT id, statement, teacher_id, correct_option, start_at, end_at, access_code " +
                         "FROM question WHERE access_code = ? LIMIT 1",
                 access
         );
-        if (r == null) return null;
+        if (r == null) {
+            return null;
+        }
 
         int qId = ((Number) r.get("id")).intValue();
         List<Option> opts = loadOptions(qId);
         OptionLetter corr = OptionLetter.valueOf((String) r.get("correct_option"));
         LocalDateTime startAt = LocalDateTime.parse((String) r.get("start_at"));
-        LocalDateTime endAt   = LocalDateTime.parse((String) r.get("end_at"));
+        LocalDateTime endAt = LocalDateTime.parse((String) r.get("end_at"));
         return new Question(
                 qId,
                 (String) r.get("statement"),
@@ -199,18 +215,25 @@ public class QuestionService implements IQuestionService {
         );
     }
 
-    /** Edita pergunta se não existirem respostas. */
+    /**
+     * Edits a question if there are no answers registered.
+     * Also enqueues SQL for replication.
+     *
+     * @param dto edit parameters
+     * @return {@code true} if the question was updated
+     * @throws Exception if DB access fails or answers already exist
+     */
     @Override
     public boolean editQuestion(EditQuestionDTO dto) throws Exception {
         Integer quizId = dto.questionId();
         Integer teacherId = dto.teacherId();
-        String statement  = dto.statement();
+        String statement = dto.statement();
         List<Option> options = dto.options();
         OptionLetter correct = dto.correctOption();
         LocalDateTime startAt = dto.startAt();
-        LocalDateTime endAt   = dto.endAt();
+        LocalDateTime endAt = dto.endAt();
 
-        Map<String,Object> ans = dbCommands.selectOne(
+        Map<String, Object> ans = dbCommands.selectOne(
                 "SELECT 1 as one FROM answer WHERE question_id = ? LIMIT 1",
                 quizId
         );
@@ -233,10 +256,9 @@ public class QuestionService implements IQuestionService {
             }
         });
 
-
         List<String> aux = new ArrayList<>();
 
-        aux.add( "UPDATE question SET statement='" + escape(statement) + "', correct_option='" + correct.name() +
+        aux.add("UPDATE question SET statement='" + escape(statement) + "', correct_option='" + correct.name() +
                 "', start_at='" + startAt + "', end_at='" + endAt + "' WHERE id=" + quizId + " AND teacher_id=" + teacherId + ";");
 
         aux.add("DELETE FROM option WHERE question_id=" + quizId + ";");
@@ -252,13 +274,20 @@ public class QuestionService implements IQuestionService {
         return true;
     }
 
-    /** Elimina pergunta se não tiver respostas. */
+    /**
+     * Deletes a question if there are no answers registered.
+     * Also enqueues SQL for replication.
+     *
+     * @param dto delete parameters
+     * @return {@code true} if the question was deleted
+     * @throws Exception if DB access fails or answers already exist
+     */
     @Override
     public boolean deleteQuestion(DeleteQuestionDTO dto) throws Exception {
         Integer qId = dto.questionId();
         Integer teacherId = dto.teacherId();
 
-        Map<String,Object> ans = dbCommands.selectOne(
+        Map<String, Object> ans = dbCommands.selectOne(
                 "SELECT 1 as one FROM answer WHERE question_id = ? LIMIT 1",
                 qId
         );
@@ -281,6 +310,36 @@ public class QuestionService implements IQuestionService {
         return true;
     }
 
+    /**
+     * Loads the options of a question.
+     *
+     * @param questionId question ID
+     * @return list of options
+     * @throws Exception if DB access fails
+     */
+    private List<Option> loadOptions(int questionId) throws Exception {
+        List<Option> opts = new ArrayList<>();
+        try (var con = java.sql.DriverManager.getConnection(dbCommands.getUrl());
+             var ps = con.prepareStatement(
+                     "SELECT letter, text FROM option WHERE question_id = ? ORDER BY letter")) {
+            ps.setInt(1, questionId);
+            try (var rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    OptionLetter letter = OptionLetter.valueOf(rs.getString("letter"));
+                    String text = rs.getString("text");
+                    opts.add(new Option(letter, text));
+                }
+            }
+        }
+        return opts;
+    }
+
+    /**
+     * Escapes single quotes for safe SQL string literal construction.
+     *
+     * @param s input string
+     * @return escaped string (or empty string if {@code s} is null)
+     */
     private static String escape(String s) {
         return s == null ? "" : s.replace("'", "''");
     }

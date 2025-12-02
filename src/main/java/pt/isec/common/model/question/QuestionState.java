@@ -3,10 +3,12 @@ package pt.isec.common.model.question;
 import java.time.LocalDateTime;
 
 /**
- * Estado de uma questão baseado no período de disponibilidade
- * - FUTURE: ainda não começou (now < startAt)
- * - ACTIVE: em curso (startAt <= now <= endAt)
- * - EXPIRED: já terminou (now > endAt)
+ * Question state based on availability period:
+ * <ul>
+ *     <li>FUTURE: not started yet (now &lt; startAt)</li>
+ *     <li>ACTIVE: in progress (startAt &lt;= now &lt;= endAt)</li>
+ *     <li>EXPIRED: already finished (now &gt; endAt)</li>
+ * </ul>
  */
 public enum QuestionState {
     FUTURE("Futura", "Ainda não começou"),
@@ -21,23 +23,42 @@ public enum QuestionState {
         this.description = description;
     }
 
+    /**
+     * Returns a human-friendly display name (in Portuguese).
+     *
+     * @return display name
+     */
     public String getDisplayName() {
         return displayName;
     }
 
+    /**
+     * Returns a short description (in Portuguese).
+     *
+     * @return description string
+     */
     public String getDescription() {
         return description;
     }
 
     /**
-     * Calcula o estado baseado nas datas
+     * Computes the question state based on start and end dates using current time.
+     *
+     * @param startAt start date/time
+     * @param endAt   end date/time
+     * @return corresponding {@link QuestionState}
      */
     public static QuestionState fromDates(LocalDateTime startAt, LocalDateTime endAt) {
         return fromDates(startAt, endAt, LocalDateTime.now());
     }
 
     /**
-     * Calcula o estado baseado nas datas e momento específico
+     * Computes the question state based on start/end dates and a specific timestamp.
+     *
+     * @param startAt start date/time
+     * @param endAt   end date/time
+     * @param now     reference date/time
+     * @return corresponding {@link QuestionState}
      */
     public static QuestionState fromDates(LocalDateTime startAt, LocalDateTime endAt, LocalDateTime now) {
         if (now.isBefore(startAt)) {
@@ -50,24 +71,29 @@ public enum QuestionState {
     }
 
     /**
-     * Verifica se pode ser respondida
+     * Checks whether the question can be answered in this state.
+     *
+     * @return {@code true} if answer is allowed
      */
     public boolean canBeAnswered() {
         return this == ACTIVE;
     }
 
     /**
-     * Verifica se resultados podem ser visualizados
+     * Checks whether results can be viewed in this state.
+     *
+     * @return {@code true} if results are available
      */
     public boolean canViewResults() {
         return this == EXPIRED;
     }
 
     /**
-     * Verifica se pode ser editada/eliminada
+     * Checks whether the question can be modified (edited/deleted) in this state.
+     *
+     * @return {@code true} if modifications are allowed
      */
     public boolean canBeModified() {
         return this == FUTURE || this == ACTIVE;
     }
 }
-

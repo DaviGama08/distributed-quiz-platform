@@ -1,5 +1,6 @@
 package pt.isec.directory.threads;
 
+import pt.isec.common.util.Log;
 import pt.isec.directory.IDirectoryManager;
 import pt.isec.directory.ServerInfo;
 
@@ -10,10 +11,22 @@ import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 
-public class ReaperThread implements Runnable{
+/**
+ * Reaper thread responsible for:
+ * <ul>
+ *     <li>Removing inactive servers based on TTL</li>
+ *     <li>Sending a {@code SHUTDOWN} message to all servers when the directory exits</li>
+ *     <li>Closing the UDP socket at the end, unblocking the listener thread</li>
+ * </ul>
+ */
+public class ReaperThread implements Runnable {
     private final IDirectoryManager tInfo;
     private final long periodMs;
 
+    /**
+     * @param tInfo    directory manager
+     * @param periodMs interval between sweeps in milliseconds
+     */
     public ReaperThread(IDirectoryManager tInfo, long periodMs) {
         this.tInfo = tInfo;
         this.periodMs = periodMs;
@@ -30,13 +43,12 @@ public class ReaperThread implements Runnable{
                 Thread.sleep(periodMs);
             }
         } catch (InterruptedException ie) {
-            // não vamos usar interrupt para shutdown, mas se acontecer,
-            // apenas saímos do loop
+            // we do not use interrupt for shutdown, but if it happens just exit the loop
             Thread.currentThread().interrupt();
         } catch (Throwable t) {
-            System.err.println("[Diretoria][Reaper] erro inesperado: " + t.getMessage());
+            Log.error(ReaperThread.class, "[Diretoria][Reaper] erro inesperado: " + t.getMessage(), t);
         } finally {
-            // === Diretoria a encerrar: enviar SHUTDOWN a todos os servidores e fechar o socket ===
+            // Directory is shutting down: send SHUTDOWN to all servers and close the socket.
             DatagramSocket socket = tInfo.socket();
             if (socket != null && !socket.isClosed()) {
                 for (ServerInfo s : new ArrayList<>(tInfo.servers().values())) {
@@ -51,16 +63,18 @@ public class ReaperThread implements Runnable{
                         );
                         socket.send(dp);
                     } catch (IOException e) {
-                        System.err.println("[Directory] Falha a enviar SHUTDOWN para "
-                                + s.getIp() + ":" + s.getUdpPort() + " – " + e.getMessage());
+                        Log.error(ReaperThread.class,
+                                "[Directory] Falha a enviar SHUTDOWN para " +
+                                        s.getIp() + ":" + s.getUdpPort() + " – " + e.getMessage(),
+                                e);
                     }
                 }
 
-                // fechar o socket aqui desbloqueia o UdpListenerThread (receive -> SocketException)
+                // closing the socket here will unblock UdpListenerThread (receive -> SocketException)
                 socket.close();
             }
 
-            System.out.println("Reaper terminou.");
+            Log.info(ReaperThread.class, "Reaper terminou.");
         }
     }
 }

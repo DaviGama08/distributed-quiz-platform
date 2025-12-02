@@ -7,54 +7,78 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+/**
+ * Entry point for the server application.
+ * <p>
+ * Expects the following command-line arguments:
+ * <pre>
+ *   &lt;dirHost&gt; &lt;dirPort&gt; &lt;dataDir|PROJECT|HOME&gt; &lt;multicastIfIp|AUTO&gt; &lt;clientPort&gt; &lt;dbCopyPort&gt;
+ * </pre>
+ */
 public class MainServer {
+
+    /**
+     * Starts the server, configures the directory service, data folder and
+     * registers a shutdown hook.
+     *
+     * @param args command-line arguments:
+     *             dirHost, dirPort, dataDir|PROJECT|HOME, multicastIfIp|AUTO, clientPort, dbCopyPort
+     * @throws Exception if an error occurs during initialization
+     */
     public static void main(String[] args) throws Exception {
         if (args.length != 6) {
-            Log.error(MainServer.class, "usage: MainServer <dirHost> <dirPort> <dataDir|PROJECT|HOME> <multicastIfIp|AUTO> <clientPort> <dbCopyPort>");
+            Log.error(MainServer.class,
+                    "Usage: <dirHost> <dirPort> <dataDir|PROJECT|HOME> <multicastIfIp|AUTO> <clientPort> <dbCopyPort>");
             return;
         }
         Class.forName("org.sqlite.JDBC");
 
-        String dirHost    = args[0];
-        int    dirPort    = Integer.parseInt(args[1]);
-        String dataArg    = args[2];
-        String multicastInterfaceIp     = args[3];
-        int    clientPort = Integer.parseInt(args[4]);
-        int    dbCopyPort = Integer.parseInt(args[5]);
+        String dirHost             = args[0];
+        int    dirPort             = Integer.parseInt(args[1]);
+        String dataArg             = args[2];
+        String multicastInterfaceIp = args[3];
+        int    clientPort          = Integer.parseInt(args[4]);
+        int    dbCopyPort          = Integer.parseInt(args[5]);
 
-        // === pasta de dados portátil ===
+        // Portable data folder
         Path dataDir;
         if ("PROJECT".equalsIgnoreCase(dataArg)) {
-            // coloca a pasta "data" no MESMO nível de "batchFiles"
-            // user.dir: é a pasta onde o comando Java foi executado, neste caso na pasta batchFiles
+            // Put the "data" folder at the same level as "batchFiles"
+            // user.dir: folder where the Java command was executed (here, batchFiles)
             Path here    = Paths.get(System.getProperty("user.dir")).toAbsolutePath();
-            Path project = here.getParent(); // uma pasta antes
-            if (project == null) project = here; // fallback
+            Path project = here.getParent(); // one level up
+            if (project == null) {
+                project = here; // fallback
+            }
             dataDir = project.resolve("data").toAbsolutePath();
         } else if ("HOME".equalsIgnoreCase(dataArg)) {
             dataDir = Paths.get(System.getProperty("user.home"), "quizdb").toAbsolutePath();
         } else {
             dataDir = Paths.get(dataArg).toAbsolutePath();
         }
-        Files.createDirectories(dataDir); //Cria a pasta com o nome definido e no local definido
+        // Ensure data directory exists
+        Files.createDirectories(dataDir);
 
-        // ficheiro distinto por servidor (evita colisões). Resolve
+        // Distinct file per server (avoids collisions)
         Path dbFile = dataDir.resolve("quiz-" + clientPort + ".db");
 
-        Log.info(MainServer.class, "[DB] dir : " + dataDir);
-        Log.info(MainServer.class, "[DB] file: " + dbFile + " (exists=" + Files.exists(dbFile) + ")");
+        Log.info(MainServer.class, "[DB] dir : %s", dataDir);
+        Log.info(MainServer.class, "[DB] file: %s (exists=%s)", dbFile, Files.exists(dbFile));
 
-        // NÃO usar try-with-resources aqui, para o servidor não fechar logo
-        //Cria instancia do serverManager passando IP e Porto da diretoria, MultiCast IP e porto do Client, Porto da BD e Ficheiro do BD
-        ServerManager serverManager = new ServerManager(dirHost, dirPort, multicastInterfaceIp, clientPort, dbCopyPort, dbFile);
+        // Do not use try-with-resources here, we want the server to stay alive
+        ServerManager serverManager =
+                new ServerManager(dirHost, dirPort, multicastInterfaceIp, clientPort, dbCopyPort, dbFile);
 
-        //Apanhar o ctrl + c
+        // Catch CTRL+C
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            try { serverManager.shutdownServer(); } catch (Exception ignored) {}
-            System.out.println("Servidor terminado.");
+            try {
+                serverManager.shutdownServer();
+            } catch (Exception ignored) {
+            }
+            Log.info(MainServer.class, "Server shutdown completed.");
         }));
 
         serverManager.run();
-        Log.info(MainServer.class, "[MainServer] Servidor iniciado. Ctrl+C para terminar.");
+        Log.info(MainServer.class, "Server started. Use CTRL+C to terminate.");
     }
 }

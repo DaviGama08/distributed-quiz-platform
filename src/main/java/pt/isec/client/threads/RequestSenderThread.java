@@ -2,48 +2,54 @@ package pt.isec.client.threads;
 
 import pt.isec.client.core.IClientService;
 import pt.isec.common.messages.TcpMessage;
+import pt.isec.common.util.Log;
 
 import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 
 /**
- * Thread que envia mensagens da fila de pedidos para o servidor via TCP.
+ * Thread that sends messages from the request queue to the server over TCP.
  */
 public class RequestSenderThread implements Runnable {
+
     private final IClientService service;
 
+    /**
+     * Creates a new request sender thread.
+     *
+     * @param service client service interface
+     */
     public RequestSenderThread(IClientService service) {
         this.service = service;
     }
 
     @Override
     public void run() {
-        System.out.println("[RequestSender] Started sending requests...");
+        Log.info(RequestSenderThread.class, "Started sending requests...");
 
         while (service.isRunning()) {
             TcpMessage<? extends Serializable> request = null;
             try {
-                // Bloqueia até haver um pedido para enviar
+                // Blocks until there is a request to send
                 request = service.getRequestQueue().take();
 
                 ObjectOutputStream out = service.getOutputStream();
                 if (out == null) {
-                    // Sem stream válido — tenta reconectar e volta a enfileirar o pedido
-                    System.err.println("[RequestSender] No output stream available, requeueing request: " +
-                            request.getType());
+                    // No valid stream — try to reconnect and requeue the request
+                    Log.error(RequestSenderThread.class,
+                            "No output stream available, requeueing request: " + request.getType());
                     service.getRequestQueue().put(request);
                     service.handleConnectionLost();
                     break;
                 }
 
-                System.out.println("[RequestSender] Sending: " + request.getType());
+                Log.info(RequestSenderThread.class, "Sending: " + request.getType());
                 out.writeObject(request);
                 out.flush();
             } catch (IOException e) {
                 if (service.isRunning()) {
-                    System.err.println("[RequestSender] Failed to send: " + e.getMessage());
-                    // Tenta não perder o pedido atual
+                    Log.error(RequestSenderThread.class, "Failed to send: " + e.getMessage(), e);
                     try {
                         if (request != null) {
                             service.getRequestQueue().put(request);
@@ -55,12 +61,12 @@ public class RequestSenderThread implements Runnable {
                 }
                 break;
             } catch (InterruptedException e) {
-                System.out.println("[RequestSender] Interrupted");
+                Log.warn(RequestSenderThread.class, "Interrupted while sending requests");
                 Thread.currentThread().interrupt();
                 break;
             }
         }
 
-        System.out.println("[RequestSender] Stopped");
+        Log.info(RequestSenderThread.class, "Stopped sending requests");
     }
 }

@@ -5,8 +5,9 @@ import java.time.LocalDateTime;
 import java.util.Objects;
 
 /**
- * Base para utilizadores (Docente/Estudante).
- * Contém validação simples e getters/setters.
+ * Base class for users (Teacher/Student).
+ * <p>
+ * Provides simple validation and getters/setters.
  */
 public abstract class User implements Serializable {
     private static final long serialVersionUID = 1L;
@@ -17,10 +18,20 @@ public abstract class User implements Serializable {
     protected String passwordHash;
     protected LocalDateTime createdAt;
 
+    /**
+     * Constructs a new user with {@code createdAt = now}.
+     */
     public User() {
         this.createdAt = LocalDateTime.now();
     }
 
+    /**
+     * Constructs a user with basic fields.
+     *
+     * @param name         user name
+     * @param email        email address
+     * @param passwordHash hashed password
+     */
     public User(String name, String email, String passwordHash){
         validate(name, email, passwordHash);
         this.name = name;
@@ -29,6 +40,15 @@ public abstract class User implements Serializable {
         this.createdAt = LocalDateTime.now();
     }
 
+    /**
+     * Constructs a user with all fields.
+     *
+     * @param id           user id
+     * @param name         user name
+     * @param email        email address
+     * @param passwordHash hashed password
+     * @param createdAt    creation time (or {@code now} if {@code null})
+     */
     public User(long id, String name, String email, String passwordHash, LocalDateTime createdAt){
         validate(name, email, passwordHash);
         this.id = id;
@@ -48,22 +68,26 @@ public abstract class User implements Serializable {
     public void setId(long id) { this.id = id; }
 
     public void setName(String name) {
-        if (name == null || name.isBlank())
+        if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("name cannot be null or blank");
+        }
         this.name = name;
     }
 
     public void setEmail(String email) {
-        if (email == null || email.isBlank())
+        if (email == null || email.isBlank()) {
             throw new IllegalArgumentException("email cannot be null or blank");
-        if (!email.contains("@") || !email.contains("."))
+        }
+        if (!email.contains("@") || !email.contains(".")) {
             throw new IllegalArgumentException("email must be a valid address");
+        }
         this.email = email;
     }
 
     public void setPasswordHash(String passwordHash) {
-        if (passwordHash == null || passwordHash.isBlank())
+        if (passwordHash == null || passwordHash.isBlank()) {
             throw new IllegalArgumentException("passwordHash cannot be null or blank");
+        }
         this.passwordHash = passwordHash;
     }
 
@@ -71,19 +95,32 @@ public abstract class User implements Serializable {
         this.createdAt = createdAt;
     }
 
+    /**
+     * Basic validation used by constructors.
+     *
+     * @param name         user name
+     * @param email        email address
+     * @param passwordHash hashed password
+     */
     protected static void validate(String name, String email, String passwordHash) {
-        if (name == null || name.isBlank())
+        if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("name cannot be null or blank");
-        if (email == null || email.isBlank())
+        }
+        if (email == null || email.isBlank()) {
             throw new IllegalArgumentException("email cannot be null or blank");
-        if (!email.contains("@") || !email.contains("."))
+        }
+        if (!email.contains("@") || !email.contains(".")) {
             throw new IllegalArgumentException("email must be a valid address");
-        if (passwordHash == null || passwordHash.isBlank())
+        }
+        if (passwordHash == null || passwordHash.isBlank()) {
             throw new IllegalArgumentException("passwordHash cannot be null or blank");
+        }
     }
 
     /**
-     * Retorna o tipo de utilizador (student ou teacher)
+     * Returns the user type (e.g., {@code "student"} or {@code "teacher"}).
+     *
+     * @return user type string
      */
     public abstract String getUserType();
 
@@ -111,4 +148,3 @@ public abstract class User implements Serializable {
                 '}';
     }
 }
-

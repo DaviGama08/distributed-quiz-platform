@@ -14,27 +14,32 @@ import java.util.List;
 import java.util.concurrent.BlockingQueue;
 
 /**
- * Interface de acesso aos recursos de rede do cliente.
- * Define métodos para gerir a ligação TCP, as filas de pedidos e respostas,
- * o estado de autenticação e os eventos de UI (property changes).
+ * Abstraction over the client's networking resources.
+ * <p>
+ * Defines methods to manage the TCP connection, request/response queues,
+ * authentication state and observable UI events (property changes).
  */
 public interface IClientService {
-    // Lida com uma perda de ligação
+
+    /**
+     * Handles a lost connection event.
+     * Typically triggers a reconnection flow.
+     */
     void handleConnectionLost();
 
-    // Streams e socket TCP
+    // TCP streams and socket
     ObjectOutputStream getOutputStream();
     ObjectInputStream getInputStream();
     Socket getTcpSocket();
 
-    // Filas de pedidos e respostas
+    // Request/response queues
     BlockingQueue<TcpMessage<? extends Serializable>> getRequestQueue();
     BlockingQueue<TcpMessage<? extends Serializable>> getResponseQueue();
 
-    // Estado de execução
+    // Execution state
     boolean isRunning();
 
-    // Estado de autenticação
+    // Authentication state setters
     void setUserId(Integer id);
     void setStudentNumber(Integer number);
     void setUserType(String t);
@@ -42,6 +47,7 @@ public interface IClientService {
     void setAuthenticated(boolean authenticated);
     void setUserName(String name);
 
+    // Authentication state getters
     Integer getUserId();
     Integer getStudentNumber();
     String getUserType();
@@ -49,12 +55,12 @@ public interface IClientService {
     String getUserName();
     boolean isAuthenticated();
 
-    // Eventos (property changes) para autenticação
+    // Authentication events
     void setPropLoginOk(AuthResponseDTO dto);
     void setPropError(String s);
     void setPropRegisterOk(AuthResponseDTO dto);
 
-    // Eventos para perguntas e respostas
+    // Question/answer events
     void setPropCreateQuestionResponse(CreateQuestionResponseDTO dto);
     void setPropEditQuestionResponse(String message);
     void setPropListQuestionsResponse(List<Question> questions);
@@ -63,11 +69,28 @@ public interface IClientService {
     void setPropSubmitAnswerFail(String message);
     void setPropViewAnswersResponse(List<Answer> answers);
     void setPropListAnsweredResponse(List<Answer> answers);
-    // Notificação ao docente de que uma resposta foi submetida (payload: questionId Integer)
+
+    /**
+     * Notification to the teacher that an answer was submitted.
+     * Payload: questionId ({@link Integer}).
+     */
     void setPropAnswerSubmitted(Integer questionId);
-    // Resposta à eliminação de pergunta (ack/nack) - payload: String message
+
+    /**
+     * Response to question deletion (ack/nack).
+     * Payload: message string.
+     */
     void setPropDeleteQuestionResponse(String message);
-    // Resposta a atualização de perfil (payload: AuthResponseDTO)
+
+    /**
+     * Response to profile update (success).
+     * Payload: {@link AuthResponseDTO}.
+     */
     void setPropUpdateProfileOk(AuthResponseDTO dto);
+
+    /**
+     * Response to profile update (failure).
+     * Payload: error message.
+     */
     void setPropUpdateProfileFail(String message);
 }

@@ -10,11 +10,14 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 
 /**
- * Dashboard do estudante com tema escuro. Usa dashboard.css para estilos.
+ * Student dashboard view (dark theme).
+ * <p>
+ * Styling is defined in {@code dashboard.css}.
  */
 public class StudentDashboardView {
+
     private String userName;
-    private String userEmail;        // mutável para poder ser atualizado
+    private String userEmail;
 
     private Scene scene;
 
@@ -22,27 +25,36 @@ public class StudentDashboardView {
     private Label welcomeLabel;
     private Label headerEmailLabel;
 
-    // Notificações
+    // Notifications
     private TextArea notificationArea;
 
-    // Sidebar / perfil
-    private Label profileNameLabel;      // nome no cartão de perfil
-    private Label avatarInitialsLabel;   // iniciais no avatar
+    // Sidebar / profile
+    private Label profileNameLabel;
+    private Label avatarInitialsLabel;
     private VBox profileCard;
 
-    // Botões do menu
+    // Menu buttons
     private Button answerQuestionBtn;
     private Button historyBtn;
     private Button logoutBtn;
 
-    // Loading overlay leve no header
+    // Lightweight loading overlay in header
     private HBox loadingBox;
 
+    /**
+     * Creates a student dashboard view.
+     *
+     * @param userName initial student name
+     * @param userEmail initial student email
+     */
     public StudentDashboardView(String userName, String userEmail) {
         this.userName = userName;
         this.userEmail = userEmail;
     }
 
+    /**
+     * Builds the main scene and UI components.
+     */
     public void createView() {
         BorderPane root = new BorderPane();
         root.getStyleClass().add("dashboard-root-dark");
@@ -57,7 +69,8 @@ public class StudentDashboardView {
             if (cssUrl != null) {
                 scene.getStylesheets().add(cssUrl.toExternalForm());
             }
-        } catch (Exception ignored) { }
+        } catch (Exception ignored) {
+        }
     }
 
     /* =================== HEADER =================== */
@@ -74,7 +87,7 @@ public class StudentDashboardView {
         headerEmailLabel = new Label(userEmail != null ? userEmail : "");
         headerEmailLabel.getStyleClass().add("header-email-dark");
 
-        // loading box (invisível por defeito) para indicar operações assíncronas não-modais
+        // Non-modal loading indicator under header
         loadingBox = new HBox(8);
         loadingBox.setAlignment(Pos.CENTER_LEFT);
         loadingBox.setPadding(new Insets(4, 0, 0, 0));
@@ -89,8 +102,15 @@ public class StudentDashboardView {
         return header;
     }
 
+    /**
+     * Shows a small non-modal loading indicator in the header.
+     *
+     * @param message message to display next to the spinner
+     */
     public void showLoading(String message) {
-        if (loadingBox == null) return;
+        if (loadingBox == null) {
+            return;
+        }
         Platform.runLater(() -> {
             Label label = (Label) loadingBox.getChildren().get(1);
             label.setText(message);
@@ -98,12 +118,17 @@ public class StudentDashboardView {
         });
     }
 
+    /**
+     * Hides the header loading indicator.
+     */
     public void hideLoading() {
-        if (loadingBox == null) return;
+        if (loadingBox == null) {
+            return;
+        }
         Platform.runLater(() -> loadingBox.setVisible(false));
     }
 
-    /* =================== SIDEBAR / PERFIL =================== */
+    /* =================== SIDEBAR / PROFILE =================== */
 
     private VBox createSidebar() {
         VBox sidebar = new VBox(12);
@@ -119,7 +144,6 @@ public class StudentDashboardView {
         historyBtn = createMenuButton("Histórico");
         logoutBtn = createMenuButton("Logout");
 
-        // Empurra logout para baixo
         Region spacer = new Region();
         VBox.setVgrow(spacer, Priority.ALWAYS);
 
@@ -159,27 +183,42 @@ public class StudentDashboardView {
     }
 
     private String getInitials(String text) {
-        if (text == null || text.isBlank()) return "?";
+        if (text == null || text.isBlank()) {
+            return "?";
+        }
         String[] parts = text.trim().split("\\s+");
-        if (parts.length == 1)
+        if (parts.length == 1) {
             return parts[0].substring(0, 1).toUpperCase();
+        }
         return ("" + parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
     }
 
+    /**
+     * Updates the profile name, welcome message and avatar initials.
+     *
+     * @param name new student name
+     */
     public void setProfileName(String name) {
-        if (name == null || name.isBlank())
+        if (name == null || name.isBlank()) {
             return;
+        }
         this.userName = name;
-        if (profileNameLabel != null)
+        if (profileNameLabel != null) {
             profileNameLabel.setText(name);
-        if (welcomeLabel != null)
+        }
+        if (welcomeLabel != null) {
             welcomeLabel.setText("Bem-vindo, " + name + "!");
-        // atualizar iniciais também
+        }
         if (avatarInitialsLabel != null) {
             avatarInitialsLabel.setText(getInitials(name));
         }
     }
 
+    /**
+     * Returns the name currently displayed on the profile card.
+     *
+     * @return profile name
+     */
     public String getProfileName() {
         return profileNameLabel != null ? profileNameLabel.getText() : userName;
     }
@@ -238,16 +277,26 @@ public class StudentDashboardView {
         return btn;
     }
 
-    /* =================== API PÚBLICA =================== */
+    /* =================== PUBLIC API =================== */
 
+    /**
+     * Returns the JavaFX scene for this view.
+     *
+     * @return scene
+     */
     public Scene getScene() {
         return scene;
     }
 
-    /** Actualizar texto de boas-vindas com o nome do aluno */
+    /**
+     * Updates the header welcome message.
+     *
+     * @param name student name
+     */
     public void setWelcomeName(String name) {
-        if (welcomeLabel == null)
+        if (welcomeLabel == null) {
             return;
+        }
 
         if (name == null || name.trim().isEmpty()) {
             welcomeLabel.setText("Bem-vindo, Estudante!");
@@ -257,28 +306,30 @@ public class StudentDashboardView {
     }
 
     private String deriveNameFromEmail(String email) {
-        if (email == null || !email.contains("@"))
+        if (email == null || !email.contains("@")) {
             return "Estudante";
+        }
         String part = email.substring(0, email.indexOf('@'));
-        if (part.isEmpty()) return "Estudante";
+        if (part.isEmpty()) {
+            return "Estudante";
+        }
         return Character.toUpperCase(part.charAt(0)) + part.substring(1);
     }
 
     /**
-     * Usado pelo StudentDashboardController para manter nome/email
-     * sincronizados com o servidor (header + perfil + avatar).
+     * Keeps name/email in sync with the server (header + profile + avatar).
+     *
+     * @param name  new name
+     * @param email new email
      */
     public void updateUserInfo(String name, String email) {
-        // atualiza nome (perfil + header)
         if (name != null && !name.isBlank()) {
-            setProfileName(name); // já actualiza welcomeLabel e iniciais
+            setProfileName(name);
         } else if ((this.userName == null || this.userName.isBlank()) && email != null) {
-            // se não tiver nome, pode derivar de email
             String derived = deriveNameFromEmail(email);
             setProfileName(derived);
         }
 
-        // atualiza email no header
         if (email != null && !email.isBlank()) {
             this.userEmail = email;
             if (headerEmailLabel != null) {
@@ -286,7 +337,6 @@ public class StudentDashboardView {
             }
         }
 
-        // atualiza iniciais com base no melhor texto disponível
         String baseForInitials = (this.userName != null && !this.userName.isBlank())
                 ? this.userName
                 : (this.userEmail != null ? this.userEmail : null);
@@ -295,23 +345,37 @@ public class StudentDashboardView {
         }
     }
 
+    /**
+     * Registers handlers that delegate actions to the given controller.
+     *
+     * @param controller student dashboard controller
+     */
     public void registerHandlers(StudentDashboardController controller) {
         answerQuestionBtn.setOnAction(e -> controller.onAnswerQuestion());
         historyBtn.setOnAction(e -> controller.onShowHistory());
         logoutBtn.setOnAction(e -> controller.onLogout());
 
-        // clicar no cartão de perfil abre o diálogo de edição de perfil
         if (profileCard != null) {
             profileCard.setOnMouseClicked(e -> controller.onProfile());
         }
     }
 
+    /**
+     * Hook for future UI updates.
+     */
     public void update() {
-        // nada extra por agora
+        // nothing extra for now
     }
 
+    /**
+     * Appends a timestamped notification to the notification area.
+     *
+     * @param message notification message
+     */
     public void addNotification(String message) {
-        if (notificationArea == null) return;
+        if (notificationArea == null) {
+            return;
+        }
         String timestamp = java.time.LocalTime.now().format(
                 java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss")
         );

@@ -18,51 +18,65 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Serviço para submissão e consulta de respostas.
+ * Service that handles answer submission and queries.
  */
 public class AnswerService implements IAnswerService {
     private final IQuestionAnswerContext context;
     private final DbCommands dbCommands;
 
+    /**
+     * Creates a new {@link AnswerService}.
+     *
+     * @param context    question/answer context used for replication and notifications
+     * @param dbCommands database access helper
+     */
     public AnswerService(IQuestionAnswerContext context, DbCommands dbCommands) {
         this.context = context;
         this.dbCommands = dbCommands;
     }
 
     /**
-     * Regista uma resposta e actualiza a replicação.
+     * Registers a new answer and updates replication.
+     *
+     * @param dto answer data
+     * @return {@code true} if successfully recorded
+     * @throws Exception if validation or DB operations fail
      */
     @Override
     public boolean submitAnswer(SubmitAnswerDTO dto) throws Exception {
-        Integer questionId    = dto.questionId();
-        Integer studentId     = dto.studentId();
+        Integer questionId = dto.questionId();
+        Integer studentId = dto.studentId();
         OptionLetter selected = dto.selectedOption();
-        LocalDateTime now     = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now();
 
-        // valida pergunta (existência + período activo) e já obtém o teacher_id
+        // validate question (existence + active period) and retrieve teacher_id
         Map<String, Object> q = dbCommands.selectOne(
                 "SELECT teacher_id, correct_option, start_at, end_at FROM question WHERE id = ?",
                 questionId
         );
-        if (q == null)
+        if (q == null) {
             throw new IllegalArgumentException("Pergunta inexistente");
+        }
 
         LocalDateTime startAt = LocalDateTime.parse((String) q.get("start_at"));
-        LocalDateTime endAt   = LocalDateTime.parse((String) q.get("end_at"));
+        LocalDateTime endAt = LocalDateTime.parse((String) q.get("end_at"));
         if (now.isBefore(startAt) || now.isAfter(endAt)) {
             throw new IllegalStateException("Pergunta fora do período de disponibilidade");
         }
 
-        // insere a resposta
+        // insert answer
         dbCommands.executeUpdate(
                 "INSERT INTO answer (student_id, question_id, chosen_option, created_at) VALUES (?, ?, ?, ?)",
                 studentId, questionId, selected.name(), now.toString()
         );
 
+        // incremental replication
+        context.queue().add(Collections.singletonList(
+                "INSERT INTO answer (student_id, question_id, chosen_option, created_at) VALUES (" +
+                        studentId + ", " + questionId + ", '" + selected.name() + "', '" + now + "');"
+        ));
 
-        context.queue().add(Collections.singletonList("INSERT INTO answer (student_id, question_id, chosen_option, created_at) VALUES (" +
-                studentId + ", " + questionId + ", '" + selected.name() + "', '" + now + "');"));
-        // Tenta notificar o docente proprietário da pergunta (se estiver conectado)
+        // Try to notify the owning teacher (if connected)
         try {
             Object rawTeacherId = q.get("teacher_id");
             Long teacherId = null;
@@ -74,39 +88,49 @@ public class AnswerService implements IAnswerService {
             }
 
             if (teacherId != null && context.isUserLogged(teacherId)) {
-                // envia notificação ao docente com o id da pergunta
-                TcpMessage<Integer> notify = new TcpMessage<>(MessageType.ANSWER_SUBMITTED, questionId, Integer.class);
+                // send notification to teacher with the question ID
+                TcpMessage<Integer> notify =
+                        new TcpMessage<>(MessageType.ANSWER_SUBMITTED, questionId, Integer.class);
                 context.sendToUser(teacherId, notify);
-                Log.info(AnswerService.class, "[AnswerService] Live notify enviado para docente " +
-                        teacherId + " (questionId=" + questionId + ")");
+                Log.info(AnswerService.class,
+                        "Real-time notification sent to teacher %d (question %d).",
+                        teacherId, questionId);
             } else {
-                // docente não ligado — apenas regista informação de log; o docente verá os updates quando fizer refresh
-                Log.info(AnswerService.class, "[AnswerService] Docente não ligado ou teacher_id nulo; " +
-                        "não há notify em tempo real para questionId=" + questionId);
+                // teacher offline — just log; teacher will see updates on refresh
+                Log.info(AnswerService.class,
+                        "Teacher is not online; no real-time notification was sent for question %d.",
+                        questionId);
             }
         } catch (Exception e) {
-            // falha a notificar não deve impedir o sucesso da submissão
-            Log.error(AnswerService.class, "[AnswerService] Failed to notify teacher: " + e.getMessage());
+            // notification failures must not prevent successful submission
+            Log.error(AnswerService.class,
+                    "Failed to notify teacher in real time: %s", e.getMessage());
         }
 
         return true;
     }
 
     /**
-     * Devolve respostas de uma pergunta (docente). Calcula isCorrect em memória.
+     * Returns all answers for a question (teacher view).
+     * Calculates {@code isCorrect} in memory.
+     *
+     * @param dto query parameters
+     * @return list of answers
+     * @throws Exception if DB access fails
      */
     @Override
     public List<Answer> viewAnswers(ViewAnswersDTO dto) throws Exception {
         Integer questionId = dto.questionId();
-        Integer teacherId  = dto.teacherId();
+        Integer teacherId = dto.teacherId();
 
-        // verifica docência
+        // check question ownership
         Map<String, Object> rec = dbCommands.selectOne(
                 "SELECT correct_option FROM question WHERE id = ? AND teacher_id = ?",
                 questionId, teacherId
         );
-        if (rec == null)
+        if (rec == null) {
             throw new IllegalArgumentException("Pergunta não encontrada ou não pertence ao docente");
+        }
 
         OptionLetter correct = OptionLetter.valueOf((String) rec.get("correct_option"));
 
@@ -127,8 +151,8 @@ public class AnswerService implements IAnswerService {
                     LocalDateTime at = LocalDateTime.parse(rs.getString("created_at"));
                     boolean isCorrect = sel.equals(correct);
 
-                    String studentName   = rs.getString("student_name");
-                    String studentEmail  = rs.getString("student_email");
+                    String studentName = rs.getString("student_name");
+                    String studentEmail = rs.getString("student_email");
                     Integer studentNumber = rs.getInt("student_number");
 
                     out.add(new Answer(
@@ -150,7 +174,12 @@ public class AnswerService implements IAnswerService {
     }
 
     /**
-     * Histórico de respostas de um estudante. Calcula isCorrect pelo correct_option da pergunta.
+     * Returns the answer history of a student.
+     * Calculates {@code isCorrect} using the question's {@code correct_option}.
+     *
+     * @param studentId student ID
+     * @return list of answers for that student
+     * @throws Exception if DB access fails
      */
     @Override
     public List<Answer> getStudentHistory(Integer studentId) throws Exception {
@@ -170,7 +199,7 @@ public class AnswerService implements IAnswerService {
                     OptionLetter sel = OptionLetter.valueOf(rs.getString("chosen_option"));
                     LocalDateTime at = LocalDateTime.parse(rs.getString("created_at"));
 
-                    String stmt    = rs.getString("statement");
+                    String stmt = rs.getString("statement");
                     String corrStr = rs.getString("correct_option");
                     boolean isCorrect = false;
                     if (corrStr != null) {

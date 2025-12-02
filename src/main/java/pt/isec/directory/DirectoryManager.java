@@ -6,10 +6,7 @@ import pt.isec.directory.threads.ReaperThread;
 import pt.isec.directory.threads.UdpListenerThread;
 import pt.isec.directory.threads.WorkerThread;
 
-import java.io.IOException;
 import java.net.*;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -65,7 +62,7 @@ public class DirectoryManager implements IDirectoryManager {
         this.metricsEveryMs= metricsEveryMs;
     }
 
-    public void start() {
+    public void run() {
         System.out.println("Starting DirectoryService...");
         try {
             this.socket = new DatagramSocket(udpPort);
@@ -89,32 +86,32 @@ public class DirectoryManager implements IDirectoryManager {
         tMetrics.start();
     }
 
-    public void stop() throws IOException {
-        running = false;
+    public void stop() {
+        //Como as threads da diretoria não chamam este metodo
+        //estamos protegidos dela dá shutdown a si própria
+        running = false; // sinal global para todas as threads
 
-        if (tListener != null) tListener.interrupt();
-        for (Thread t : tWorkers) if (t != null) t.interrupt();
-        if (tReaper != null) tReaper.interrupt();
-        if (tMetrics != null) tMetrics.interrupt();
+        try {
+            if (tListener != null)
+                tListener.join();
 
-        if (socket != null && !socket.isClosed()) {
-
-            for (ServerInfo s : new ArrayList<>(servers.values())) {
-                String text = "SHUTDOWN";
-                byte[] out  = text.getBytes(StandardCharsets.UTF_8);
-                DatagramPacket dp = new DatagramPacket(
-                        out,
-                        out.length,
-                        InetAddress.getByName(s.getIp()),
-                        s.getUdpPort()
-                );
-                socket.send(dp);
+            for (Thread t : tWorkers) {
+                if (t != null)
+                    t.join();
             }
 
-            socket.close();
+            if (tReaper != null)
+                tReaper.join();
+
+            if (tMetrics != null)
+                tMetrics.join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
 
+        System.out.println("DirectoryManager parado.");
     }
+
 
     @Override public int udpPort() { return udpPort; }
     @Override public int queueCapacity() { return queueCapacity; }

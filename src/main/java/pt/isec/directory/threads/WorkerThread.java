@@ -9,6 +9,7 @@ import java.net.DatagramPacket;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 public class WorkerThread implements Runnable{
     private final IDirectoryManager tInfo;
@@ -18,9 +19,16 @@ public class WorkerThread implements Runnable{
     @Override
     public void run() {
         System.out.println("Worker inicializado...");
-        while (tInfo.isRunning()){
-            try {
-                UdpMessage msg = tInfo.queue().take();
+        try {
+            // Continua a processar enquanto:
+            //  - o sistema está a correr, OU
+            //  - ainda há mensagens na fila
+            while (tInfo.isRunning() || !tInfo.queue().isEmpty()){
+                UdpMessage msg = tInfo.queue().poll(500, TimeUnit.MILLISECONDS);
+                if (msg == null) {
+                    // timeout: voltar ao topo do while e verificar isRunning()
+                    continue;
+                }
 
                 String payload = new String(msg.data(), 0, msg.length(), StandardCharsets.UTF_8);
                 System.out.println("[Worker] Recebido: " + payload);
@@ -35,21 +43,13 @@ public class WorkerThread implements Runnable{
 
                 String reply;
 
-                // Distinguir entre mensagens de CLIENTE (sem campo de versão) e SERVIDOR (tipo por TYPE)
                 switch (type) {
-                    // === MENSAGENS DE CLIENTE (sem VER requerido) ===
                     case "LOGIN" -> {
                         System.out.println("[Worker] → Cliente pede descoberta de servidor");
                         reply = handleLogin();
                     }
 
-                    // === MENSAGENS DE SERVIDOR ===
                     case "REGISTER", "HEARTBEAT", "DEREGISTER" -> {
-                        // Para o servidor: não exigimos mais o campo VER aqui — o formato esperado
-                        // é KEY=VALUE|KEY=VALUE|... onde TYPE indica a ação.
-                        // Para compatibilidade, ignoramos quaisquer campos extra.
-
-                        //Para o servidor
                         reply = switch (type) {
                             case "REGISTER" -> {
                                 System.out.println("[Worker] → Servidor pede registo");
@@ -74,19 +74,18 @@ public class WorkerThread implements Runnable{
                 }
 
                 send(msg, reply);
-
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            } catch (IOException e) {
-                System.err.println("Erro a enviar UDP: " + e.getMessage());
-            } catch (Exception e) {
-                System.err.println("Erro inesperado no Worker: " + e.getMessage());
             }
+        } catch (InterruptedException e) {
+            // não esperamos usar interrupt, mas se acontecer:
+            Thread.currentThread().interrupt();
+        } catch (IOException e) {
+            System.err.println("Erro a enviar UDP: " + e.getMessage());
+        } catch (Exception e) {
+            System.err.println("Erro inesperado no Worker: " + e.getMessage());
         }
+
         System.out.println("Worker terminou.");
     }
-
 
     /**
      * Trata pedido de login/descoberta do servidor principal por parte do cliente.

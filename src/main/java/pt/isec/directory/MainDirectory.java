@@ -54,7 +54,7 @@ public class MainDirectory {
                 System.out.println("Diretoria terminada.");
             }));
 
-            ds.start();
+            ds.run();
             System.out.println("Diretoria a correr. CTRL+C para sair.");
         } catch (Exception e) {
             System.err.println("Falha ao iniciar a diretoria: " + e.getMessage());

@@ -14,7 +14,6 @@ import pt.isec.server.threads.NetworkTcpConnection;
 import pt.isec.common.util.Log;
 import java.io.IOException;
 import java.net.*;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -26,7 +25,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class ServerManager implements IServerManager, IQuestionAnswerContext, Runnable, AutoCloseable {
+public class ServerManager implements IServerManager, IQuestionAnswerContext {
     private volatile boolean dbInitialised = false;
     private DbCommands dbCommands;
 
@@ -356,7 +355,6 @@ public class ServerManager implements IServerManager, IQuestionAnswerContext, Ru
     @Override
     public BlockingQueue<List<String>> queue(){return sqlToBroadcast;}
     // CLOSEABLE INTERFACE
-    @Override
     public void close() throws Exception {
         // 1) sinal global – todas as threads vão começar a terminar
         running = false;
@@ -387,13 +385,7 @@ public class ServerManager implements IServerManager, IQuestionAnswerContext, Ru
         Log.info(ServerManager.class, "Shutdown completo.");
     }
 
-    // RUNNABLE INTERFACE
-    @Override
     public void run() {
-        start();
-    }
-
-    private void start() {
         tDirectoryHeartbeat = new Thread(new DirectoryHeartbeatThread(this), "directory-heartbeat");
         threadClusterHeartbeat = new Thread(new ClusterHeartbeatThread(this),   "cluster-heartbeat");
         threadClientListener = new Thread(new ClientListenerThread(this),     "client-listener");

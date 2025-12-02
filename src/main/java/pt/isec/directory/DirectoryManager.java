@@ -114,7 +114,6 @@ public class DirectoryManager implements IDirectoryManager {
 
 
     @Override public int udpPort() { return udpPort; }
-    @Override public int queueCapacity() { return queueCapacity; }
     @Override public boolean isRunning() { return running; }
     @Override public DatagramSocket socket() { return socket; }
     @Override public int maxPacketSize() { return maxPacketSize; }
@@ -139,9 +138,6 @@ public class DirectoryManager implements IDirectoryManager {
         ServerInfo info = servers.get(uuid);
         return info == null ? -1 : info.getTcpPort();
     }
-
-
-    @Override public long ttlMillis() { return ttlMs; }
 
     @Override
     public void removeServersFromList(long currTime) {

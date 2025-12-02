@@ -176,7 +176,6 @@ public class ServerManager implements IServerManager, IQuestionAnswerContext {
                 // serviços concretos, mas guardados como interfaces
                 this.authService = new AuthService(qaContext, dbCommands);
 
-
                 this.questionService = new QuestionService(qaContext, dbCommands);
                 this.answerService   = new AnswerService(qaContext, dbCommands);
 

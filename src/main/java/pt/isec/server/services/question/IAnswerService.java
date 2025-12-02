@@ -6,11 +6,14 @@ import pt.isec.common.model.question.Answer;
 
 import java.util.List;
 
-/**
- * Interface pública do serviço de gestão de Respostas.
- */
 public interface IAnswerService {
+
+    /* ===================== RESPOSTAS ===================== */
+
     boolean submitAnswer(SubmitAnswerDTO dto) throws Exception;
     List<Answer> viewAnswers(ViewAnswersDTO dto) throws Exception;
+
+    /* ===================== HISTÓRICO ===================== */
+
     List<Answer> getStudentHistory(Integer studentId) throws Exception;
 }

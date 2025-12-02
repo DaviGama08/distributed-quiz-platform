@@ -1,18 +1,39 @@
 package pt.isec.common.util;
 
+import org.fusesource.jansi.Ansi;
+import org.fusesource.jansi.AnsiConsole;
+
 import java.io.PrintStream;
 
 /**
- * Simple logger to standardize console messages.
+ * Simple logger with colored output according to module origin.
  * <p>
+ * Colors for INFO messages:
+ * <ul>
+ *     <li>CLIENT    → Pink</li>
+ *     <li>SERVER    → Blue</li>
+ *     <li>DIRECTORY → Green</li>
+ * </ul>
+ * For WARN and ERROR messages the entire line is colored:
+ * <ul>
+ *     <li>WARN  → Yellow</li>
+ *     <li>ERROR → Red</li>
+ * </ul>
+ *
  * Format:
  * <pre>
  *   [LEVEL][ClassName] message
  * </pre>
- *
- * LEVEL: INFO, WARN, ERROR
  */
 public final class Log {
+
+    // Initialize Jansi once (ignore if it fails)
+    static {
+        try {
+            AnsiConsole.systemInstall();
+        } catch (Exception ignored) {
+        }
+    }
 
     private Log() {
         // static utility
@@ -38,12 +59,7 @@ public final class Log {
      * @param args   format arguments
      */
     public static void info(Class<?> source, String format, Object... args) {
-        String msg = String.format(format, args);
-        String nl = System.lineSeparator();
-        boolean endsWithNl = msg.endsWith(nl);
-        if (endsWithNl) {
-            msg = msg.substring(0, msg.length() - nl.length());
-        }
+        String msg = cleanFormat(format, args);
         log("INFO", source, msg, null, true);
     }
 
@@ -67,12 +83,7 @@ public final class Log {
      * @param args   format arguments
      */
     public static void warn(Class<?> source, String format, Object... args) {
-        String msg = String.format(format, args);
-        String nl = System.lineSeparator();
-        boolean endsWithNl = msg.endsWith(nl);
-        if (endsWithNl) {
-            msg = msg.substring(0, msg.length() - nl.length());
-        }
+        String msg = cleanFormat(format, args);
         log("WARN", source, msg, null, true);
     }
 
@@ -96,17 +107,12 @@ public final class Log {
      * @param args   format arguments
      */
     public static void error(Class<?> source, String format, Object... args) {
-        String msg = String.format(format, args);
-        String nl = System.lineSeparator();
-        boolean endsWithNl = msg.endsWith(nl);
-        if (endsWithNl) {
-            msg = msg.substring(0, msg.length() - nl.length());
-        }
+        String msg = cleanFormat(format, args);
         log("ERROR", source, msg, null, true);
     }
 
     /**
-     * Logs an error message with an associated {@link Throwable}.
+     * Logs an error message with a throwable.
      *
      * @param source  source class
      * @param message message text
@@ -116,30 +122,106 @@ public final class Log {
         log("ERROR", source, message, t, true);
     }
 
-    /* ===================== Core ===================== */
+    /* ===================== Formatting helper ===================== */
 
-    /**
-     * Core logging implementation.
-     *
-     * @param level   log level string
-     * @param source  source class
-     * @param message message text
-     * @param t       optional throwable
-     * @param newline whether to append newline
-     */
-    private static void log(String level, Class<?> source, String message, Throwable t, boolean newline) {
+    private static String cleanFormat(String format, Object... args) {
+        String msg = String.format(format, args);
+        String nl = System.lineSeparator();
+        if (msg.endsWith(nl)) {
+            msg = msg.substring(0, msg.length() - nl.length());
+        }
+        return msg;
+    }
+
+    /* ===================== Core Logging ===================== */
+
+    private static void log(String level,
+                            Class<?> source,
+                            String message,
+                            Throwable t,
+                            boolean newline) {
+
         String className = (source != null ? source.getSimpleName() : "UNKNOWN");
-        String prefix = "[" + level + "][" + className + "] ";
+        String plainPrefix = "[" + level + "][" + className + "] ";
+        String plainLine = plainPrefix + message;
+
+        // Decide output stream
         PrintStream ps = "ERROR".equals(level) ? System.err : System.out;
 
+        String toPrint = plainLine;
+
+        try {
+            // For WARN & ERROR, color the entire line
+            if ("ERROR".equals(level)) {
+                toPrint = Ansi.ansi()
+                        .fgBrightRed()
+                        .a(plainLine)
+                        .reset()
+                        .toString();
+            } else if ("WARN".equals(level)) {
+                toPrint = Ansi.ansi()
+                        .fgBrightYellow()
+                        .a(plainLine)
+                        .reset()
+                        .toString();
+            } else {
+                // INFO (or other): only prefix colored by module, message plain
+                String coloredPrefix = plainPrefix;
+                int[] rgb = resolveColor(source);
+                if (rgb != null) {
+                    coloredPrefix = Ansi.ansi()
+                            .fgRgb(rgb[0], rgb[1], rgb[2])
+                            .a(plainPrefix)
+                            .reset()
+                            .toString();
+                }
+                toPrint = coloredPrefix + message;
+            }
+        } catch (Throwable ignored) {
+            // If Jansi fails for some reason, fall back to plain text
+            toPrint = plainLine;
+        }
+
         if (newline) {
-            ps.println(prefix + message);
+            ps.println(toPrint);
         } else {
-            ps.print(prefix + message);
+            ps.print(toPrint);
         }
 
         if (t != null) {
             t.printStackTrace(ps);
         }
+    }
+
+    /**
+     * Selects RGB color based on package for INFO messages.
+     *
+     * @param source source class
+     * @return {r,g,b} or {@code null} (no color)
+     */
+    private static int[] resolveColor(Class<?> source) {
+        if (source == null) {
+            return null;
+        }
+
+        String pkg = source.getPackageName();
+
+        if (pkg.startsWith("pt.isec.client")) {
+            // Pink (HotPink)
+            return new int[]{255, 105, 180};
+        }
+
+        if (pkg.startsWith("pt.isec.server")) {
+            // Blue
+            return new int[]{30, 144, 255};
+        }
+
+        if (pkg.startsWith("pt.isec.directory")) {
+            // Green
+            return new int[]{0, 255, 0};
+        }
+
+        // Other packages: no color
+        return null;
     }
 }

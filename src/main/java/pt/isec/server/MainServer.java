@@ -1,5 +1,6 @@
 package pt.isec.server;
 
+import org.fusesource.jansi.AnsiConsole;
 import pt.isec.server.core.ServerManager;
 import pt.isec.common.util.Log;
 
@@ -26,6 +27,8 @@ public class MainServer {
      * @throws Exception if an error occurs during initialization
      */
     public static void main(String[] args) throws Exception {
+        //Cores na consola
+        AnsiConsole.systemInstall();
         if (args.length != 6) {
             Log.error(MainServer.class,
                     "Usage: <dirHost> <dirPort> <dataDir|PROJECT|HOME> <multicastIfIp|AUTO> <clientPort> <dbCopyPort>");

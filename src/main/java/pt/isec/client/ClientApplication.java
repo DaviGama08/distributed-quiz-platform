@@ -9,6 +9,7 @@ import javafx.scene.image.Image;
 import javafx.scene.layout.HBox;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
+import org.fusesource.jansi.AnsiConsole;
 import pt.isec.client.core.ClientManager;
 import pt.isec.client.ui.auth.AuthenticationController;
 import pt.isec.client.ui.student.StudentDashboardController;
@@ -49,6 +50,9 @@ public class ClientApplication extends Application {
      */
     @Override
     public void start(Stage stage) {
+        //Cores na consola
+        AnsiConsole.systemInstall();
+
         this.primaryStage = stage;
         this.clientManager = new ClientManager(DIRECTORY_IP, DIRECTORY_PORT);
         this.authController = new AuthenticationController(primaryStage, clientManager, this);

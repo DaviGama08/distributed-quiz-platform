@@ -44,7 +44,7 @@ public class WorkerThread implements Runnable {
                 }
 
                 String payload = new String(msg.data(), 0, msg.length(), StandardCharsets.UTF_8);
-                Log.info(WorkerThread.class, "[Worker] Recebido: %s", payload);
+                Log.info(WorkerThread.class,"Recebido: %s", payload);
 
                 Map<String, String> kv = parseKv(payload);
 
@@ -58,22 +58,22 @@ public class WorkerThread implements Runnable {
 
                 switch (type) {
                     case "LOGIN" -> {
-                        Log.info(WorkerThread.class, "[Worker] → Cliente pede descoberta de servidor");
+                        Log.info(WorkerThread.class, "Cliente pede descoberta de servidor");
                         reply = handleLogin();
                     }
 
                     case "REGISTER", "HEARTBEAT", "DEREGISTER" -> {
                         reply = switch (type) {
                             case "REGISTER" -> {
-                                Log.info(WorkerThread.class, "[Worker] → Servidor pede registo");
+                                Log.info(WorkerThread.class, "Servidor pede registo");
                                 yield handleRegister(kv, msg.port());
                             }
                             case "HEARTBEAT" -> {
-                                Log.info(WorkerThread.class, "[Worker] → Servidor envia heartbeat");
+                                Log.info(WorkerThread.class, "Servidor envia heartbeat");
                                 yield handleHeartbeat(kv);
                             }
                             case "DEREGISTER" -> {
-                                Log.info(WorkerThread.class, "[Worker] → Servidor pede desregisto");
+                                Log.info(WorkerThread.class, "Servidor pede desregisto");
                                 yield handleDeregister(kv);
                             }
                             default -> "500 INTERNAL_ERROR";
@@ -81,7 +81,7 @@ public class WorkerThread implements Runnable {
                     }
 
                     default -> {
-                        Log.info(WorkerThread.class, "[Worker] → Tipo desconhecido: %s", type);
+                        Log.info(WorkerThread.class, "Tipo desconhecido: %s", type);
                         reply = "400 BAD_REQUEST TYPE";
                     }
                 }
@@ -215,7 +215,7 @@ public class WorkerThread implements Runnable {
         for (ServerInfo other : threadInfo.servers().values()) {
             if (other.getIp().equals(ip) && other.getTcpPort() == port && !other.getId().equals(id)) {
                 Log.info(WorkerThread.class,
-                        "[Diretoria] rejeitado REGISTER: endpoint duplicado %s:%d para ID=%s (já existe %s)",
+                        "rejeitado REGISTER: endpoint duplicado %s:%d para ID=%s (já existe %s)",
                         ip, port, id, other.getId());
                 return "409 CONFLICT DUP_ENDPOINT";
             }

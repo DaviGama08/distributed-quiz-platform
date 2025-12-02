@@ -32,8 +32,7 @@ public class MetricsThread implements Runnable {
 
                 String masterName = (master == null || port <= 0) ? "NONE" : ("servidor" + port);
 
-                Log.info(MetricsThread.class,
-                        "[Diretoria][Metrics] servers=%d, master=%s, tcpPort=%d",
+                Log.info(MetricsThread.class,"servers=%d, master=%s, tcpPort=%d",
                         total, masterName, port);
 
                 Thread.sleep(periodMs);

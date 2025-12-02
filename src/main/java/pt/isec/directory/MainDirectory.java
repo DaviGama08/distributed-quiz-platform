@@ -1,5 +1,6 @@
 package pt.isec.directory;
 
+import org.fusesource.jansi.AnsiConsole;
 import pt.isec.common.util.Log;
 import pt.isec.directory.core.DirectoryManager;
 
@@ -27,6 +28,9 @@ public class MainDirectory {
      * @param args command line arguments
      */
     public static void main(String[] args) {
+        //Cores na consola
+        AnsiConsole.systemInstall();
+
         int  udpPort       = DEF_UDP_PORT;
         int  queueCapacity = DEF_QUEUE;
         int  maxPacketSize = DEF_MAX_PKT;

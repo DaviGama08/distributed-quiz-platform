@@ -45,7 +45,7 @@ public class ReaperThread implements Runnable {
             // we do not use interrupt for shutdown, but if it happens just exit the loop
             Thread.currentThread().interrupt();
         } catch (Throwable t) {
-            Log.error(ReaperThread.class, "[Diretoria][Reaper] erro inesperado: " + t.getMessage(), t);
+            Log.error(ReaperThread.class, "erro inesperado: " + t.getMessage(), t);
         } finally {
             // Directory is shutting down: send SHUTDOWN to all servers and close the socket.
             DatagramSocket socket = threadInfo.socket();
@@ -63,7 +63,7 @@ public class ReaperThread implements Runnable {
                         socket.send(dp);
                     } catch (IOException e) {
                         Log.error(ReaperThread.class,
-                                "[Directory] Falha a enviar SHUTDOWN para " +
+                                "Falha a enviar SHUTDOWN para " +
                                         s.getIp() + ":" + s.getUdpPort() + " – " + e.getMessage(),
                                 e);
                     }

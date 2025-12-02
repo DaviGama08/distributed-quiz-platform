@@ -103,6 +103,6 @@ public class UdpListenerThread implements Runnable {
                 break;
             }
         }
-        Log.info(UdpListenerThread.class, "UdpListenerThread terminou.");
+        Log.info(UdpListenerThread.class,"UdpListenerThread terminou.");
     }
 }

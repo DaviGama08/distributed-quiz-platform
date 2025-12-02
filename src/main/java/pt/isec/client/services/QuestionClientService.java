@@ -1,6 +1,7 @@
 package pt.isec.client.services;
 
-import pt.isec.client.core.IClientService;
+import pt.isec.client.core.IClientControllerContext;
+import pt.isec.client.core.IClientServiceContext;
 import pt.isec.common.dto.question.*;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;
@@ -8,20 +9,20 @@ import pt.isec.common.messages.MessageType;
 /**
  * Client-side service for question-related operations.
  * <p>
- * All methods enqueue a request message on the {@link IClientService} request queue
+ * All methods enqueue a request message on the {@link IClientControllerContext} request queue
  * and return immediately. Responses are processed by {@code ResponseHandlerThread}
  * and forwarded via property change events in {@code ClientService}.
  */
 public class QuestionClientService {
 
-    private final IClientService service;
+    private final IClientServiceContext service;
 
     /**
      * Creates a new question client service.
      *
      * @param service underlying client service
      */
-    public QuestionClientService(IClientService service) {
+    public QuestionClientService(IClientServiceContext service) {
         this.service = service;
     }
 
@@ -39,37 +40,11 @@ public class QuestionClientService {
     }
 
     /**
-     * Backwards-compatible overload: accepts {@link UpdateQuestionDTO} and converts it
-     * to {@link EditQuestionDTO}.
-     *
-     * @param dto update question payload
-     */
-    public void updateQuestion(UpdateQuestionDTO dto) {
-        if (dto == null) {
-            return;
-        }
-        EditQuestionDTO edit = new EditQuestionDTO(
-                dto.questionId(), dto.teacherId(), dto.statement(),
-                dto.options(), dto.correctOption(), dto.startAt(), dto.endAt()
-        );
-        updateQuestion(edit);
-    }
-
-    /**
-     * Convenience method named {@code editQuestion} to match server semantics.
+     * Sends a request to edit a question.
      *
      * @param dto edit question payload
      */
     public void editQuestion(EditQuestionDTO dto) {
-        updateQuestion(dto);
-    }
-
-    /**
-     * Sends a request to edit an existing question.
-     *
-     * @param dto edit question payload
-     */
-    public void updateQuestion(EditQuestionDTO dto) {
         try {
             service.getRequestQueue().put(new TcpMessage<>(MessageType.EDIT_QUESTION, dto));
         } catch (InterruptedException e) {

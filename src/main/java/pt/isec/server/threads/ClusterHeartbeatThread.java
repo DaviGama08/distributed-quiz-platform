@@ -1,6 +1,6 @@
 package pt.isec.server.threads;
 
-import pt.isec.server.core.IServerManager;
+import pt.isec.server.core.IServerThreadContext;
 import pt.isec.server.core.ServerManager;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;
@@ -15,7 +15,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -38,17 +37,17 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
     private static final int ACCEPT_TIMEOUT_MS = 500;
     private static final int BUFFER_SIZE = 4096;
 
-    private final IServerManager tInfo;
+    private final IServerThreadContext threadInfo;
     private MulticastSocket ms;
     private ServerSocket dbCopyServerSocket;
 
     /**
      * Creates a new cluster heartbeat thread.
      *
-     * @param tInfo server manager providing multicast and DB information
+     * @param threadInfo server manager providing multicast and DB information
      */
-    public ClusterHeartbeatThread(IServerManager tInfo) {
-        this.tInfo = tInfo;
+    public ClusterHeartbeatThread(IServerThreadContext threadInfo) {
+        this.threadInfo = threadInfo;
     }
 
     /**
@@ -61,8 +60,8 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
      */
     @Override
     public void run() {
-        try (MulticastSocket _ms = new MulticastSocket(tInfo.multicastPort());
-             ServerSocket _ss = new ServerSocket(tInfo.dbCopyPort())) {
+        try (MulticastSocket _ms = new MulticastSocket(threadInfo.multicastPort());
+             ServerSocket _ss = new ServerSocket(threadInfo.dbCopyPort())) {
 
             this.ms = _ms;
             this.dbCopyServerSocket = _ss;
@@ -70,14 +69,14 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
             _ms.setReuseAddress(true);
             _ms.setSoTimeout(RX_TIMEOUT_MS);
             _ms.setTimeToLive(MULTICAST_TTL);
-            _ms.setNetworkInterface(tInfo.multicastInterface());
+            _ms.setNetworkInterface(threadInfo.multicastInterface());
             try {
                 _ms.setLoopbackMode(false);
             } catch (Throwable ignore) {
             }
 
-            InetAddress grp = InetAddress.getByName(tInfo.multicastGroup());
-            _ms.joinGroup(new InetSocketAddress(grp, tInfo.multicastPort()), tInfo.multicastInterface());
+            InetAddress grp = InetAddress.getByName(threadInfo.multicastGroup());
+            _ms.joinGroup(new InetSocketAddress(grp, threadInfo.multicastPort()), threadInfo.multicastInterface());
 
             _ss.setSoTimeout(ACCEPT_TIMEOUT_MS);
 
@@ -85,16 +84,16 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
             byte[] buf = new byte[BUFFER_SIZE];
             DatagramPacket pkt = new DatagramPacket(buf, buf.length);
 
-            while (tInfo.isRunning()) {
+            while (threadInfo.isRunning()) {
                 long now = System.currentTimeMillis();
 
                 // PRIMARY: send heartbeats (with or without SQL)
-                if (tInfo.isPrimary()) {
+                if (threadInfo.isPrimary()) {
                     lastSent = handlePrimaryHeartbeatLoop(_ms, grp, lastSent, now);
                 }
 
                 // BACKUP: receive heartbeat and apply updates
-                if (!tInfo.isPrimary()) {
+                if (!threadInfo.isPrimary()) {
                     handleBackupHeartbeatLoop(_ms, pkt);
                 }
 
@@ -104,7 +103,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                 Thread.sleep(LOOP_SLEEP_MS);
             }
         } catch (Exception e) {
-            if (tInfo.isRunning()) {
+            if (threadInfo.isRunning()) {
                 Log.error(ClusterHeartbeatThread.class,
                         "[MC-LOOP] Error in main cluster loop: %s", e.getMessage());
             }
@@ -127,7 +126,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
 
         List<String> sqlToSend = null;
 
-        BlockingQueue<List<String>> q = tInfo.queue();
+        BlockingQueue<List<String>> q = threadInfo.queue();
         if (q != null) {
             sqlToSend = q.poll();
         }
@@ -160,7 +159,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
             if (msg.startsWith("MC_HB;")) {
                 long rxClientPort = extractLong(msg, "clientPort");
                 // ignore our own heartbeats
-                boolean fromMe = senderIp.equals(tInfo.serverTcpIp()) && rxClientPort == tInfo.serverTcpPort();
+                boolean fromMe = senderIp.equals(threadInfo.serverTcpIp()) && rxClientPort == threadInfo.serverTcpPort();
                 if (!fromMe) {
 
                     long rxVersion = extractLong(msg, "version");
@@ -172,13 +171,13 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                         Log.info(ClusterHeartbeatThread.class,
                                 "[MC] Heartbeat with SQL received from primary; applying incremental updates.");
 
-                        versionMismatch = rxVersion >= 0 && rxVersion != tInfo.dbVersion() + 1;
+                        versionMismatch = rxVersion >= 0 && rxVersion != threadInfo.dbVersion() + 1;
 
                         if (versionMismatch) {
                             Log.error(ClusterHeartbeatThread.class,
                                     "[MC] Unexpected DB version while applying SQL (expected=%d, received=%d). Shutting down server.",
-                                    tInfo.dbVersion() + 1, rxVersion);
-                            tInfo.shutdownServer();
+                                    threadInfo.dbVersion() + 1, rxVersion);
+                            threadInfo.shutdownServer();
                             return;
                         }
 
@@ -191,24 +190,24 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                             if (s.isEmpty()) {
                                 continue;
                             }
-                            tInfo.getDb().executeUpdate(s);
+                            threadInfo.getDb().executeUpdate(s);
                             Log.info(ClusterHeartbeatThread.class,
                                     "[MC] SQL executed from heartbeat: %s", s);
                         }
-                        tInfo.setDbVersion(rxVersion);
+                        threadInfo.setDbVersion(rxVersion);
                     } else {
 
                         int rxDbPort = (int) extractLong(msg, "dbPort");
 
-                        boolean missingDb = !Files.exists(tInfo.dbPath());
+                        boolean missingDb = !Files.exists(threadInfo.dbPath());
 
                         if (missingDb) {
                             Log.error(ClusterHeartbeatThread.class,
                                     "[MC] DB copy required: missingDb=%s, localVersion=%d, remoteVersion=%d, primary=%s:%d",
-                                    missingDb, tInfo.dbVersion(), rxVersion, senderIp, rxDbPort);
+                                    missingDb, threadInfo.dbVersion(), rxVersion, senderIp, rxDbPort);
 
                             if (rxDbPort > 0) {
-                                if (tInfo instanceof ServerManager sn) {
+                                if (threadInfo instanceof ServerManager sn) {
                                     if (!sn.tryLockCopy()) {
                                         Log.warn(ClusterHeartbeatThread.class,
                                                 "[MC] DB copy request ignored: a copy is already in progress.");
@@ -229,17 +228,17 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                             return;
                         }
 
-                        versionMismatch = rxVersion >= 0 && rxVersion != tInfo.dbVersion();
+                        versionMismatch = rxVersion >= 0 && rxVersion != threadInfo.dbVersion();
 
                         Log.info(ClusterHeartbeatThread.class,
                                 "[MC] DB version check: received=%d, local=%d",
-                                rxVersion, tInfo.dbVersion());
+                                rxVersion, threadInfo.dbVersion());
 
                         if (versionMismatch) {
                             Log.error(ClusterHeartbeatThread.class,
                                     "[MC] DB version mismatch detected (received=%d, local=%d). Shutting down server.",
-                                    rxVersion, tInfo.dbVersion());
-                            tInfo.shutdownServer();
+                                    rxVersion, threadInfo.dbVersion());
+                            threadInfo.shutdownServer();
                         }
                     }
                 }
@@ -247,7 +246,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
         } catch (SocketTimeoutException ignore) {
             // no heartbeat in this cycle
         } catch (Exception e) {
-            if (tInfo.isRunning()) {
+            if (threadInfo.isRunning()) {
                 Log.error(ClusterHeartbeatThread.class,
                         "[MC-LOOP] Error receiving heartbeat: %s", e.getMessage());
             }
@@ -266,7 +265,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
         } catch (SocketTimeoutException ignore) {
             // no incoming request
         } catch (Exception e) {
-            if (tInfo.isRunning()) {
+            if (threadInfo.isRunning()) {
                 Log.error(ClusterHeartbeatThread.class,
                         "[DBCOPY] Error accepting DB copy request: %s", e.getMessage());
             }
@@ -312,15 +311,15 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                     .encodeToString(joined.getBytes(StandardCharsets.UTF_8));
         }
 
-        String beat = "MC_HB;id=servidor" + tInfo.serverTcpPort() +
+        String beat = "MC_HB;id=servidor" + threadInfo.serverTcpPort() +
                 ";role=MASTER" +
-                ";version=" + tInfo.dbVersion() +
-                ";dbPort=" + tInfo.dbCopyPort() +
-                ";clientPort=" + tInfo.serverTcpPort() +
+                ";version=" + threadInfo.dbVersion() +
+                ";dbPort=" + threadInfo.dbCopyPort() +
+                ";clientPort=" + threadInfo.serverTcpPort() +
                 ";sql=" + encodedSql;
 
         byte[] data = beat.getBytes(StandardCharsets.UTF_8);
-        ms.send(new DatagramPacket(data, data.length, grp, tInfo.multicastPort()));
+        ms.send(new DatagramPacket(data, data.length, grp, threadInfo.multicastPort()));
     }
 
     /**
@@ -350,7 +349,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
      * @param rxVersion   DB version received from heartbeat
      */
     private void requestDbCopyFromPrimary(String primaryIp, int primaryPort, long rxVersion) {
-        Path target = tInfo.dbPath();
+        Path target = threadInfo.dbPath();
         Path tmp = target.resolveSibling(target.getFileName().toString() + ".tmp");
 
         try (NetworkTcpConnection conn = NetworkTcpConnection.connect(
@@ -403,7 +402,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
             if (moved) {
                 Log.info(ClusterHeartbeatThread.class,
                         "[DBCOPY/RQ] DB copy completed at %s (new version=%d)", target, rxVersion);
-                tInfo.setDbVersion(rxVersion);
+                threadInfo.setDbVersion(rxVersion);
             } else {
                 Log.error(ClusterHeartbeatThread.class,
                         "[DBCOPY/RQ] Could not replace %s (temporary file left: %s)", target, tmp);
@@ -433,14 +432,14 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                 return;
             }
 
-            if (!tInfo.isPrimary()) {
+            if (!threadInfo.isPrimary()) {
                 connection.sendMessage(new TcpMessage<>(MessageType.NACK, "not-primary", String.class));
                 return;
             }
 
             connection.sendMessage(new TcpMessage<>(MessageType.ACK, "copy-start"));
 
-            Path dbFile = tInfo.dbPath();
+            Path dbFile = threadInfo.dbPath();
             long size = Files.size(dbFile);
             connection.writeLong(size);
 

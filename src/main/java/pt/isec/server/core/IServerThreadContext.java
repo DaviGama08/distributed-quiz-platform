@@ -16,7 +16,7 @@ import java.util.concurrent.BlockingQueue;
  * <p>
  * Provides access to configuration, lifecycle, database and business services.
  */
-public interface IServerManager {
+public interface IServerThreadContext {
 
     /* ===================== IDENTIFICATION / ENDPOINTS ===================== */
 

@@ -1,6 +1,7 @@
 package pt.isec.directory;
 
 import pt.isec.common.util.Log;
+import pt.isec.directory.core.DirectoryManager;
 
 /**
  * Entry point for the Directory service.

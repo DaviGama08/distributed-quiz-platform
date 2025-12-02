@@ -6,7 +6,7 @@ import pt.isec.common.dto.auth.*;
 import pt.isec.common.dto.question.*;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;
-import pt.isec.server.core.IServerManager;
+import pt.isec.server.core.IServerThreadContext;
 import pt.isec.common.model.question.Question;
 import pt.isec.common.util.Log;
 
@@ -25,7 +25,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
     private static final int FIRST_MESSAGE_TIMEOUT_SEC = 30;
     private static final Duration NO_TIMEOUT = Duration.ZERO;
 
-    private final IServerManager threadInfo;
+    private final IServerThreadContext threadInfo;
     private final NetworkTcpConnection connection;
 
     private Long loggerUserId = null;
@@ -37,7 +37,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
      * @param threadInfo server manager context
      * @param connection TCP connection with the client
      */
-    public ClientHandlerThread(IServerManager threadInfo, NetworkTcpConnection connection) {
+    public ClientHandlerThread(IServerThreadContext threadInfo, NetworkTcpConnection connection) {
         this.threadInfo = threadInfo;
         this.connection = connection;
     }

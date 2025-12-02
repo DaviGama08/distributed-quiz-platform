@@ -1,7 +1,8 @@
-package pt.isec.directory;
+package pt.isec.directory.core;
 
 import pt.isec.common.messages.UdpMessage;
 import pt.isec.common.util.Log;
+import pt.isec.directory.threads.ServerInfo;
 import pt.isec.directory.threads.MetricsThread;
 import pt.isec.directory.threads.ReaperThread;
 import pt.isec.directory.threads.UdpListenerThread;
@@ -27,7 +28,7 @@ import java.util.concurrent.ConcurrentMap;
  *     <li>Periodically reap inactive servers and log metrics</li>
  * </ul>
  */
-public class DirectoryManager implements IDirectoryManager {
+public class DirectoryManager implements IDirectoryThreadContext {
     private final int udpPort;
     private final int queueCapacity;
     private volatile boolean running = true;

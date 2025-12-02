@@ -1,6 +1,6 @@
 package pt.isec.server.threads;
 
-import pt.isec.server.core.IServerManager;
+import pt.isec.server.core.IServerThreadContext;
 import pt.isec.common.util.Log;
 
 import java.net.ServerSocket;
@@ -20,7 +20,7 @@ public class ClientListenerThread implements Runnable, AutoCloseable {
     private static final int THREAD_POOL_SIZE = 8;
     private final ExecutorService pool = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
 
-    private final IServerManager tInfo;
+    private final IServerThreadContext threadInfo;
     private ServerSocket serverSocket;
 
     private final List<ClientHandlerThread> handlers = new CopyOnWriteArrayList<>();
@@ -28,10 +28,10 @@ public class ClientListenerThread implements Runnable, AutoCloseable {
     /**
      * Creates a new client listener thread.
      *
-     * @param tInfo server manager context
+     * @param threadInfo server manager context
      */
-    public ClientListenerThread(IServerManager tInfo) {
-        this.tInfo = tInfo;
+    public ClientListenerThread(IServerThreadContext threadInfo) {
+        this.threadInfo = threadInfo;
     }
 
     /**
@@ -46,17 +46,17 @@ public class ClientListenerThread implements Runnable, AutoCloseable {
     public void run() {
         try {
             // Create the TCP socket that accepts client connections
-            serverSocket = new ServerSocket(tInfo.serverTcpPort());
+            serverSocket = new ServerSocket(threadInfo.serverTcpPort());
             serverSocket.setSoTimeout(1000); // 1 second
             Log.info(ClientListenerThread.class,
-                    "[ACCEPT] Listening for TCP client connections on port %d", tInfo.serverTcpPort());
+                    "[ACCEPT] Listening for TCP client connections on port %d", threadInfo.serverTcpPort());
 
             // Main loop — accept clients while the server is running
-            while (tInfo.isRunning()) {
+            while (threadInfo.isRunning()) {
                 try {
                     Socket newSocket = serverSocket.accept();
                     ClientHandlerThread handler =
-                            new ClientHandlerThread(tInfo, new NetworkTcpConnection(newSocket));
+                            new ClientHandlerThread(threadInfo, new NetworkTcpConnection(newSocket));
                     handlers.add(handler);
                     pool.execute(handler);
 
@@ -66,7 +66,7 @@ public class ClientListenerThread implements Runnable, AutoCloseable {
             }
 
         } catch (Exception e) {
-            if (tInfo.isRunning()) {
+            if (threadInfo.isRunning()) {
                 Log.error(ClientListenerThread.class,
                         "[ACCEPT] Error in client accept loop: %s", e.getMessage());
             }

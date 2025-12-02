@@ -1,6 +1,6 @@
 package pt.isec.server.threads;
 
-import pt.isec.server.core.IServerManager;
+import pt.isec.server.core.IServerThreadContext;
 import pt.isec.server.core.ServerManager;
 import pt.isec.common.util.Log;
 
@@ -29,16 +29,16 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
     private static final int SLEEP_INTERVAL_MS = 50;
     private static final int BUFFER_SIZE = 512;
 
-    private final IServerManager managerTheardInfo;
+    private final IServerThreadContext threadInfo;
     private DatagramSocket socket;
 
     /**
      * Creates a new directory heartbeat thread.
      *
-     * @param managerTheardInfo server manager providing directory and DB information
+     * @param threadInfo server manager providing directory and DB information
      */
-    public DirectoryHeartbeatThread(IServerManager managerTheardInfo) {
-        this.managerTheardInfo = managerTheardInfo;
+    public DirectoryHeartbeatThread(IServerThreadContext threadInfo) {
+        this.threadInfo = threadInfo;
     }
 
     /**
@@ -51,16 +51,16 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             socket = s;
             s.setSoTimeout(SOCKET_TIMEOUT_MS);
 
-            InetAddress dirAddr = InetAddress.getByName(managerTheardInfo.directoryHost());
-            int dirPort = managerTheardInfo.directoryPort();
+            InetAddress dirAddr = InetAddress.getByName(threadInfo.directoryHost());
+            int dirPort = threadInfo.directoryPort();
 
             // REGISTER
             String registerMsg = requestKeyValue(
                     "TYPE", "REGISTER",
-                    "ID", managerTheardInfo.id(),
-                    "TCP", managerTheardInfo.serverTcpIp() + ":" + managerTheardInfo.serverTcpPort(), // this server TCP endpoint
-                    "DBV", String.valueOf(managerTheardInfo.dbVersion()),                            // DB version
-                    "DBP", String.valueOf(managerTheardInfo.dbCopyPort())                            // DB copy port
+                    "ID", threadInfo.id(),
+                    "TCP", threadInfo.serverTcpIp() + ":" + threadInfo.serverTcpPort(), // this server TCP endpoint
+                    "DBV", String.valueOf(threadInfo.dbVersion()),                            // DB version
+                    "DBP", String.valueOf(threadInfo.dbCopyPort())                            // DB copy port
             );
             send(s, dirAddr, dirPort, registerMsg);
 
@@ -69,25 +69,25 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             if (reply == null) {
                 Log.error(DirectoryHeartbeatThread.class,
                         "[DIR] No response from directory for REGISTER; shutting down server.");
-                managerTheardInfo.shutdownServer();
+                threadInfo.shutdownServer();
                 return;
             }
 
-            managerTheardInfo.setPrimary(reply.ip, reply.port);
+            threadInfo.setPrimary(reply.ip, reply.port);
             boolean iAmPrimary =
-                    Objects.equals(reply.ip, managerTheardInfo.serverTcpIp()) &&
-                            reply.port == managerTheardInfo.serverTcpPort();
+                    Objects.equals(reply.ip, threadInfo.serverTcpIp()) &&
+                            reply.port == threadInfo.serverTcpPort();
 
             // version from directory: -1 = first time
             if (reply.dbv != null) {
                 if (reply.dbv == -1 && iAmPrimary) {
-                    managerTheardInfo.setDbVersion(1); // first time: create quiz-01.db
+                    threadInfo.setDbVersion(1); // first time: create quiz-01.db
                 } else if (reply.dbv >= 0) {
-                    managerTheardInfo.setDbVersion(reply.dbv);
+                    threadInfo.setDbVersion(reply.dbv);
                 }
             }
 
-            if (managerTheardInfo instanceof ServerManager node) {
+            if (threadInfo instanceof ServerManager node) {
                 if (iAmPrimary) {
                     try {
                         // primary chooses DB: newest or new
@@ -109,23 +109,23 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                 }
             } else {
                 Log.error(DirectoryHeartbeatThread.class,
-                        "[DB] IServerManager instance is not a ServerManager; unexpected configuration.");
+                        "[DB] IServerThreadContext instance is not a ServerManager; unexpected configuration.");
             }
 
             Log.info(DirectoryHeartbeatThread.class,
                     "[DIR] Current primary server: %s:%d | isPrimary=%s | dbVersion=%d",
-                    reply.ip, reply.port, iAmPrimary, managerTheardInfo.dbVersion());
+                    reply.ip, reply.port, iAmPrimary, threadInfo.dbVersion());
 
             long last = 0;
 
             // HEARTBEAT — always send current DB version (managerTheardInfo.dbVersion())
-            while (managerTheardInfo.isRunning()) {
+            while (threadInfo.isRunning()) {
                 long now = System.currentTimeMillis();
 
                 if (now - last >= HEARTBEAT_INTERVAL_MS) {
                     String hb = requestKeyValue(
                             "TYPE", "HEARTBEAT",
-                            "ID", managerTheardInfo.id()
+                            "ID", threadInfo.id()
                     );
                     send(s, dirAddr, dirPort, hb);
                     last = now;
@@ -133,10 +133,10 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
 
                 Endpoint cur = tryReceivePrincipal(s);
                 if (cur != null) {
-                    managerTheardInfo.setPrimary(cur.ip, cur.port);
+                    threadInfo.setPrimary(cur.ip, cur.port);
                     boolean prim =
-                            Objects.equals(cur.ip, managerTheardInfo.serverTcpIp()) &&
-                                    cur.port == managerTheardInfo.serverTcpPort();
+                            Objects.equals(cur.ip, threadInfo.serverTcpIp()) &&
+                                    cur.port == threadInfo.serverTcpPort();
                     Log.info(DirectoryHeartbeatThread.class,
                             "[DIR] Primary reported by directory: %s:%d | isPrimary=%s",
                             cur.ip, cur.port, prim);
@@ -147,12 +147,12 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             // DEREGISTER
             String deregMsg = requestKeyValue(
                     "TYPE", "DEREGISTER",
-                    "ID", managerTheardInfo.id()
+                    "ID", threadInfo.id()
             );
             send(s, dirAddr, dirPort, deregMsg);
 
         } catch (Exception e) {
-            if (managerTheardInfo.isRunning()) {
+            if (threadInfo.isRunning()) {
                 Log.error(DirectoryHeartbeatThread.class,
                         "[DIR] Error in directory heartbeat thread: %s", e.getMessage());
             }
@@ -243,7 +243,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
 
             // After TTL without heartbeat, directory may send SHUTDOWN / 404 NO_PRINCIPAL
             if (resp.startsWith("SHUTDOWN") || resp.startsWith("404 NO_PRINCIPAL")) {
-                managerTheardInfo.shutdownServer();
+                threadInfo.shutdownServer();
                 Log.info(DirectoryHeartbeatThread.class,
                         "[DIR] Directory requested shutdown (or no primary available). Server will be terminated.");
                 return null;

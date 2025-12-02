@@ -1,6 +1,7 @@
-package pt.isec.directory;
+package pt.isec.directory.core;
 
 import pt.isec.common.messages.UdpMessage;
+import pt.isec.directory.threads.ServerInfo;
 
 import java.net.DatagramSocket;
 import java.util.Map;
@@ -12,7 +13,7 @@ import java.util.concurrent.ConcurrentMap;
  * <p>
  * Exposes configuration, global state and access to the server registry and message queue.
  */
-public interface IDirectoryManager {
+public interface IDirectoryThreadContext {
 
     /* ===================== UDP CONFIGURATION ===================== */
 

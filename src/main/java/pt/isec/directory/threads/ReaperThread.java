@@ -1,8 +1,7 @@
 package pt.isec.directory.threads;
 
 import pt.isec.common.util.Log;
-import pt.isec.directory.IDirectoryManager;
-import pt.isec.directory.ServerInfo;
+import pt.isec.directory.core.IDirectoryThreadContext;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -20,25 +19,25 @@ import java.util.ArrayList;
  * </ul>
  */
 public class ReaperThread implements Runnable {
-    private final IDirectoryManager tInfo;
+    private final IDirectoryThreadContext threadInfo;
     private final long periodMs;
 
     /**
-     * @param tInfo    directory manager
+     * @param threadInfo    directory manager
      * @param periodMs interval between sweeps in milliseconds
      */
-    public ReaperThread(IDirectoryManager tInfo, long periodMs) {
-        this.tInfo = tInfo;
+    public ReaperThread(IDirectoryThreadContext threadInfo, long periodMs) {
+        this.threadInfo = threadInfo;
         this.periodMs = periodMs;
     }
 
     @Override
     public void run() {
         try {
-            while (tInfo.isRunning()){
+            while (threadInfo.isRunning()){
                 long now = System.currentTimeMillis();
 
-                tInfo.removeServersFromList(now);
+                threadInfo.removeServersFromList(now);
 
                 Thread.sleep(periodMs);
             }
@@ -49,9 +48,9 @@ public class ReaperThread implements Runnable {
             Log.error(ReaperThread.class, "[Diretoria][Reaper] erro inesperado: " + t.getMessage(), t);
         } finally {
             // Directory is shutting down: send SHUTDOWN to all servers and close the socket.
-            DatagramSocket socket = tInfo.socket();
+            DatagramSocket socket = threadInfo.socket();
             if (socket != null && !socket.isClosed()) {
-                for (ServerInfo s : new ArrayList<>(tInfo.servers().values())) {
+                for (ServerInfo s : new ArrayList<>(threadInfo.servers().values())) {
                     try {
                         String text = "SHUTDOWN";
                         byte[] out  = text.getBytes(StandardCharsets.UTF_8);

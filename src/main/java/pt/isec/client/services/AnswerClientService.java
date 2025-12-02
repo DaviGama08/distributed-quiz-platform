@@ -1,6 +1,7 @@
 package pt.isec.client.services;
 
-import pt.isec.client.core.IClientService;
+import pt.isec.client.core.ClientManager;
+import pt.isec.client.core.IClientServiceContext;
 import pt.isec.common.dto.answer.SubmitAnswerDTO;
 import pt.isec.common.dto.answer.ViewAnswersDTO;
 import pt.isec.common.messages.TcpMessage;
@@ -11,18 +12,18 @@ import pt.isec.common.messages.MessageType;
  * <p>
  * All methods enqueue a request message; responses are handled by
  * {@code ResponseHandlerThread} and propagated as events by
- * {@link pt.isec.client.core.ClientService}.
+ * {@link ClientManager}.
  */
 public class AnswerClientService {
 
-    private final IClientService service;
+    private final IClientServiceContext service;
 
     /**
      * Creates a new answer client service.
      *
      * @param service underlying client service
      */
-    public AnswerClientService(IClientService service) {
+    public AnswerClientService(IClientServiceContext service) {
         this.service = service;
     }
 

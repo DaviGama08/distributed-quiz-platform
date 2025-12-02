@@ -17,8 +17,8 @@ import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 import pt.isec.client.ClientApplication;
-import pt.isec.client.ClientManager;
-import pt.isec.client.core.ClientService;
+import pt.isec.client.core.ClientManager;
+import pt.isec.client.core.IClientControllerContext;
 import pt.isec.client.ui.IDisposableProp;
 import pt.isec.client.ui.util.AlertUtils;
 import pt.isec.client.ui.util.UiUtils;
@@ -48,7 +48,7 @@ import java.util.*;
 public class TeacherDashboardController implements IDisposableProp {
 
     private final Stage stage;
-    private final ClientManager clientManager;
+    private final IClientControllerContext clientControllerContext;
     private final ClientApplication application;
     private String userEmail;
     private String userName;
@@ -105,18 +105,18 @@ public class TeacherDashboardController implements IDisposableProp {
      * Creates a new teacher dashboard controller and wires up all listeners.
      *
      * @param stage         main application stage
-     * @param clientManager client manager with services
+     * @param clientControllerContext client manager with services
      * @param application   main application
      * @param userName      teacher name
      * @param userEmail     teacher email
      */
     public TeacherDashboardController(Stage stage,
-                                      ClientManager clientManager,
+                                      ClientManager clientControllerContext,
                                       ClientApplication application,
                                       String userName,
                                       String userEmail) {
         this.stage = stage;
-        this.clientManager = clientManager;
+        this.clientControllerContext = clientControllerContext;
         this.application = application;
         this.userName = userName;
         this.userEmail = userEmail;
@@ -232,7 +232,7 @@ public class TeacherDashboardController implements IDisposableProp {
                                     " falhou: já tem respostas.");
                             return;
                         }
-                        Integer teacherId = clientManager.getUserId();
+                        Integer teacherId = clientControllerContext.getUserId();
                         if (teacherId == null) {
                             AlertUtils.showError(getCurrentOwnerWindow(),
                                     "Erro",
@@ -243,7 +243,7 @@ public class TeacherDashboardController implements IDisposableProp {
                         try {
                             if (listLoadingBox != null) listLoadingBox.setVisible(true);
                         } catch (Exception ignored) {}
-                        clientManager.getQuestionService()
+                        clientControllerContext.getQuestionService()
                                 .joinQuestion(new JoinQuestionDTO(target.getAccessCode(), teacherId));
                         return;
                     } else if (action == PendingAction.DELETE) {
@@ -255,14 +255,14 @@ public class TeacherDashboardController implements IDisposableProp {
                                     " falhou: já tem respostas.");
                             return;
                         }
-                        Integer teacherId = clientManager.getUserId();
+                        Integer teacherId = clientControllerContext.getUserId();
                         if (teacherId == null) {
                             AlertUtils.showError(getCurrentOwnerWindow(),
                                     "Erro",
                                     "Sessão inválida. Faça login novamente.");
                             return;
                         }
-                        clientManager.getQuestionService()
+                        clientControllerContext.getQuestionService()
                                 .deleteQuestion(new DeleteQuestionDTO(target.getId(), teacherId));
                         AlertUtils.showInfo(getCurrentOwnerWindow(),
                                 "Pedido enviado",
@@ -280,13 +280,13 @@ public class TeacherDashboardController implements IDisposableProp {
 
                 Window owner = getCurrentOwnerWindow();
                 TeacherDialogs.showAnswersDialog(owner, q, answers, () -> {
-                    Integer teacherId = clientManager.getUserId();
+                    Integer teacherId = clientControllerContext.getUserId();
                     if (teacherId == null) {
                         AlertUtils.showError(owner, "Erro",
                                 "Sessão inválida. Faça login novamente.");
                         return;
                     }
-                    clientManager.getQuestionService()
+                    clientControllerContext.getQuestionService()
                             .deleteQuestion(new DeleteQuestionDTO(q.getId(), teacherId));
                     AlertUtils.showInfo(owner, "Pedido enviado",
                             "A pergunta " + q.getAccessCode()
@@ -338,7 +338,7 @@ public class TeacherDashboardController implements IDisposableProp {
                     return;
                 }
 
-                Integer teacherId = clientManager.getUserId();
+                Integer teacherId = clientControllerContext.getUserId();
                 if (teacherId == null) {
                     AlertUtils.showError(getCurrentOwnerWindow(),
                             "Erro", "Sessão inválida. Faça login novamente.");
@@ -354,7 +354,7 @@ public class TeacherDashboardController implements IDisposableProp {
                         teacherId,
                         dto -> {
                             awaitingUpdateQuestion = true;
-                            clientManager.getQuestionService().editQuestion(dto);
+                            clientControllerContext.getQuestionService().editQuestion(dto);
                         });
             });
         };
@@ -476,36 +476,31 @@ public class TeacherDashboardController implements IDisposableProp {
     }
 
     private void setupPropertyChangeListeners() {
-        ClientService service = clientManager.getService();
-
-        service.addPropertyChangeListener(ClientService.PROP_NOTIFICATION, notificationListener);
-        service.addPropertyChangeListener(ClientService.PROP_CREATE_QUESTION_RESPONSE, createQuestionListener);
-        service.addPropertyChangeListener(ClientService.PROP_LIST_QUESTIONS_RESPONSE, listQuestionsListener);
-        service.addPropertyChangeListener(ClientService.PROP_JOIN_QUESTION_RESPONSE, joinQuestionListener);
-        service.addPropertyChangeListener(ClientService.PROP_VIEW_ANSWERS_RESPONSE, viewAnswersListener);
-        service.addPropertyChangeListener(ClientService.PROP_ANSWER_SUBMITTED, answerSubmittedListener);
-        service.addPropertyChangeListener(ClientService.PROP_UPDATE_QUESTION_RESPONSE, updateQuestionListener);
-        service.addPropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_OK, updateProfileOkListener);
-        service.addPropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_FAIL, updateProfileFailListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_NOTIFICATION, notificationListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_CREATE_QUESTION_RESPONSE, createQuestionListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_LIST_QUESTIONS_RESPONSE, listQuestionsListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_JOIN_QUESTION_RESPONSE, joinQuestionListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_VIEW_ANSWERS_RESPONSE, viewAnswersListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_ANSWER_SUBMITTED, answerSubmittedListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_UPDATE_QUESTION_RESPONSE, updateQuestionListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_UPDATE_PROFILE_OK, updateProfileOkListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_UPDATE_PROFILE_FAIL, updateProfileFailListener);
 
         // ⚠️ ConnectListener removido daqui conforme pedido
     }
 
     @Override
     public void dispose() {
-        ClientService service = clientManager.getService();
-        if (service == null) return;
-
         try {
-            service.removePropertyChangeListener(ClientService.PROP_NOTIFICATION, notificationListener);
-            service.removePropertyChangeListener(ClientService.PROP_CREATE_QUESTION_RESPONSE, createQuestionListener);
-            service.removePropertyChangeListener(ClientService.PROP_LIST_QUESTIONS_RESPONSE, listQuestionsListener);
-            service.removePropertyChangeListener(ClientService.PROP_JOIN_QUESTION_RESPONSE, joinQuestionListener);
-            service.removePropertyChangeListener(ClientService.PROP_VIEW_ANSWERS_RESPONSE, viewAnswersListener);
-            service.removePropertyChangeListener(ClientService.PROP_ANSWER_SUBMITTED, answerSubmittedListener);
-            service.removePropertyChangeListener(ClientService.PROP_UPDATE_QUESTION_RESPONSE, updateQuestionListener);
-            service.removePropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_OK, updateProfileOkListener);
-            service.removePropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_FAIL, updateProfileFailListener);
+            clientControllerContext.removePropertyChangeListener(ClientManager.PROP_NOTIFICATION, notificationListener);
+            clientControllerContext.removePropertyChangeListener(ClientManager.PROP_CREATE_QUESTION_RESPONSE, createQuestionListener);
+            clientControllerContext.removePropertyChangeListener(ClientManager.PROP_LIST_QUESTIONS_RESPONSE, listQuestionsListener);
+            clientControllerContext.removePropertyChangeListener(ClientManager.PROP_JOIN_QUESTION_RESPONSE, joinQuestionListener);
+            clientControllerContext.removePropertyChangeListener(ClientManager.PROP_VIEW_ANSWERS_RESPONSE, viewAnswersListener);
+            clientControllerContext.removePropertyChangeListener(ClientManager.PROP_ANSWER_SUBMITTED, answerSubmittedListener);
+            clientControllerContext.removePropertyChangeListener(ClientManager.PROP_UPDATE_QUESTION_RESPONSE, updateQuestionListener);
+            clientControllerContext.removePropertyChangeListener(ClientManager.PROP_UPDATE_PROFILE_OK, updateProfileOkListener);
+            clientControllerContext.removePropertyChangeListener(ClientManager.PROP_UPDATE_PROFILE_FAIL, updateProfileFailListener);
         } catch (Exception ignored) { }
 
         try { if (listLoadingBox != null) listLoadingBox.setVisible(false); } catch (Exception ignored) {}
@@ -538,7 +533,7 @@ public class TeacherDashboardController implements IDisposableProp {
      * Opens the creation dialog and sends the request when confirmed.
      */
     public void onCreateQuestion() {
-        Integer teacherId = clientManager.getUserId();
+        Integer teacherId = clientControllerContext.getUserId();
         if (teacherId == null) {
             AlertUtils.showError(getCurrentOwnerWindow(),
                     "Erro", "Sessão inválida. Faça login novamente.");
@@ -548,7 +543,7 @@ public class TeacherDashboardController implements IDisposableProp {
         Window owner = getCurrentOwnerWindow();
         TeacherDialogs.showCreateQuestionDialog(owner, teacherId, (CreateQuestionDTO dto) -> {
             awaitingCreateQuestion = true;
-            clientManager.getQuestionService().createQuestion(dto);
+            clientControllerContext.getQuestionService().createQuestion(dto);
             view.addNotification("Pedido para criar nova pergunta enviado.");
         });
     }
@@ -700,13 +695,13 @@ public class TeacherDashboardController implements IDisposableProp {
             refreshQuestionsTableView();
         });
 
-        Integer teacherId = clientManager.getUserId();
+        Integer teacherId = clientControllerContext.getUserId();
         if (teacherId == null) {
             AlertUtils.showError(getCurrentOwnerWindow(),
                     "Erro", "Sessão inválida. Faça login novamente.");
         } else {
             awaitingListQuestions = true;
-            clientManager.getQuestionService()
+            clientControllerContext.getQuestionService()
                     .listQuestions(new ListQuestionsDTO(teacherId, null));
         }
 
@@ -733,19 +728,19 @@ public class TeacherDashboardController implements IDisposableProp {
                         ", mas ela já tem respostas.");
                 return;
             }
-            Integer teacherId = clientManager.getUserId();
+            Integer teacherId = clientControllerContext.getUserId();
             if (teacherId == null) {
                 AlertUtils.showError(getCurrentOwnerWindow(),
                         "Erro", "Sessão inválida. Faça login novamente.");
                 return;
             }
             awaitingJoinQuestion = true;
-            clientManager.getQuestionService()
+            clientControllerContext.getQuestionService()
                     .joinQuestion(new JoinQuestionDTO(selected.getAccessCode(), teacherId));
             return;
         }
 
-        Integer teacherId = clientManager.getUserId();
+        Integer teacherId = clientControllerContext.getUserId();
         if (teacherId == null) {
             AlertUtils.showError(getCurrentOwnerWindow(),
                     "Erro", "Sessão inválida. Faça login novamente.");
@@ -755,7 +750,7 @@ public class TeacherDashboardController implements IDisposableProp {
         pendingActionQuestion = selected;
         pendingViewQuestion = selected;
         awaitingViewAnswers = true;
-        clientManager.getAnswerService()
+        clientControllerContext.getAnswerService()
                 .viewAnswersForTeacher(new ViewAnswersDTO(selected.getId(), teacherId));
     }
 
@@ -779,12 +774,12 @@ public class TeacherDashboardController implements IDisposableProp {
             );
             if (!confirm) return;
 
-            Integer teacherId = clientManager.getUserId();
+            Integer teacherId = clientControllerContext.getUserId();
             if (teacherId == null) {
                 AlertUtils.showError(owner, "Erro", "Sessão inválida. Faça login novamente.");
                 return;
             }
-            clientManager.getQuestionService()
+            clientControllerContext.getQuestionService()
                     .deleteQuestion(new DeleteQuestionDTO(selected.getId(), teacherId));
             AlertUtils.showInfo(owner,
                     "Pedido enviado",
@@ -796,7 +791,7 @@ public class TeacherDashboardController implements IDisposableProp {
             return;
         }
 
-        Integer teacherId = clientManager.getUserId();
+        Integer teacherId = clientControllerContext.getUserId();
         if (teacherId == null) {
             AlertUtils.showError(getCurrentOwnerWindow(),
                     "Erro", "Sessão inválida. Faça login novamente.");
@@ -807,7 +802,7 @@ public class TeacherDashboardController implements IDisposableProp {
         pendingActionQuestion = selected;
         pendingViewQuestion = selected;
         awaitingViewAnswers = true;
-        clientManager.getAnswerService()
+        clientControllerContext.getAnswerService()
                 .viewAnswersForTeacher(new ViewAnswersDTO(selected.getId(), teacherId));
     }
 
@@ -822,7 +817,7 @@ public class TeacherDashboardController implements IDisposableProp {
             return;
         }
 
-        Integer teacherId = clientManager.getUserId();
+        Integer teacherId = clientControllerContext.getUserId();
         if (teacherId == null) {
             AlertUtils.showError(getCurrentOwnerWindow(),
                     "Erro", "Sessão inválida. Faça login novamente.");
@@ -830,7 +825,7 @@ public class TeacherDashboardController implements IDisposableProp {
         }
         pendingViewQuestion = q;
         awaitingViewAnswers = true;
-        clientManager.getAnswerService()
+        clientControllerContext.getAnswerService()
                 .viewAnswersForTeacher(new ViewAnswersDTO(q.getId(), teacherId));
     }
 
@@ -864,10 +859,10 @@ public class TeacherDashboardController implements IDisposableProp {
     }
 
     private void refreshQuestions() {
-        Integer teacherId = clientManager.getUserId();
+        Integer teacherId = clientControllerContext.getUserId();
         if (teacherId == null) return;
         awaitingListQuestions = true;
-        clientManager.getQuestionService()
+        clientControllerContext.getQuestionService()
                 .listQuestions(new ListQuestionsDTO(teacherId, null));
     }
 
@@ -887,7 +882,7 @@ public class TeacherDashboardController implements IDisposableProp {
             if (code == null || code.trim().isEmpty()) return;
 
             String trimmed = code.trim();
-            Integer teacherId = clientManager.getUserId();
+            Integer teacherId = clientControllerContext.getUserId();
             if (teacherId == null) {
                 AlertUtils.showError(getCurrentOwnerWindow(),
                         "Erro", "Sessão inválida. Faça login novamente.");
@@ -910,7 +905,7 @@ public class TeacherDashboardController implements IDisposableProp {
 
             pendingViewQuestion = q;
             awaitingViewAnswers = true;
-            clientManager.getAnswerService()
+            clientControllerContext.getAnswerService()
                     .viewAnswersForTeacher(new ViewAnswersDTO(q.getId(), teacherId));
         });
     }
@@ -1022,13 +1017,13 @@ public class TeacherDashboardController implements IDisposableProp {
             }
 
             try {
-                Integer uid = clientManager.getUserId();
+                Integer uid = clientControllerContext.getUserId();
                 UpdateTeacherDTO dto = new UpdateTeacherDTO(
                         uid, uid, n, e,
                         (opw == null || opw.isBlank()) ? null : opw,
                         (npw == null || npw.isBlank()) ? null : npw
                 );
-                clientManager.getAuthService().updateTeacher(dto);
+                clientControllerContext.getAuthService().updateTeacher(dto);
                 view.addNotification("Pedido de atualização de perfil enviado.");
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
@@ -1051,12 +1046,12 @@ public class TeacherDashboardController implements IDisposableProp {
         if (!confirm) return;
 
         try {
-            clientManager.getAuthService().logout();
+            clientControllerContext.getAuthService().logout();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
         dispose();
-        clientManager.getService().logout();
+        clientControllerContext.logout();
         application.showAuthentication();
     }
 
@@ -1091,7 +1086,7 @@ public class TeacherDashboardController implements IDisposableProp {
      * the UI thread.
      */
     private void fetchAnswerCountsSequentially() {
-        Integer teacherId = clientManager.getUserId();
+        Integer teacherId = clientControllerContext.getUserId();
         if (teacherId == null) return;
         if (bulkLoadingAnswers) return;
 
@@ -1107,7 +1102,7 @@ public class TeacherDashboardController implements IDisposableProp {
                     pendingViewQuestion = q;
                     awaitingViewAnswers = true;
                     try {
-                        clientManager.getAnswerService()
+                        clientControllerContext.getAnswerService()
                                 .viewAnswersForTeacher(new ViewAnswersDTO(q.getId(), teacherId));
                     } catch (Exception e) {
                         awaitingViewAnswers = false;

@@ -12,8 +12,8 @@ import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 import pt.isec.client.ClientApplication;
-import pt.isec.client.ClientManager;
-import pt.isec.client.core.ClientService;
+import pt.isec.client.core.ClientManager;
+import pt.isec.client.core.IClientControllerContext;
 import pt.isec.client.ui.IDisposableProp;
 import pt.isec.client.ui.util.AlertUtils;
 import pt.isec.client.ui.util.UiUtils;
@@ -37,13 +37,13 @@ import java.util.List;
  *     <li>Fetch the student's answer history</li>
  *     <li>Update profile information</li>
  * </ul>
- * Uses the event-based model of {@link ClientService}, with all requests enqueued
+ * Uses the event-based model of {@link ClientManager}, with all requests enqueued
  * and responses delivered via property change events.
  */
 public class StudentDashboardController implements IDisposableProp {
 
     private final Stage stage;
-    private final ClientManager clientManager;
+    private final IClientControllerContext clientControllerContext;
     private final ClientApplication application;
     private String userEmail;
     private String userName;
@@ -70,18 +70,18 @@ public class StudentDashboardController implements IDisposableProp {
      * Creates a new controller for the student dashboard.
      *
      * @param stage          primary stage
-     * @param clientManager  client manager with all services
+     * @param clientControllerContext  client manager with all services
      * @param application    reference to the main application
      * @param userName       initial student name
      * @param userEmail      initial student email
      */
     public StudentDashboardController(Stage stage,
-                                      ClientManager clientManager,
+                                      ClientManager clientControllerContext,
                                       ClientApplication application,
                                       String userName,
                                       String userEmail) {
         this.stage = stage;
-        this.clientManager = clientManager;
+        this.clientControllerContext = clientControllerContext;
         this.application = application;
         this.userName = userName;
         this.userEmail = userEmail;
@@ -213,21 +213,19 @@ public class StudentDashboardController implements IDisposableProp {
     }
 
     /**
-     * Registers all property change listeners in the {@link ClientService}.
+     * Registers all property change listeners in the {@link ClientManager}.
      */
     private void setupPropertyChangeListeners() {
-        ClientService service = clientManager.getService();
-
-        service.addPropertyChangeListener(ClientService.PROP_NOTIFICATION, notificationListener);
-        service.addPropertyChangeListener(ClientService.PROP_JOIN_QUESTION_RESPONSE, joinQuestionListener);
-        service.addPropertyChangeListener(ClientService.PROP_SUBMIT_ANSWER_OK, submitAnswerOkListener);
-        service.addPropertyChangeListener(ClientService.PROP_SUBMIT_ANSWER_FAIL, submitAnswerFailListener);
-        service.addPropertyChangeListener(ClientService.PROP_LIST_ANSWERED_RESPONSE, listAnsweredListener);
-        service.addPropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_OK, updateProfileOkListener);
-        service.addPropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_FAIL, updateProfileFailListener);
-        service.addPropertyChangeListener(ClientService.PROP_USER_NAME, userNameListener);
-        service.addPropertyChangeListener(ClientService.PROP_USER_EMAIL, userEmailListener);
-        service.addPropertyChangeListener(ClientService.PROP_STUDENT_NUMBER, studentNumberListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_NOTIFICATION, notificationListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_JOIN_QUESTION_RESPONSE, joinQuestionListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_SUBMIT_ANSWER_OK, submitAnswerOkListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_SUBMIT_ANSWER_FAIL, submitAnswerFailListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_LIST_ANSWERED_RESPONSE, listAnsweredListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_UPDATE_PROFILE_OK, updateProfileOkListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_UPDATE_PROFILE_FAIL, updateProfileFailListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_USER_NAME, userNameListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_USER_EMAIL, userEmailListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_STUDENT_NUMBER, studentNumberListener);
     }
 
     /**
@@ -235,21 +233,16 @@ public class StudentDashboardController implements IDisposableProp {
      */
     @Override
     public void dispose() {
-        ClientService service = clientManager.getService();
-        if (service == null) {
-            return;
-        }
-
-        service.removePropertyChangeListener(ClientService.PROP_NOTIFICATION, notificationListener);
-        service.removePropertyChangeListener(ClientService.PROP_JOIN_QUESTION_RESPONSE, joinQuestionListener);
-        service.removePropertyChangeListener(ClientService.PROP_SUBMIT_ANSWER_OK, submitAnswerOkListener);
-        service.removePropertyChangeListener(ClientService.PROP_SUBMIT_ANSWER_FAIL, submitAnswerFailListener);
-        service.removePropertyChangeListener(ClientService.PROP_LIST_ANSWERED_RESPONSE, listAnsweredListener);
-        service.removePropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_OK, updateProfileOkListener);
-        service.removePropertyChangeListener(ClientService.PROP_UPDATE_PROFILE_FAIL, updateProfileFailListener);
-        service.removePropertyChangeListener(ClientService.PROP_USER_NAME, userNameListener);
-        service.removePropertyChangeListener(ClientService.PROP_USER_EMAIL, userEmailListener);
-        service.removePropertyChangeListener(ClientService.PROP_STUDENT_NUMBER, studentNumberListener);
+        clientControllerContext.removePropertyChangeListener(ClientManager.PROP_NOTIFICATION, notificationListener);
+        clientControllerContext.removePropertyChangeListener(ClientManager.PROP_JOIN_QUESTION_RESPONSE, joinQuestionListener);
+        clientControllerContext.removePropertyChangeListener(ClientManager.PROP_SUBMIT_ANSWER_OK, submitAnswerOkListener);
+        clientControllerContext.removePropertyChangeListener(ClientManager.PROP_SUBMIT_ANSWER_FAIL, submitAnswerFailListener);
+        clientControllerContext.removePropertyChangeListener(ClientManager.PROP_LIST_ANSWERED_RESPONSE, listAnsweredListener);
+        clientControllerContext.removePropertyChangeListener(ClientManager.PROP_UPDATE_PROFILE_OK, updateProfileOkListener);
+        clientControllerContext.removePropertyChangeListener(ClientManager.PROP_UPDATE_PROFILE_FAIL, updateProfileFailListener);
+        clientControllerContext.removePropertyChangeListener(ClientManager.PROP_USER_NAME, userNameListener);
+        clientControllerContext.removePropertyChangeListener(ClientManager.PROP_USER_EMAIL, userEmailListener);
+        clientControllerContext.removePropertyChangeListener(ClientManager.PROP_STUDENT_NUMBER, studentNumberListener);
 
         try {
             view.hideLoading();
@@ -276,9 +269,9 @@ public class StudentDashboardController implements IDisposableProp {
         avatarCircle.getStyleClass().add("profile-avatar-circle");
 
         String nameForInitials =
-                clientManager.getService().getUserName() != null
-                        ? clientManager.getService().getUserName()
-                        : clientManager.getService().getUserEmail();
+                clientControllerContext.getUserName() != null
+                        ? clientControllerContext.getUserName()
+                        : clientControllerContext.getUserEmail();
 
         Label initials = new Label(
                 UiUtils.getInitials(nameForInitials)
@@ -287,9 +280,9 @@ public class StudentDashboardController implements IDisposableProp {
         avatarCircle.getChildren().add(initials);
 
         String nameLabelValue =
-                clientManager.getService().getUserName() != null
-                        ? clientManager.getService().getUserName()
-                        : clientManager.getService().getUserEmail();
+                clientControllerContext.getUserName() != null
+                        ? clientControllerContext.getUserName()
+                        : clientControllerContext.getUserEmail();
 
         Label nameLabel = new Label(nameLabelValue);
         nameLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
@@ -297,7 +290,7 @@ public class StudentDashboardController implements IDisposableProp {
         Label roleLabel = new Label("Estudante");
         roleLabel.setFont(Font.font("Arial", 12));
 
-        Label emailLabel = new Label(clientManager.getService().getUserEmail());
+        Label emailLabel = new Label(clientControllerContext.getUserEmail());
         emailLabel.setFont(Font.font("Arial", 12));
 
         VBox infoBox = new VBox(4, nameLabel, roleLabel, emailLabel);
@@ -326,7 +319,7 @@ public class StudentDashboardController implements IDisposableProp {
      */
     public void onAnswerQuestion() {
         StudentDialogs.showEnterQuestionCodeDialog(getOwnerWindow(), code -> {
-            Integer studentId = clientManager.getUserId();
+            Integer studentId = clientControllerContext.getUserId();
             if (studentId == null) {
                 showErrorAlert("Sessão inválida. Faça login novamente.");
                 view.addNotification("Falha ao procurar pergunta: sessão inválida.");
@@ -335,7 +328,7 @@ public class StudentDashboardController implements IDisposableProp {
             awaitingJoinQuestion = true;
             try {
                 view.showLoading("A carregar pergunta...");
-                clientManager.getQuestionService()
+                clientControllerContext.getQuestionService()
                         .joinQuestion(new JoinQuestionDTO(code, studentId));
             } catch (Exception e) {
                 try {
@@ -356,7 +349,7 @@ public class StudentDashboardController implements IDisposableProp {
      * @param question question to answer
      */
     private void openQuestionDialog(Question question) {
-        Integer studentId = clientManager.getUserId();
+        Integer studentId = clientControllerContext.getUserId();
         if (studentId == null) {
             showErrorAlert("Sessão inválida. Faça login novamente.");
             view.addNotification("Sessão inválida ao tentar responder à pergunta.");
@@ -370,7 +363,7 @@ public class StudentDashboardController implements IDisposableProp {
                 (SubmitAnswerDTO dto) -> {
                     awaitingSubmitAnswer = true;
                     try {
-                        clientManager.getAnswerService().submitAnswer(dto);
+                        clientControllerContext.getAnswerService().submitAnswer(dto);
                     } catch (Exception ex) {
                         awaitingSubmitAnswer = false;
                         String msg = "Erro ao submeter resposta: " + ex.getMessage();
@@ -388,7 +381,7 @@ public class StudentDashboardController implements IDisposableProp {
      * Handler to request and display the student's answer history.
      */
     public void onShowHistory() {
-        Integer studentId = clientManager.getUserId();
+        Integer studentId = clientControllerContext.getUserId();
         if (studentId == null) {
             showErrorAlert("Sessão inválida. Faça login novamente.");
             view.addNotification("Falha ao obter histórico: sessão inválida.");
@@ -396,7 +389,7 @@ public class StudentDashboardController implements IDisposableProp {
         }
         awaitingHistory = true;
         try {
-            clientManager.getAnswerService().viewAnswersForStudent(studentId);
+            clientControllerContext.getAnswerService().viewAnswersForStudent(studentId);
         } catch (Exception e) {
             awaitingHistory = false;
             String msg = "Erro ao obter histórico: " + e.getMessage();
@@ -423,17 +416,17 @@ public class StudentDashboardController implements IDisposableProp {
         Label numberLabel = new Label("Número de estudante:");
         TextField numberField = new TextField();
         numberField.setPromptText("Número de estudante");
-        numberField.setText(String.valueOf(clientManager.getStudentNumber()));
+        numberField.setText(String.valueOf(clientControllerContext.getStudentNumber()));
 
         Label nameLabel = new Label("Nome:");
         TextField nameField = new TextField();
-        nameField.setText(clientManager.getService().getUserName() != null
-                ? clientManager.getService().getUserName() : "");
+        nameField.setText(clientControllerContext.getUserName() != null
+                ? clientControllerContext.getUserName() : "");
 
         Label emailLabel = new Label("Email:");
         TextField emailField = new TextField();
-        emailField.setText(clientManager.getService().getUserEmail() != null
-                ? clientManager.getService().getUserEmail() : "");
+        emailField.setText(clientControllerContext.getUserEmail() != null
+                ? clientControllerContext.getUserEmail() : "");
 
         Label oldPwLabel = new Label("Password atual (só necessária se pretende alterar):");
         PasswordField oldPwField = new PasswordField();
@@ -472,11 +465,11 @@ public class StudentDashboardController implements IDisposableProp {
                 }
 
                 UpdateStudentDTO dto = new UpdateStudentDTO(
-                        clientManager.getUserId(), number, name, email,
+                        clientControllerContext.getUserId(), number, name, email,
                         (oldPw == null || oldPw.isBlank()) ? null : oldPw,
                         (newPw == null || newPw.isBlank()) ? null : newPw
                 );
-                clientManager.getAuthService().updateStudent(dto);
+                clientControllerContext.getAuthService().updateStudent(dto);
                 // Feedback is delivered via updateProfile listeners
                 view.addNotification("Pedido de atualização de perfil enviado.");
             } catch (NumberFormatException nfe) {
@@ -507,12 +500,12 @@ public class StudentDashboardController implements IDisposableProp {
         }
 
         try {
-            clientManager.getAuthService().logout();
+            clientControllerContext.getAuthService().logout();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
         dispose();
-        clientManager.getService().logout();
+        clientControllerContext.logout();
         application.showAuthentication();
     }
 

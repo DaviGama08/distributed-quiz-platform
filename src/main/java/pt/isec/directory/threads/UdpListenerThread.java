@@ -2,7 +2,7 @@ package pt.isec.directory.threads;
 
 import pt.isec.common.messages.UdpMessage;
 import pt.isec.common.util.Log;
-import pt.isec.directory.IDirectoryManager;
+import pt.isec.directory.core.IDirectoryThreadContext;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -45,28 +45,28 @@ import java.net.SocketTimeoutException;
  * </ul>
  */
 public class UdpListenerThread implements Runnable {
-    private final IDirectoryManager tInfo;
+    private final IDirectoryThreadContext threadInfo;
 
-    public UdpListenerThread(IDirectoryManager tInfo) {
-        this.tInfo = tInfo;
+    public UdpListenerThread(IDirectoryThreadContext threadInfo) {
+        this.threadInfo = threadInfo;
     }
 
     @Override
     public void run() {
-        DatagramSocket socket = tInfo.socket();
+        DatagramSocket socket = threadInfo.socket();
         Log.info(UdpListenerThread.class,
-                "Directoria UDP a escutar na porta %d...", tInfo.udpPort());
-        byte[] buffer         = new byte[tInfo.maxPacketSize()];
+                "Directoria UDP a escutar na porta %d...", threadInfo.udpPort());
+        byte[] buffer         = new byte[threadInfo.maxPacketSize()];
         DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
 
-        while (tInfo.isRunning()) {
+        while (threadInfo.isRunning()) {
             try {
                 socket.receive(packet);
 
                 byte[] data = new byte[packet.getLength()];
                 System.arraycopy(packet.getData(), packet.getOffset(), data, 0, packet.getLength());
 
-                tInfo.queue().put(
+                threadInfo.queue().put(
                         new UdpMessage(packet.getAddress(), packet.getPort(), data, data.length)
                 );
 
@@ -74,7 +74,7 @@ public class UdpListenerThread implements Runnable {
                 // optional: socket configured with timeout; just re-check loop condition
             } catch (SocketException se) {
                 // socket intentionally closed on shutdown will cause SocketException here
-                if (!tInfo.isRunning() || socket.isClosed()) {
+                if (!threadInfo.isRunning() || socket.isClosed()) {
                     // ordered shutdown – exit loop quietly
                     break;
                 }
@@ -87,7 +87,7 @@ public class UdpListenerThread implements Runnable {
                     break;
                 }
             } catch (IOException e) {
-                if (tInfo.isRunning()) {
+                if (threadInfo.isRunning()) {
                     Log.error(UdpListenerThread.class,
                             "Erro a receber UDP: " + e.getMessage(), e);
                 }

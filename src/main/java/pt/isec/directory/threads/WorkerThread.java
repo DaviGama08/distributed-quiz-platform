@@ -2,8 +2,7 @@ package pt.isec.directory.threads;
 
 import pt.isec.common.messages.UdpMessage;
 import pt.isec.common.util.Log;
-import pt.isec.directory.IDirectoryManager;
-import pt.isec.directory.ServerInfo;
+import pt.isec.directory.core.IDirectoryThreadContext;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -24,10 +23,10 @@ import java.util.concurrent.TimeUnit;
  * </ul>
  */
 public class WorkerThread implements Runnable {
-    private final IDirectoryManager tInfo;
+    private final IDirectoryThreadContext threadInfo;
 
-    public WorkerThread(IDirectoryManager tInfo) {
-        this.tInfo = tInfo;
+    public WorkerThread(IDirectoryThreadContext threadInfo) {
+        this.threadInfo = threadInfo;
     }
 
     @Override
@@ -37,8 +36,8 @@ public class WorkerThread implements Runnable {
             // Continue processing as long as:
             //  - the system is running, OR
             //  - there are still messages in the queue
-            while (tInfo.isRunning() || !tInfo.queue().isEmpty()) {
-                UdpMessage msg = tInfo.queue().poll(500, TimeUnit.MILLISECONDS);
+            while (threadInfo.isRunning() || !threadInfo.queue().isEmpty()) {
+                UdpMessage msg = threadInfo.queue().poll(500, TimeUnit.MILLISECONDS);
                 if (msg == null) {
                     // timeout: re-check isRunning() in the outer loop
                     continue;
@@ -113,9 +112,9 @@ public class WorkerThread implements Runnable {
      */
     private String handleLogin() {
         ServerInfo principal;
-        synchronized (tInfo.serversLock()) {
+        synchronized (threadInfo.serversLock()) {
             // pick the "master" server as the first one in insertion order
-            var iterator = tInfo.serversOrdered().values().iterator();
+            var iterator = threadInfo.serversOrdered().values().iterator();
             principal = iterator.hasNext() ? iterator.next() : null;
         }
         if (principal == null) return "404 NO_PRINCIPAL";
@@ -138,11 +137,11 @@ public class WorkerThread implements Runnable {
         String id = kv.get("ID");
         if (id == null || id.isEmpty()) return "400 BAD_REQUEST ID";
 
-        ServerInfo removed = tInfo.servers().remove(id);
+        ServerInfo removed = threadInfo.servers().remove(id);
         if (removed == null) return "409 CONFLICT UNKNOWN_ID";
 
-        synchronized (tInfo.serversLock()) {
-            tInfo.serversOrdered().remove(id);
+        synchronized (threadInfo.serversLock()) {
+            threadInfo.serversOrdered().remove(id);
         }
 
         return "200 OK";
@@ -165,15 +164,15 @@ public class WorkerThread implements Runnable {
         String id = kv.get("ID");
         if (id == null || id.isBlank()) return "400 BAD_REQUEST ID";
 
-        ServerInfo si = tInfo.servers().get(id);
+        ServerInfo si = threadInfo.servers().get(id);
         if (si == null) return "409 CONFLICT UNKNOWN_ID";
 
         long now = System.currentTimeMillis();
         si.setLastSeenMillis(now);
 
         ServerInfo principal;
-        synchronized (tInfo.serversLock()) {
-            var iterator = tInfo.serversOrdered().values().iterator();
+        synchronized (threadInfo.serversLock()) {
+            var iterator = threadInfo.serversOrdered().values().iterator();
             principal = iterator.hasNext() ? iterator.next() : null;
         }
 
@@ -213,7 +212,7 @@ public class WorkerThread implements Runnable {
         if (ip.isEmpty() || port <= 0 || port > 65535) return "400 BAD_REQUEST TCP";
 
         // Rule: do not allow two servers on the same <ip:port> with different IDs
-        for (ServerInfo other : tInfo.servers().values()) {
+        for (ServerInfo other : threadInfo.servers().values()) {
             if (other.getIp().equals(ip) && other.getTcpPort() == port && !other.getId().equals(id)) {
                 Log.info(WorkerThread.class,
                         "[Diretoria] rejeitado REGISTER: endpoint duplicado %s:%d para ID=%s (já existe %s)",
@@ -227,13 +226,13 @@ public class WorkerThread implements Runnable {
             if (dbv != null && !dbv.isBlank()) version = Integer.parseInt(dbv.trim());
         } catch (Exception ignore) {}
 
-        ServerInfo si = tInfo.servers().get(id);
+        ServerInfo si = threadInfo.servers().get(id);
         if (si == null) {
             si = new ServerInfo(id, ip, port, udpPort);
             si.setLastSeenMillis(System.currentTimeMillis());
-            tInfo.servers().put(id, si);
-            synchronized (tInfo.serversLock()) {
-                tInfo.serversOrdered().put(id, si);
+            threadInfo.servers().put(id, si);
+            synchronized (threadInfo.serversLock()) {
+                threadInfo.serversOrdered().put(id, si);
             }
         } else {
             // same ID coming back: update last seen
@@ -241,8 +240,8 @@ public class WorkerThread implements Runnable {
         }
 
         ServerInfo principal;
-        synchronized (tInfo.serversLock()) {
-            var iterator = tInfo.serversOrdered().values().iterator();
+        synchronized (threadInfo.serversLock()) {
+            var iterator = threadInfo.serversOrdered().values().iterator();
             principal = iterator.hasNext() ? iterator.next() : null;
         }
         if (principal == null) return "404 NO_PRINCIPAL";
@@ -261,7 +260,7 @@ public class WorkerThread implements Runnable {
     private void send(UdpMessage to, String text) throws IOException {
         byte[] out        = text.getBytes(StandardCharsets.UTF_8);
         DatagramPacket dp = new DatagramPacket(out, out.length, to.addr(), to.port());
-        tInfo.socket().send(dp);
+        threadInfo.socket().send(dp);
     }
 
     /**

@@ -1,6 +1,7 @@
 package pt.isec.client.threads;
 
-import pt.isec.client.core.IClientService;
+import pt.isec.client.core.IClientControllerContext;
+import pt.isec.client.core.IClientThreadContext;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.util.Log;
 
@@ -13,14 +14,14 @@ import java.io.Serializable;
  */
 public class RequestSenderThread implements Runnable {
 
-    private final IClientService service;
+    private final IClientThreadContext service;
 
     /**
      * Creates a new request sender thread.
      *
      * @param service client service interface
      */
-    public RequestSenderThread(IClientService service) {
+    public RequestSenderThread(IClientThreadContext service) {
         this.service = service;
     }
 

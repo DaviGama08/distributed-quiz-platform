@@ -1,4 +1,4 @@
-package pt.isec.directory;
+package pt.isec.directory.threads;
 
 /**
  * Holds runtime information about a quiz server registered in the directory.

@@ -1,6 +1,7 @@
 package pt.isec.client.threads;
 
-import pt.isec.client.core.IClientService;
+import pt.isec.client.core.IClientControllerContext;
+import pt.isec.client.core.IClientThreadContext;
 import pt.isec.common.dto.auth.AuthResponseDTO;
 import pt.isec.common.dto.question.CreateQuestionResponseDTO;
 import pt.isec.common.messages.TcpMessage;
@@ -17,19 +18,19 @@ import java.util.List;
  * Thread that processes responses from the server taken from the response queue
  * and executes the appropriate logic for each message type.
  * <p>
- * This class delegates to {@link IClientService} to fire property change events
+ * This class delegates to {@link IClientControllerContext} to fire property change events
  * so that UI controllers can update the interface accordingly.
  */
 public class ResponseHandlerThread implements Runnable {
 
-    private final IClientService tInfo;
+    private final IClientThreadContext tInfo;
 
     /**
      * Creates a new response handler thread.
      *
      * @param tInfo client service interface
      */
-    public ResponseHandlerThread(IClientService tInfo) {
+    public ResponseHandlerThread(IClientThreadContext tInfo) {
         this.tInfo = tInfo;
     }
 
@@ -52,7 +53,7 @@ public class ResponseHandlerThread implements Runnable {
     }
 
     /**
-     * Processes a single response, delegating to {@link IClientService}
+     * Processes a single response, delegating to {@link IClientControllerContext}
      * to emit the proper property events.
      *
      * @param response TCP message received from the server

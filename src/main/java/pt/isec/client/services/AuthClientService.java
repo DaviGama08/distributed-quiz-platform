@@ -1,6 +1,8 @@
 package pt.isec.client.services;
 
-import pt.isec.client.core.IClientService;
+import pt.isec.client.core.ClientManager;
+import pt.isec.client.core.IClientControllerContext;
+import pt.isec.client.core.IClientServiceContext;
 import pt.isec.common.dto.auth.*;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;
@@ -8,7 +10,7 @@ import pt.isec.common.messages.MessageType;
 /**
  * Client-side service for authentication and registration operations.
  * <p>
- * Communicates with the server through {@link IClientService} and enqueues
+ * Communicates with the server through {@link IClientControllerContext} and enqueues
  * messages to be sent by {@code RequestSenderThread}.
  * <p>
  * It does not wait for responses; results are delivered by
@@ -16,14 +18,14 @@ import pt.isec.common.messages.MessageType;
  */
 public class AuthClientService {
 
-    private final IClientService service;
+    private final IClientServiceContext service;
 
     /**
      * Creates a new authentication client service.
      *
      * @param service underlying client service
      */
-    public AuthClientService(IClientService service) {
+    public AuthClientService(IClientServiceContext service) {
         this.service = service;
     }
 
@@ -101,7 +103,7 @@ public class AuthClientService {
      * Logs out the current user.
      * <p>
      * Only enqueues the message; when the server responds with ACK,
-     * {@link pt.isec.client.core.ClientService} will update the authentication state
+     * {@link ClientManager} will update the authentication state
      * via {@code PROP_AUTHENTICATED}.
      *
      * @throws InterruptedException if the thread is interrupted while enqueuing

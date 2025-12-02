@@ -1,7 +1,7 @@
 package pt.isec.directory.threads;
 
 import pt.isec.common.util.Log;
-import pt.isec.directory.IDirectoryManager;
+import pt.isec.directory.core.IDirectoryThreadContext;
 
 /**
  * Metrics/logging thread.
@@ -10,25 +10,25 @@ import pt.isec.directory.IDirectoryManager;
  * number of servers, current primary, TCP port, etc.
  */
 public class MetricsThread implements Runnable {
-    private final IDirectoryManager tInfo;
+    private final IDirectoryThreadContext threadInfo;
     private final long periodMs;
 
     /**
-     * @param tInfo    directory manager
+     * @param threadInfo    directory manager
      * @param periodMs log interval in milliseconds
      */
-    public MetricsThread(IDirectoryManager tInfo, long periodMs) {
-        this.tInfo = tInfo;
+    public MetricsThread(IDirectoryThreadContext threadInfo, long periodMs) {
+        this.threadInfo = threadInfo;
         this.periodMs = periodMs;
     }
 
     @Override
     public void run() {
-        while (tInfo.isRunning()) {
+        while (threadInfo.isRunning()) {
             try {
-                String master = tInfo.masterServerUuid();
-                int total = tInfo.serversCount();
-                int port = (master != null) ? tInfo.serverTcpPort(master) : -1;
+                String master = threadInfo.masterServerUuid();
+                int total = threadInfo.serversCount();
+                int port = (master != null) ? threadInfo.serverTcpPort(master) : -1;
 
                 String masterName = (master == null || port <= 0) ? "NONE" : ("servidor" + port);
 

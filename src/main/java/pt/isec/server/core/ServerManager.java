@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *   <li>Starts and stops background threads for directory, cluster and client listeners</li>
  * </ul>
  */
-public class ServerManager implements IServerManager, IQuestionAnswerContext {
+public class ServerManager implements IServerThreadContext, IQuestionAnswerContext {
     private volatile boolean dbInitialised = false;
     private DbCommands dbCommands;
 

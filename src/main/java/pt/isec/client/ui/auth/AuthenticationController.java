@@ -3,8 +3,8 @@ package pt.isec.client.ui.auth;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import pt.isec.client.ClientApplication;
-import pt.isec.client.ClientManager;
-import pt.isec.client.core.ClientService;
+import pt.isec.client.core.ClientManager;
+import pt.isec.client.core.IClientControllerContext;
 import pt.isec.client.ui.IDisposableProp;
 import pt.isec.client.ui.util.UiUtils;
 import pt.isec.common.dto.auth.AuthResponseDTO;
@@ -31,7 +31,7 @@ public class AuthenticationController implements IDisposableProp {
     private static final Color RED = Color.web("#A01316");
 
     private final Stage stage;
-    private final ClientManager clientManager;
+    private final IClientControllerContext clientControllerContext;
     private final ClientApplication application;
     private final AuthenticationView view;
 
@@ -49,12 +49,12 @@ public class AuthenticationController implements IDisposableProp {
      * Creates a new authentication controller.
      *
      * @param stage         primary stage
-     * @param clientManager client manager for service access
+     * @param clientControllerContext client manager for service access
      * @param application   main JavaFX application
      */
-    public AuthenticationController(Stage stage, ClientManager clientManager, ClientApplication application) {
+    public AuthenticationController(Stage stage, ClientManager clientControllerContext, ClientApplication application) {
         this.stage = stage;
-        this.clientManager = clientManager;
+        this.clientControllerContext = clientControllerContext;
         this.application = application;
         this.view = new AuthenticationView();
         this.view.createView();
@@ -64,16 +64,15 @@ public class AuthenticationController implements IDisposableProp {
     }
 
     /**
-     * Registers all needed property change listeners on {@link ClientService}.
+     * Registers all needed property change listeners on {@link ClientManager}.
      */
     private void setupPropertyChangeListeners() {
-        ClientService service = clientManager.getService();
 
-        service.addPropertyChangeListener(ClientService.PROP_AUTHENTICATED, authListener);
-        service.addPropertyChangeListener(ClientService.PROP_LOGIN_OK, loginOkListener);
-        service.addPropertyChangeListener(ClientService.PROP_LOGIN_FAIL, loginFailListener);
-        service.addPropertyChangeListener(ClientService.PROP_REGISTER_OK, registerOkListener);
-        service.addPropertyChangeListener(ClientService.PROP_CONNECTION_STATUS, connectionStatusListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_AUTHENTICATED, authListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_LOGIN_OK, loginOkListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_LOGIN_FAIL, loginFailListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_REGISTER_OK, registerOkListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_CONNECTION_STATUS, connectionStatusListener);
     }
 
     /**
@@ -93,10 +92,9 @@ public class AuthenticationController implements IDisposableProp {
         view.clearLoginFields();
         view.clearRegisterFields();
 
-        ClientService service = clientManager.getService();
-        String userType = service.getUserType();
-        String email = service.getUserEmail();
-        String name = service.getUserName();
+        String userType = clientControllerContext.getUserType();
+        String email = clientControllerContext.getUserEmail();
+        String name = clientControllerContext.getUserName();
 
         if ("TEACHER".equalsIgnoreCase(userType)) {
             application.showTeacherDashboard(name, email);
@@ -110,16 +108,15 @@ public class AuthenticationController implements IDisposableProp {
      */
     private void handleLoginSuccessResponse(PropertyChangeEvent evt) {
         AuthResponseDTO data = (AuthResponseDTO) evt.getNewValue();
-        ClientService service = clientManager.getService();
         try {
-            service.setUserId(Integer.parseInt(data.userId()));
+            clientControllerContext.setUserId(Integer.parseInt(data.userId()));
         } catch (NumberFormatException ignored) {
-            service.setUserId(null);
+            clientControllerContext.setUserId(null);
         }
-        service.setUserType(data.userType());
-        service.setUserEmail(data.email());
-        service.setUserName(data.name());
-        service.setAuthenticated(true);
+        clientControllerContext.setUserType(data.userType());
+        clientControllerContext.setUserEmail(data.email());
+        clientControllerContext.setUserName(data.name());
+        clientControllerContext.setAuthenticated(true);
 
         UiUtils.runOnUiThread(() ->
                 view.setLoginStatus("✔️ Login OK! A carregar dashboard...", Color.GREEN, false, true)
@@ -150,16 +147,14 @@ public class AuthenticationController implements IDisposableProp {
      */
     private void handleRegisterOkResponse(PropertyChangeEvent evt) {
         AuthResponseDTO data = (AuthResponseDTO) evt.getNewValue();
-        ClientService service = clientManager.getService();
-
         try {
-            service.setUserId(Integer.parseInt(data.userId()));
+            clientControllerContext.setUserId(Integer.parseInt(data.userId()));
         } catch (NumberFormatException ignored) {
-            service.setUserId(null);
+            clientControllerContext.setUserId(null);
         }
-        service.setUserType(data.userType());
-        service.setUserEmail(data.email());
-        service.setUserName(data.name());
+        clientControllerContext.setUserType(data.userType());
+        clientControllerContext.setUserEmail(data.email());
+        clientControllerContext.setUserName(data.name());
 
         UiUtils.runOnUiThread(() -> {
             view.setRegisterStatus(
@@ -270,7 +265,7 @@ public class AuthenticationController implements IDisposableProp {
         setAuthBusy(true);
         view.setLoginStatus("A autenticar...", BLUE, true, false);
 
-        clientManager.getAuthService().login(email, password);
+        clientControllerContext.getAuthService().login(email, password);
     }
 
     /**
@@ -314,9 +309,9 @@ public class AuthenticationController implements IDisposableProp {
                     );
                     return;
                 }
-                clientManager.getAuthService().registerStudent(name, email, password, number);
+                clientControllerContext.getAuthService().registerStudent(name, email, password, number);
             } else {
-                clientManager.getAuthService().registerTeacher(name, email, password, extra);
+                clientControllerContext.getAuthService().registerTeacher(name, email, password, extra);
             }
         } catch (Exception e) {
             UiUtils.runOnUiThread(() ->
@@ -372,19 +367,14 @@ public class AuthenticationController implements IDisposableProp {
     }
 
     /**
-     * Removes all listeners registered on the {@link ClientService}.
+     * Removes all listeners registered on the {@link ClientManager}.
      */
     @Override
     public void dispose() {
-        ClientService service = clientManager.getService();
-        if (service == null) {
-            return;
-        }
-
-        service.removePropertyChangeListener(ClientService.PROP_AUTHENTICATED, authListener);
-        service.removePropertyChangeListener(ClientService.PROP_LOGIN_OK, loginOkListener);
-        service.removePropertyChangeListener(ClientService.PROP_LOGIN_FAIL, loginFailListener);
-        service.removePropertyChangeListener(ClientService.PROP_REGISTER_OK, registerOkListener);
-        service.removePropertyChangeListener(ClientService.PROP_CONNECTION_STATUS, connectionStatusListener);
+        clientControllerContext.removePropertyChangeListener(ClientManager.PROP_AUTHENTICATED, authListener);
+        clientControllerContext.removePropertyChangeListener(ClientManager.PROP_LOGIN_OK, loginOkListener);
+        clientControllerContext.removePropertyChangeListener(ClientManager.PROP_LOGIN_FAIL, loginFailListener);
+        clientControllerContext.removePropertyChangeListener(ClientManager.PROP_REGISTER_OK, registerOkListener);
+        clientControllerContext.removePropertyChangeListener(ClientManager.PROP_CONNECTION_STATUS, connectionStatusListener);
     }
 }

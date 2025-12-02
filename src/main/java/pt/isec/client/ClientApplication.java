@@ -9,7 +9,7 @@ import javafx.scene.image.Image;
 import javafx.scene.layout.HBox;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
-import pt.isec.client.core.ClientService;
+import pt.isec.client.core.ClientManager;
 import pt.isec.client.ui.auth.AuthenticationController;
 import pt.isec.client.ui.student.StudentDashboardController;
 import pt.isec.client.ui.teacher.TeacherDashboardController;
@@ -51,7 +51,6 @@ public class ClientApplication extends Application {
     public void start(Stage stage) {
         this.primaryStage = stage;
         this.clientManager = new ClientManager(DIRECTORY_IP, DIRECTORY_PORT);
-
         this.authController = new AuthenticationController(primaryStage, clientManager, this);
 
         stage.getIcons().clear();
@@ -74,7 +73,7 @@ public class ClientApplication extends Application {
 
             Platform.runLater(() -> {
                 // Reconnecting state -> show non-modal indicator
-                if (ClientService.STATUS_RECONNECTING.equals(status)) {
+                if (ClientManager.STATUS_RECONNECTING.equals(status)) {
                     if (reconnectAlert == null) {
                         reconnectAlert = new Alert(Alert.AlertType.INFORMATION);
                         reconnectAlert.initOwner(primaryStage);
@@ -95,7 +94,7 @@ public class ClientApplication extends Application {
                 }
 
                 // Successfully reconnected -> hide indicator
-                if (ClientService.STATUS_CONNECTED.equals(status)) {
+                if (ClientManager.STATUS_CONNECTED.equals(status)) {
                     if (reconnectAlert != null) {
                         try {
                             reconnectAlert.close();
@@ -110,7 +109,7 @@ public class ClientApplication extends Application {
                 if ("DIRECTORY_ERROR".equals(status) ||
                         "SERVER_ERROR".equals(status) ||
                         "DISCONNECTED".equals(status) ||
-                        ClientService.STATUS_DISCONNECTED_PERMANENT.equals(status)) {
+                        ClientManager.STATUS_DISCONNECTED_PERMANENT.equals(status)) {
 
                     if (reconnectAlert != null) {
                         try {
@@ -131,8 +130,8 @@ public class ClientApplication extends Application {
         };
 
         // Register connection listener
-        clientManager.getService()
-                .addPropertyChangeListener(ClientService.PROP_CONNECTION_STATUS, connectionListener);
+        clientManager
+                .addPropertyChangeListener(ClientManager.PROP_CONNECTION_STATUS, connectionListener);
 
         primaryStage.setTitle("Sistema de Gestão de Perguntas");
 
@@ -184,8 +183,8 @@ public class ClientApplication extends Application {
         if (clientManager != null) {
             if (connectionListener != null) {
                 try {
-                    clientManager.getService()
-                            .removePropertyChangeListener(ClientService.PROP_CONNECTION_STATUS, connectionListener);
+                    clientManager
+                            .removePropertyChangeListener(ClientManager.PROP_CONNECTION_STATUS, connectionListener);
                 } catch (Exception ignored) {
                 }
                 connectionListener = null;

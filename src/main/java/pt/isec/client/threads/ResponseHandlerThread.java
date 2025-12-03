@@ -123,6 +123,11 @@ public class ResponseHandlerThread implements Runnable {
                 CreateQuestionResponseDTO dto = response.getDataAs(CreateQuestionResponseDTO.class);
                 tInfo.setPropCreateQuestionResponse(dto);
             }
+            case CREATE_QUESTION_FAIL -> {
+                Log.error(ResponseHandlerThread.class, "Server error: " + response.getData());
+                if(response.getData() instanceof String s)
+                    tInfo.setPropCreateQuestionError(s);
+            }
 
             case LIST_QUESTIONS_RESPONSE -> {
                 Log.info(ResponseHandlerThread.class, "Questions list received");
@@ -131,6 +136,12 @@ public class ResponseHandlerThread implements Runnable {
                     List<Question> qList = (List<Question>) list;
                     tInfo.setPropListQuestionsResponse(qList);
                 }
+            }
+
+            case EDIT_QUESTION_FAIL -> {
+                Log.error(ResponseHandlerThread.class, "Server error: " + response.getData());
+                if(response.getData() instanceof String s)
+                    tInfo.setPropEditQuestionError(s);
             }
 
             case QUESTION_DETAILS -> {

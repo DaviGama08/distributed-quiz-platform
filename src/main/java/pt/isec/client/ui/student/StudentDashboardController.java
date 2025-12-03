@@ -316,20 +316,32 @@ public class StudentDashboardController implements IDisposableProp {
 
     /**
      * Handler to request a question by access code and open the answering dialog.
+     * <p>
+     * Validates the access code locally before sending the request to the server
+     * and provides user feedback in all error/success scenarios.
      */
     public void onAnswerQuestion() {
         StudentDialogs.showEnterQuestionCodeDialog(getOwnerWindow(), code -> {
+            String trimmedCode = (code != null ? code.trim() : "");
+
+            if (trimmedCode.isEmpty()) {
+                showErrorAlert("O código da pergunta é obrigatório.");
+                view.addNotification("Falha ao procurar pergunta: código de acesso em branco.");
+                return;
+            }
+
             Integer studentId = clientControllerContext.getUserId();
             if (studentId == null) {
                 showErrorAlert("Sessão inválida. Faça login novamente.");
                 view.addNotification("Falha ao procurar pergunta: sessão inválida.");
                 return;
             }
+
             awaitingJoinQuestion = true;
             try {
                 view.showLoading("A carregar pergunta...");
                 clientControllerContext.getQuestionService()
-                        .joinQuestion(new JoinQuestionDTO(code, studentId));
+                        .joinQuestion(new JoinQuestionDTO(trimmedCode, studentId));
             } catch (Exception e) {
                 try {
                     view.hideLoading();
@@ -404,6 +416,11 @@ public class StudentDashboardController implements IDisposableProp {
 
     /**
      * Opens the editable student profile dialog (name, email, student number and password).
+     * <p>
+     * All semantic validation (email format, password rules, uniqueness, etc.)
+     * is performed on the server. This handler only collects the raw values,
+     * forwards them to the server and relies on the update profile listeners
+     * to show any validation error message returned by the backend.
      */
     public void onProfile() {
         Dialog<ButtonType> dialog = new Dialog<>();
@@ -416,7 +433,10 @@ public class StudentDashboardController implements IDisposableProp {
         Label numberLabel = new Label("Número de estudante:");
         TextField numberField = new TextField();
         numberField.setPromptText("Número de estudante");
-        numberField.setText(String.valueOf(clientControllerContext.getStudentNumber()));
+        Integer currentNumber = clientControllerContext.getStudentNumber();
+        if (currentNumber != null) {
+            numberField.setText(String.valueOf(currentNumber));
+        }
 
         Label nameLabel = new Label("Nome:");
         TextField nameField = new TextField();
@@ -451,32 +471,42 @@ public class StudentDashboardController implements IDisposableProp {
                 return;
             }
 
-            try {
-                Integer number = Integer.parseInt(numberField.getText().trim());
-                String name = nameField.getText().trim();
-                String email = emailField.getText().trim();
-                String oldPw = oldPwField.getText();
-                String newPw = newPwField.getText();
+            String numberText = numberField.getText();
+            String name = nameField.getText();
+            String email = emailField.getText();
+            String oldPw = oldPwField.getText();
+            String newPw = newPwField.getText();
 
-                if (name.isBlank() || email.isBlank()) {
-                    showErrorAlert("Nome e email são obrigatórios.");
-                    view.addNotification("Edição de perfil falhou: nome/email em falta.");
-                    return;
+            // Student number is passed as Integer, but semantic validation is done on the server
+            Integer number = null;
+            if (numberText != null) {
+                String trimmed = numberText.trim();
+                if (!trimmed.isEmpty()) {
+                    try {
+                        number = Integer.parseInt(trimmed);
+                    } catch (NumberFormatException ignored) {
+                        // Let the server treat null/invalid as "Número de estudante inválido"
+                        number = null;
+                    }
                 }
+            }
 
+            try {
                 UpdateStudentDTO dto = new UpdateStudentDTO(
-                        clientControllerContext.getUserId(), number, name, email,
+                        clientControllerContext.getUserId(),
+                        number,
+                        name != null ? name.trim() : null,
+                        email != null ? email.trim() : null,
                         (oldPw == null || oldPw.isBlank()) ? null : oldPw,
                         (newPw == null || newPw.isBlank()) ? null : newPw
                 );
                 clientControllerContext.getAuthService().updateStudent(dto);
-                // Feedback is delivered via updateProfile listeners
+                // Success / error feedback is delivered via updateProfile listeners
                 view.addNotification("Pedido de atualização de perfil enviado.");
-            } catch (NumberFormatException nfe) {
-                showErrorAlert("Número de estudante inválido.");
-                view.addNotification("Número de estudante inválido ao editar perfil.");
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
+                showErrorAlert("Erro ao enviar atualização de perfil: " + ie.getMessage());
+                view.addNotification("Erro ao enviar atualização de perfil: " + ie.getMessage());
             }
         });
     }

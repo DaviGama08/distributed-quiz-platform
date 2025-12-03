@@ -1,5 +1,4 @@
 package pt.isec.server.core;
-
 import pt.isec.server.db.DbCommands;
 import pt.isec.server.db.DbCreate;
 import pt.isec.server.services.auth.AuthService;
@@ -68,7 +67,7 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
     private volatile Path dbPath;
 
     private volatile boolean running = true;
-    private volatile boolean isPrimary = false;
+    private volatile boolean isPrimary;
 
     private final AtomicLong dbVersion = new AtomicLong(0);
     private final AtomicBoolean copying = new AtomicBoolean(false);
@@ -401,6 +400,25 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
     /* ======================= CLIENT CONNECTIONS ======================= */
 
     @Override
+    public void sendToUser(long userId, pt.isec.common.messages.TcpMessage<?> msg) {
+        NetworkTcpConnection conn = activeClientConnections.get(userId);
+        if (conn == null) {
+            Log.info(ServerManager.class,
+                    "Sem ligação TCP registada para o utilizador %d, não foi possível enviar %s",
+                    userId, msg.getType());
+            return;
+        }
+
+        try {
+            conn.sendMessage(msg);
+        } catch (IOException e) {
+            Log.error(ServerManager.class,
+                    "Erro ao enviar %s para o utilizador %d: %s",
+                    msg.getType(), userId, e.getMessage());
+        }
+    }
+
+    @Override
     public void registerClientConnection(long userId, NetworkTcpConnection conn) {
         if (conn == null) {
             return;
@@ -411,21 +429,6 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
     @Override
     public void unregisterClientConnection(long userId) {
         activeClientConnections.remove(userId);
-    }
-
-    @Override
-    public void sendToUser(long userId, pt.isec.common.messages.TcpMessage<?> msg) {
-        NetworkTcpConnection c = activeClientConnections.get(userId);
-        if (c == null) {
-            return;
-        }
-        try {
-            c.sendMessage(msg);
-        } catch (Exception e) {
-            Log.error(ServerManager.class,
-                    "Falha ao enviar mensagem para o utilizador %d: %s",
-                    userId, e.getMessage());
-        }
     }
 
     /* ======================= REPLICATION / DB COPY ======================= */
@@ -527,4 +530,5 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
 
         Log.info(ServerManager.class, "Shutdown completo do servidor.");
     }
+
 }

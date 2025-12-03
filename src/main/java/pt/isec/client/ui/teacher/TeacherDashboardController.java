@@ -1,5 +1,4 @@
 package pt.isec.client.ui.teacher;
-
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.geometry.Insets;
@@ -9,10 +8,7 @@ import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.text.Font;
-import javafx.scene.text.FontWeight;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.Window;
@@ -21,7 +17,6 @@ import pt.isec.client.core.ClientManager;
 import pt.isec.client.core.IClientControllerContext;
 import pt.isec.client.ui.IDisposableProp;
 import pt.isec.client.ui.util.AlertUtils;
-import pt.isec.client.ui.util.UiUtils;
 import pt.isec.client.ui.util.dialogs.TeacherDialogs;
 import pt.isec.common.dto.answer.ViewAnswersDTO;
 import pt.isec.common.dto.auth.AuthResponseDTO;
@@ -55,6 +50,7 @@ public class TeacherDashboardController implements IDisposableProp {
     private final TeacherDashboardView view;
 
     // listeners
+    private final PropertyChangeListener createQuestionErrorListener;
     private final PropertyChangeListener notificationListener;
     private final PropertyChangeListener createQuestionListener;
     private final PropertyChangeListener listQuestionsListener;
@@ -62,6 +58,7 @@ public class TeacherDashboardController implements IDisposableProp {
     private final PropertyChangeListener answerSubmittedListener;
     private final PropertyChangeListener joinQuestionListener;
     private final PropertyChangeListener updateQuestionListener;
+    private final PropertyChangeListener updateQuestionErrorListener;
     private final PropertyChangeListener updateProfileOkListener;
     private final PropertyChangeListener updateProfileFailListener;
 
@@ -100,6 +97,8 @@ public class TeacherDashboardController implements IDisposableProp {
 
     // flag para carregamento em massa de contagens de respostas
     private volatile boolean bulkLoadingAnswers = false;
+    private volatile boolean autoRefreshRunning = false;
+    private Thread autoRefreshThread = null;
 
     /**
      * Creates a new teacher dashboard controller and wires up all listeners.
@@ -151,6 +150,26 @@ public class TeacherDashboardController implements IDisposableProp {
             });
         };
 
+        this.createQuestionErrorListener = evt -> {
+            if (!awaitingCreateQuestion) return;
+            awaitingCreateQuestion = false;
+
+            String msg = normalizeErrorMessage(
+                    evt.getNewValue(),
+                    "Não foi possível criar a pergunta."
+            );
+
+            Platform.runLater(() -> {
+                Window owner = getCurrentOwnerWindow();
+                AlertUtils.showError(
+                        owner,
+                        "Erro ao criar pergunta",
+                        msg
+                );
+                view.addNotification("Falha ao criar pergunta: " + msg);
+            });
+        };
+
         this.listQuestionsListener = evt -> {
             if (!awaitingListQuestions) return;
             awaitingListQuestions = false;
@@ -187,6 +206,7 @@ public class TeacherDashboardController implements IDisposableProp {
         this.viewAnswersListener = evt -> {
             if (!awaitingViewAnswers) return;
             awaitingViewAnswers = false;
+
             @SuppressWarnings("unchecked")
             List<Answer> answers = (List<Answer>) evt.getNewValue();
             Question q = pendingViewQuestion;
@@ -275,6 +295,17 @@ public class TeacherDashboardController implements IDisposableProp {
                     }
                 }
 
+                // A partir daqui é o caso "normal": ver respostas.
+                // NOVO: só abre o diálogo se a pergunta estiver EXPIRADA.
+                if (!isExpired(q)) {
+                    // Pergunta ainda não expirada: só atualiza métricas e regista no painel.
+                    view.addNotification(
+                            "Contagem de respostas atualizada para a pergunta " +
+                                    q.getAccessCode() + " (total: " + count + ")."
+                    );
+                    return;
+                }
+
                 view.addNotification("Respostas carregadas para a pergunta " +
                         q.getAccessCode() + " (total: " + count + ").");
 
@@ -297,7 +328,6 @@ public class TeacherDashboardController implements IDisposableProp {
                 });
             });
         };
-
         // Listener disparado quando o servidor envia ANSWER_SUBMITTED
         this.answerSubmittedListener = evt -> {
             Integer qid = null;
@@ -307,20 +337,22 @@ public class TeacherDashboardController implements IDisposableProp {
             } else if (v instanceof String) {
                 try {
                     qid = Integer.parseInt((String) v);
-                } catch (Exception ignored) {
-                }
+                } catch (Exception ignored) { }
             }
             if (qid == null) return;
 
             Integer finalQid = qid;
-            Platform.runLater(() -> {
-                // incrementa contador local da pergunta
-                answersCountByQuestion.merge(finalQid, 1, Integer::sum);
-                // recalcula métricas do dashboard
-                updateDashboardStats();
-                // log visível no painel
-                view.addNotification("Uma nova resposta foi submetida à pergunta ID " + finalQid + ".");
-            });
+
+            // só tratar da parte visual na UI thread
+            Platform.runLater(() ->
+                    view.addNotification("Uma nova resposta foi submetida à pergunta ID " + finalQid + ".")
+            );
+
+            // força recálculo da contagem dessa pergunta a partir do servidor:
+            // apagamos a entrada para esse ID e deixamos o fetchAnswerCountsSequentially
+            // voltar a pedir as respostas e a meter o count certo.
+            answersCountByQuestion.remove(finalQid);
+            fetchAnswerCountsSequentially();
         };
 
         this.joinQuestionListener = evt -> {
@@ -387,7 +419,10 @@ public class TeacherDashboardController implements IDisposableProp {
                         currentDetailsDialog = null;
                     }
                 } else {
-                    String msg = (result != null ? result : "Falha ao actualizar a pergunta.");
+                    String msg = normalizeErrorMessage(
+                            result,
+                            "Falha ao actualizar a pergunta."
+                    );
                     AlertUtils.showError(owner, "Erro ao Actualizar", msg);
                     view.addNotification("Falha ao atualizar pergunta: " + msg);
                     if (currentDetailsDialog != null) {
@@ -400,7 +435,39 @@ public class TeacherDashboardController implements IDisposableProp {
                 }
             });
         };
+        this.updateQuestionErrorListener = evt -> {
+            if (!awaitingUpdateQuestion) return;
+            awaitingUpdateQuestion = false;
 
+            String msg = normalizeErrorMessage(
+                    evt.getNewValue(),
+                    "Não foi possível editar a pergunta."
+            );
+
+            Platform.runLater(() -> {
+                Window owner = getCurrentOwnerWindow();
+
+                try {
+                    if (dialogLoadingBox != null) dialogLoadingBox.setVisible(false);
+                } catch (Exception ignored) {}
+                try {
+                    if (listLoadingBox != null) listLoadingBox.setVisible(false);
+                } catch (Exception ignored) {}
+
+                AlertUtils.showError(owner,
+                        "Erro ao editar pergunta",
+                        msg);
+                view.addNotification("Falha ao editar pergunta: " + msg);
+
+                if (currentDetailsDialog != null) {
+                    try {
+                        Button ok = (Button) currentDetailsDialog.getDialogPane()
+                                .lookupButton(ButtonType.OK);
+                        if (ok != null) ok.setDisable(false);
+                    } catch (Exception ignored) {}
+                }
+            });
+        };
         this.updateProfileOkListener = evt -> {
             Object v = evt.getNewValue();
             Platform.runLater(() -> {
@@ -442,6 +509,7 @@ public class TeacherDashboardController implements IDisposableProp {
         this.updateProfileFailListener = evt -> {
             Object v = evt.getNewValue();
             String msg = (v == null ? "Erro desconhecido" : v.toString());
+
             Platform.runLater(() -> {
                 if (currentEditProfileDialog != null) {
                     try {
@@ -449,7 +517,9 @@ public class TeacherDashboardController implements IDisposableProp {
                     } catch (Exception ignored) {}
                     currentEditProfileDialog = null;
                 }
-                AlertUtils.showError(getCurrentOwnerWindow(), "Falha ao actualizar perfil", msg);
+                AlertUtils.showError(getCurrentOwnerWindow(),
+                        "Falha ao actualizar perfil",
+                        msg);
                 view.addNotification("Falha ao atualizar perfil: " + msg);
             });
         };
@@ -457,6 +527,7 @@ public class TeacherDashboardController implements IDisposableProp {
         setupPropertyChangeListeners();
         updateDashboardStats();
         refreshQuestions();
+        startAutoRefreshQuestions();
     }
 
     /* ===================== LIFECYCLE ===================== */
@@ -478,15 +549,16 @@ public class TeacherDashboardController implements IDisposableProp {
     private void setupPropertyChangeListeners() {
         clientControllerContext.addPropertyChangeListener(ClientManager.PROP_NOTIFICATION, notificationListener);
         clientControllerContext.addPropertyChangeListener(ClientManager.PROP_CREATE_QUESTION_RESPONSE, createQuestionListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_CREATE_QUESTION_FAIL, createQuestionErrorListener);
         clientControllerContext.addPropertyChangeListener(ClientManager.PROP_LIST_QUESTIONS_RESPONSE, listQuestionsListener);
         clientControllerContext.addPropertyChangeListener(ClientManager.PROP_JOIN_QUESTION_RESPONSE, joinQuestionListener);
         clientControllerContext.addPropertyChangeListener(ClientManager.PROP_VIEW_ANSWERS_RESPONSE, viewAnswersListener);
         clientControllerContext.addPropertyChangeListener(ClientManager.PROP_ANSWER_SUBMITTED, answerSubmittedListener);
         clientControllerContext.addPropertyChangeListener(ClientManager.PROP_UPDATE_QUESTION_RESPONSE, updateQuestionListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_UPDATE_QUESTION_FAIL, updateQuestionErrorListener);
         clientControllerContext.addPropertyChangeListener(ClientManager.PROP_UPDATE_PROFILE_OK, updateProfileOkListener);
         clientControllerContext.addPropertyChangeListener(ClientManager.PROP_UPDATE_PROFILE_FAIL, updateProfileFailListener);
 
-        // ⚠️ ConnectListener removido daqui conforme pedido
     }
 
     @Override
@@ -494,18 +566,28 @@ public class TeacherDashboardController implements IDisposableProp {
         try {
             clientControllerContext.removePropertyChangeListener(ClientManager.PROP_NOTIFICATION, notificationListener);
             clientControllerContext.removePropertyChangeListener(ClientManager.PROP_CREATE_QUESTION_RESPONSE, createQuestionListener);
+            clientControllerContext.removePropertyChangeListener(ClientManager.PROP_CREATE_QUESTION_FAIL, createQuestionErrorListener);
             clientControllerContext.removePropertyChangeListener(ClientManager.PROP_LIST_QUESTIONS_RESPONSE, listQuestionsListener);
             clientControllerContext.removePropertyChangeListener(ClientManager.PROP_JOIN_QUESTION_RESPONSE, joinQuestionListener);
             clientControllerContext.removePropertyChangeListener(ClientManager.PROP_VIEW_ANSWERS_RESPONSE, viewAnswersListener);
             clientControllerContext.removePropertyChangeListener(ClientManager.PROP_ANSWER_SUBMITTED, answerSubmittedListener);
             clientControllerContext.removePropertyChangeListener(ClientManager.PROP_UPDATE_QUESTION_RESPONSE, updateQuestionListener);
+            clientControllerContext.removePropertyChangeListener(ClientManager.PROP_UPDATE_QUESTION_FAIL, updateQuestionErrorListener);
             clientControllerContext.removePropertyChangeListener(ClientManager.PROP_UPDATE_PROFILE_OK, updateProfileOkListener);
             clientControllerContext.removePropertyChangeListener(ClientManager.PROP_UPDATE_PROFILE_FAIL, updateProfileFailListener);
         } catch (Exception ignored) { }
 
+        // parar thread de auto-refresh
+        autoRefreshRunning = false;
+        if (autoRefreshThread != null) {
+            autoRefreshThread.interrupt();
+            autoRefreshThread = null;
+        }
+
         try { if (listLoadingBox != null) listLoadingBox.setVisible(false); } catch (Exception ignored) {}
         try { if (dialogLoadingBox != null) dialogLoadingBox.setVisible(false); } catch (Exception ignored) {}
     }
+
 
     /* ===================== MÉTRICAS / DASHBOARD ===================== */
 
@@ -712,11 +794,6 @@ public class TeacherDashboardController implements IDisposableProp {
         questionsTable = null;
     }
 
-    /** Método antigo mantido por compatibilidade: delega para onManageQuestions(). */
-    public void onListQuestions() {
-        onManageQuestions();
-    }
-
     private void handleEditFromList(Question selected) {
         Integer known = answersCountByQuestion.get(selected.getId());
         if (known != null) {
@@ -869,23 +946,35 @@ public class TeacherDashboardController implements IDisposableProp {
     /* ===================== VER RESPOSTAS POR CÓDIGO ===================== */
 
     /**
-     * Handler for the "View Answers" by access code.
-     * Requests the corresponding question (if owned by this teacher) and,
-     * if expired, loads and shows its answers.
+     * Handler for "View Answers" by access code from the teacher dashboard.
+     * <p>
+     * Validates the provided access code, checks ownership and expiration
+     * and, when valid, requests the answers from the server.
      */
     public void onViewAnswers() {
         TextInputDialog dialog = new TextInputDialog();
         dialog.setTitle("Ver Respostas");
         dialog.setHeaderText("Ver respostas de uma pergunta");
         dialog.setContentText("Código da pergunta:");
-        dialog.showAndWait().ifPresent(code -> {
-            if (code == null || code.trim().isEmpty()) return;
 
-            String trimmed = code.trim();
+        dialog.showAndWait().ifPresent(code -> {
+            String trimmed = (code != null ? code.trim() : "");
+
+            if (trimmed.isEmpty()) {
+                AlertUtils.showError(
+                        getCurrentOwnerWindow(),
+                        "Código inválido",
+                        "O código da pergunta é obrigatório."
+                );
+                view.addNotification("Tentativa de ver respostas falhou: código de pergunta em branco.");
+                return;
+            }
+
             Integer teacherId = clientControllerContext.getUserId();
             if (teacherId == null) {
                 AlertUtils.showError(getCurrentOwnerWindow(),
                         "Erro", "Sessão inválida. Faça login novamente.");
+                view.addNotification("Tentativa de ver respostas falhou: sessão inválida.");
                 return;
             }
 
@@ -893,6 +982,7 @@ public class TeacherDashboardController implements IDisposableProp {
             if (q == null) {
                 AlertUtils.showError(getCurrentOwnerWindow(),
                         "Erro", "Pergunta não encontrada ou não é sua.");
+                view.addNotification("Tentativa de ver respostas falhou: pergunta não encontrada para o código " + trimmed + ".");
                 return;
             }
 
@@ -900,6 +990,8 @@ public class TeacherDashboardController implements IDisposableProp {
                 AlertUtils.showError(getCurrentOwnerWindow(),
                         "Respostas indisponíveis",
                         "As respostas só podem ser consultadas quando a pergunta estiver expirada.");
+                view.addNotification("Tentativa de ver respostas da pergunta " + q.getAccessCode() +
+                        " falhou: ainda não está expirada.");
                 return;
             }
 
@@ -907,8 +999,11 @@ public class TeacherDashboardController implements IDisposableProp {
             awaitingViewAnswers = true;
             clientControllerContext.getAnswerService()
                     .viewAnswersForTeacher(new ViewAnswersDTO(q.getId(), teacherId));
+            view.addNotification("Pedido para carregar respostas da pergunta " +
+                    q.getAccessCode() + " enviado.");
         });
     }
+
 
     private Question findQuestionByCode(String accessCode) {
         if (accessCode == null || accessCode.isBlank()) return null;
@@ -920,58 +1015,13 @@ public class TeacherDashboardController implements IDisposableProp {
         return null;
     }
 
-    /* ===================== PERFIL / LOGOUT ===================== */
-
-    /**
-     * Shows a read-only profile dialog for the teacher.
-     */
-    public void onOpenProfile() {
-        Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle("Perfil do Docente");
-        dialog.setHeaderText(null);
-
-        VBox content = new VBox(15);
-        content.setPadding(new Insets(20));
-
-        String initialsText = UiUtils.getInitials(userName != null ? userName : userEmail);
-
-        StackPane avatarCircle = new StackPane();
-        avatarCircle.getStyleClass().add("profile-avatar-circle");
-        Label initials = new Label(initialsText);
-        initials.getStyleClass().add("profile-avatar-initials");
-        avatarCircle.getChildren().add(initials);
-
-        Label nameLabel = new Label(userName != null ? userName : userEmail);
-        nameLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
-
-        Label roleLabel = new Label("Docente");
-        roleLabel.setFont(Font.font("Arial", 12));
-
-        Label emailLabel = new Label(userEmail);
-        emailLabel.setFont(Font.font("Arial", 12));
-
-        VBox infoBox = new VBox(4, nameLabel, roleLabel, emailLabel);
-        infoBox.setAlignment(Pos.CENTER_LEFT);
-
-        HBox header = new HBox(20, avatarCircle, infoBox);
-        header.setAlignment(Pos.CENTER_LEFT);
-
-        Label hint = new Label(
-                "Os dados de perfil são geridos pela instituição.\n" +
-                        "Para alterar o seu nome ou email, contacte a secretaria."
-        );
-        hint.setWrapText(true);
-        hint.setStyle("-fx-text-fill: #7f8c8d;");
-
-        content.getChildren().addAll(header, new Separator(), hint);
-        dialog.getDialogPane().setContent(content);
-        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
-        dialog.showAndWait();
-    }
-
     /**
      * Opens an editable profile dialog for the teacher and sends an update
      * request when the user confirms.
+     * <p>
+     * All semantic validation of email/password/credentials is delegated to the server.
+     * The client only performs minimal UI checks (empty fields, session),
+     * and shows success/error feedback based on server responses.
      */
     public void onEditProfile() {
         Dialog<ButtonType> dialog = new Dialog<>();
@@ -990,38 +1040,60 @@ public class TeacherDashboardController implements IDisposableProp {
 
         Label oldPwLabel = new Label("Password atual (só se alterar):");
         PasswordField oldPw = new PasswordField();
+
         Label newPwLabel = new Label("Nova password (deixe em branco para não alterar):");
         PasswordField newPw = new PasswordField();
 
-        content.getChildren().addAll(nameLabel, nameField,
+        content.getChildren().addAll(
+                nameLabel, nameField,
                 emailLabel, emailField,
                 oldPwLabel, oldPw,
-                newPwLabel, newPw);
+                newPwLabel, newPw
+        );
 
         dialog.getDialogPane().setContent(content);
         ButtonType save = new ButtonType("Salvar", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(save, ButtonType.CANCEL);
 
         dialog.showAndWait().ifPresent(bt -> {
-            if (bt != save) return;
-            String n = nameField.getText().trim();
-            String e = emailField.getText().trim();
-            String opw = oldPw.getText();
-            String npw = newPw.getText();
-
-            if (n.isBlank() || e.isBlank()) {
-                AlertUtils.showError(getCurrentOwnerWindow(),
-                        "Erro", "Nome e email são obrigatórios.");
-                view.addNotification("Edição de perfil falhou: nome/email em falta.");
+            if (bt != save) {
                 return;
             }
 
+            String n   = nameField.getText()  != null ? nameField.getText().trim()  : "";
+            String e   = emailField.getText() != null ? emailField.getText().trim() : "";
+            String opw = oldPw.getText()      != null ? oldPw.getText()             : "";
+            String npw = newPw.getText()      != null ? newPw.getText()             : "";
+
+            // Minimal UI-level checks (opcional, não fazem validação de formato/força)
+            if (n.isBlank() || e.isBlank()) {
+                AlertUtils.showError(
+                        getCurrentOwnerWindow(),
+                        "Erro",
+                        "Nome e email são obrigatórios."
+                );
+                view.addNotification("Edição de perfil falhou: nome ou email em branco.");
+                return;
+            }
+
+            Integer uid = clientControllerContext.getUserId();
+            if (uid == null) {
+                AlertUtils.showError(getCurrentOwnerWindow(),
+                        "Erro", "Sessão inválida. Faça login novamente.");
+                view.addNotification("Edição de perfil falhou: sessão inválida.");
+                return;
+            }
+
+            // Toda a validação real de email/password fica no servidor (AuthService.updateTeacher).
+            // Aqui apenas passamos os valores (old/new) tal como o utilizador introduziu.
             try {
-                Integer uid = clientControllerContext.getUserId();
                 UpdateTeacherDTO dto = new UpdateTeacherDTO(
-                        uid, uid, n, e,
-                        (opw == null || opw.isBlank()) ? null : opw,
-                        (npw == null || npw.isBlank()) ? null : npw
+                        uid,
+                        uid,
+                        n,
+                        e,
+                        opw != null && !opw.isBlank() ? opw : null,
+                        npw != null && !npw.isBlank() ? npw : null
                 );
                 clientControllerContext.getAuthService().updateTeacher(dto);
                 view.addNotification("Pedido de atualização de perfil enviado.");
@@ -1030,7 +1102,7 @@ public class TeacherDashboardController implements IDisposableProp {
             }
         });
     }
-
+    
     /**
      * Handles teacher logout: asks for confirmation, sends the logout request,
      * clears local state and returns to the authentication screen.
@@ -1133,5 +1205,53 @@ public class TeacherDashboardController implements IDisposableProp {
                 Platform.runLater(this::updateDashboardStats);
             }
         }, "FetchAnswerCounts").start();
+    }
+
+    /**
+     * Returns a valid, non-blank error message.
+     * <p>
+     * If {@code value} is a non-blank String, it is returned.
+     * Otherwise, {@code defaultMessage} is returned.
+     *
+     * @param value the value to inspect
+     * @param defaultMessage the fallback message to return if {@code value} is not a valid String
+     * @return a non-blank error message
+     */
+    private String normalizeErrorMessage(Object value, String defaultMessage) {
+        if (value instanceof String s && s != null && !s.isBlank()) {
+            return s;
+        }
+        return defaultMessage;
+    }
+
+    private void startAutoRefreshQuestions() {
+        if (autoRefreshRunning) return;
+        autoRefreshRunning = true;
+
+        autoRefreshThread = new Thread(() -> {
+            while (autoRefreshRunning) {
+                try {
+                    // intervalo de refresh (ajusta se quiseres, 5s é razoável)
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+
+                try {
+                    // Isto só dispara o pedido; a resposta é tratada em listQuestionsListener
+                    refreshQuestions();
+                } catch (Exception e) {
+                    Log.error(
+                            TeacherDashboardController.class,
+                            "Erro no auto-refresh de perguntas: " + e.getMessage(),
+                            e
+                    );
+                }
+            }
+        }, "TeacherQuestionsAutoRefresh");
+
+        autoRefreshThread.setDaemon(true);
+        autoRefreshThread.start();
     }
 }

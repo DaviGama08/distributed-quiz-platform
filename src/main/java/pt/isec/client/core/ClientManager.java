@@ -24,7 +24,6 @@ import java.net.*;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Central client manager and network service.
@@ -65,12 +64,14 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
 
     // Authentication-related events
     public static final String PROP_LOGIN_OK    = "loginOK";
-    public static final String PROP_LOGIN_FAIL  = "loginFail";
+    public static final String PROP_FAIL        = "fail";
     public static final String PROP_REGISTER_OK = "registerOK";
 
     // Question/answer events
     public static final String PROP_CREATE_QUESTION_RESPONSE = "createQuestionResponse";
+    public static final String PROP_CREATE_QUESTION_FAIL     = "createQuestionFail";
     public static final String PROP_UPDATE_QUESTION_RESPONSE = "editQuestionResponse";
+    public static final String PROP_UPDATE_QUESTION_FAIL     = "editQuestionFail";
     public static final String PROP_LIST_QUESTIONS_RESPONSE  = "listQuestionsResponse";
     public static final String PROP_JOIN_QUESTION_RESPONSE   = "joinQuestionResponse";
     public static final String PROP_SUBMIT_ANSWER_OK         = "submitAnswerOk";
@@ -448,7 +449,7 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
 
     @Override
     public void setPropError(String s) {
-        pcs.firePropertyChange(PROP_LOGIN_FAIL, null, s);
+        pcs.firePropertyChange(PROP_FAIL, null, s);
     }
 
     @Override
@@ -463,10 +464,18 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
     public void setPropCreateQuestionResponse(CreateQuestionResponseDTO dto) {
         pcs.firePropertyChange(PROP_CREATE_QUESTION_RESPONSE, null, dto);
     }
-
+    @Override
+    public void setPropCreateQuestionError(String message) {
+        pcs.firePropertyChange(PROP_CREATE_QUESTION_FAIL, null, message);
+    }
     @Override
     public void setPropEditQuestionResponse(String message) {
         pcs.firePropertyChange(PROP_UPDATE_QUESTION_RESPONSE, null, message);
+    }
+
+    @Override
+    public void setPropEditQuestionError(String message){
+        pcs.firePropertyChange(PROP_UPDATE_QUESTION_FAIL, null, message);
     }
 
     @Override

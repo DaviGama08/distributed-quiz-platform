@@ -73,7 +73,11 @@ public interface IClientThreadContext extends IClientServiceContext{
 
     void setPropCreateQuestionResponse(CreateQuestionResponseDTO dto);
 
+    void setPropCreateQuestionError(String msg);
+
     void setPropEditQuestionResponse(String message);
+
+    void setPropEditQuestionError(String message);
 
     void setPropListQuestionsResponse(List<Question> questions);
 

@@ -13,7 +13,7 @@ INSERT OR IGNORE INTO config (id, db_version, teacher_code_hash)
 VALUES (
            1,
            0,
-           '210000:KdbtTbzp4mwwjPfYW/Prww==:QqDAdfAIIsI4W5Cc+CB7dHJS0m3Nrre3Wa7GGXaWXY4='
+           '210000:NepZ5Es/L7S10U9V0cugyA==:BsxS/RicF9Nh8cV8j1rO76DqKf79Qk2R28POliuu1S8='
        );
 
 -- Docentes

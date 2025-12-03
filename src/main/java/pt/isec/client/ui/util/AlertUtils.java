@@ -27,9 +27,11 @@ public final class AlertUtils {
         if (owner != null) {
             alert.initOwner(owner);
         }
-        alert.setTitle(title != null ? title : "Informação");
+
+        alert.setTitle(title != null && !title.isBlank() ? title : "Informação");
         alert.setHeaderText(null);
         alert.setContentText(message != null ? message : "");
+
         alert.showAndWait();
     }
 
@@ -37,17 +39,22 @@ public final class AlertUtils {
      * Shows an error dialog.
      *
      * @param owner   owner window (may be {@code null})
-     * @param title   dialog title (defaults to "Erro" if {@code null})
      * @param message dialog message (empty if {@code null})
      */
-    public static void showError(Window owner, String title, String message) {
+    public static void showError(Window owner, String header, String message) {
         Alert alert = new Alert(Alert.AlertType.ERROR);
         if (owner != null) {
             alert.initOwner(owner);
         }
-        alert.setTitle(title != null ? title : "Erro");
-        alert.setHeaderText(null);
-        alert.setContentText(message != null ? message : "");
+
+        alert.setTitle("Erro");
+        alert.setHeaderText(
+                header != null && !header.isBlank() ? header : null
+        );
+        alert.setContentText(
+                message != null && !message.isBlank() ? message : ""
+        );
+
         alert.showAndWait();
     }
 
@@ -57,22 +64,23 @@ public final class AlertUtils {
      * @param owner  owner window (may be {@code null})
      * @param title  dialog title (defaults to "Confirmar" if {@code null})
      * @param header dialog header text (may be {@code null})
-     * @param message dialog message body (may be {@code null})
      * @return {@code true} if user pressed OK, {@code false} otherwise
      */
     public static boolean showConfirmation(Window owner,
                                            String title,
                                            String header,
-                                           String message) {
+                                           String content) {
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         if (owner != null) {
             alert.initOwner(owner);
         }
-        alert.setTitle(title != null ? title : "Confirmar");
-        alert.setHeaderText(header);
-        alert.setContentText(message != null ? message : "");
 
-        Optional<ButtonType> result = alert.showAndWait();
-        return result.isPresent() && result.get() == ButtonType.OK;
+        alert.setTitle(title != null && !title.isBlank() ? title : "Confirmar");
+        alert.setHeaderText(header);
+        alert.setContentText(content != null ? content : "");
+
+        return alert.showAndWait()
+                .filter(btn -> btn == ButtonType.OK || btn == ButtonType.YES)
+                .isPresent();
     }
 }

@@ -23,9 +23,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -40,6 +38,7 @@ public final class TeacherDialogs {
 
     /**
      * CSS style used to visually mark fields with validation errors.
+     * (Currently not applied; kept for future use.)
      */
     private static final String ERROR_STYLE =
             "-fx-border-color: #e74c3c; -fx-border-width: 2; -fx-border-radius: 4; -fx-background-insets: 0;";
@@ -54,14 +53,20 @@ public final class TeacherDialogs {
 
     /**
      * Shows a dialog for creating a new question.
+     * <p>
+     * This dialog is responsible for collecting user input and building the
+     * {@link CreateQuestionDTO}. It performs only minimal UI validation
+     * (required fields) so that the {@link Option} objects can be created
+     * without lançar exceptions. All business rules are enforced on the server.
      *
-     * @param owner    owner window (may be {@code null})
+     * @param owner     owner window (may be {@code null})
      * @param teacherId current teacher id (used for the DTO)
-     * @param onSubmit callback invoked with the created {@link CreateQuestionDTO} if the user confirms
+     * @param onSubmit  callback invoked with the created {@link CreateQuestionDTO} if the user confirms
      */
     public static void showCreateQuestionDialog(Window owner,
                                                 Integer teacherId,
                                                 Consumer<CreateQuestionDTO> onSubmit) {
+
         Dialog<ButtonType> dialog = new Dialog<>();
         if (owner != null) {
             dialog.initOwner(owner);
@@ -178,120 +183,92 @@ public final class TeacherDialogs {
 
         Button okButton = (Button) dialog.getDialogPane().lookupButton(ButtonType.OK);
         okButton.setText("Criar Pergunta");
+
         okButton.setOnAction(ev -> {
-            // Clear previous error highlights
-            clearErrors(statementField, optA, optB, optC, optD, startDate, endDate, startHour, endHour);
+            // ---------- minimal UI validation (required fields) ----------
 
-            String statement = statementField.getText().trim();
-            if (statement.isEmpty()) {
-                AlertUtils.showError(owner, "Erro", "O enunciado não pode estar vazio.");
-                markError(statementField);
+            String statement = statementField.getText();
+            if (statement == null || statement.trim().isEmpty()) {
+                AlertUtils.showError(owner, "Erro", "Preencha o enunciado.");
                 ev.consume();
                 return;
             }
+            statement = statement.trim();
 
-            int numOptions = numOptionsSpinner.getValue();
-            List<Option> options = new ArrayList<>();
+            Integer numOptionsVal = numOptionsSpinner.getValue();
+            int numOptions = (numOptionsVal == null ? 0 : numOptionsVal);
+            if (numOptions < 2) numOptions = 2;
+            if (numOptions > 4) numOptions = 4;
+
             TextField[] allOptions = {optA, optB, optC, optD};
+
+            // garantir que todas as opções visíveis têm texto
+            for (int i = 0; i < numOptions && i < allOptions.length; i++) {
+                String txt = allOptions[i].getText();
+                if (txt == null || txt.trim().isEmpty()) {
+                    AlertUtils.showError(owner,
+                            "Erro",
+                            "Preencha todas as opções até ao número escolhido.");
+                    ev.consume();
+                    return;
+                }
+            }
+
+            // ---------- construir DTO (sem regras de negócio) ----------
+
             OptionLetter[] letters = OptionLetter.values();
-
-            int filledCount = 0;
-            for (int i = 0; i < numOptions; i++) {
-                if (!allOptions[i].getText().trim().isEmpty()) {
-                    filledCount++;
-                }
-            }
-            if (filledCount < 2) {
-                AlertUtils.showError(owner, "Erro", "A pergunta deve ter pelo menos duas respostas possíveis.");
-                // highlight all visible options
-                for (int i = 0; i < numOptions; i++) {
-                    markError(allOptions[i]);
-                }
-                ev.consume();
-                return;
-            }
-
-            // Collect text and validate empties
-            List<String> texts = new ArrayList<>();
-            for (int i = 0; i < numOptions; i++) {
-                String optText = allOptions[i].getText().trim();
-                if (optText.isEmpty()) {
-                    AlertUtils.showError(owner, "Erro", "Preencha todas as respostas até ao número escolhido.");
-                    for (int j = 0; j < numOptions; j++) {
-                        markError(allOptions[i]);
-                    }
-                    ev.consume();
-                    return;
-                }
-                texts.add(optText);
-            }
-
-            // Check for duplicated answers (case-insensitive)
-            Set<String> seen = new HashSet<>();
-            for (String t : texts) {
-                String normal = t.toLowerCase();
-                if (!seen.add(normal)) {
-                    AlertUtils.showError(owner, "Erro", "As opções não podem conter respostas duplicadas");
-                    ev.consume();
-                    return;
-                }
-            }
-
-            for (int i = 0; i < numOptions; i++) {
-                options.add(new Option(letters[i], texts.get(i)));
-            }
-
-            LocalDate startD = startDate.getValue();
-            LocalDate endD = endDate.getValue();
-            if (startD == null || endD == null) {
-                AlertUtils.showError(owner, "Erro", "Datas de início e fim são obrigatórias.");
-                if (startD == null) {
-                    markError(startDate);
-                }
-                if (endD == null) {
-                    markError(endDate);
-                }
-                ev.consume();
-                return;
-            }
-
+            List<Option> options = new ArrayList<>();
             try {
-                LocalTime sTime = LocalTime.of(startHour.getValue(), startMinute.getValue());
-                LocalTime eTime = LocalTime.of(endHour.getValue(), endMinute.getValue());
-                LocalDateTime startAt = LocalDateTime.of(startD, sTime);
-                LocalDateTime endAt = LocalDateTime.of(endD, eTime);
-
-                if (!endAt.isAfter(startAt)) {
-                    AlertUtils.showError(owner, "Erro",
-                            "A data/hora de fim deve ser posterior à data/hora de início.");
-                    markError(startDate);
-                    markError(endDate);
-                    ev.consume();
-                    return;
+                for (int i = 0; i < numOptions && i < allOptions.length && i < letters.length; i++) {
+                    String txt = allOptions[i].getText().trim();
+                    options.add(new Option(letters[i], txt));
                 }
-
-                if (teacherId == null) {
-                    AlertUtils.showError(owner, "Erro", "Sessão inválida. Faça login novamente.");
-                    ev.consume();
-                    return;
-                }
-
-                CreateQuestionDTO dto = new CreateQuestionDTO(
-                        statement, teacherId, options,
-                        OptionLetter.valueOf(correctCombo.getValue()),
-                        startAt, endAt
-                );
-                if (onSubmit != null) {
-                    onSubmit.accept(dto);
-                }
-                // let dialog close
-            } catch (Exception e) {
-                AlertUtils.showError(owner, "Erro",
-                        "Formato de hora inválido (utilize HH:MM).");
-                markError(startHour);
-                markError(endHour);
+            } catch (IllegalArgumentException ex) {
+                // fallback defensivo se Option tiver mais validações
+                AlertUtils.showError(owner, "Erro", ex.getMessage());
                 ev.consume();
+                return;
             }
+
+            OptionLetter correct = null;
+            String sel = correctCombo.getValue();
+            if (sel != null && !sel.isBlank()) {
+                try {
+                    correct = OptionLetter.valueOf(sel);
+                } catch (IllegalArgumentException ex) {
+                    // valor estranho no combo – deixa o servidor validar
+                }
+            }
+
+            LocalDateTime startAt = null;
+            LocalDateTime endAt = null;
+
+            LocalDate sDate = startDate.getValue();
+            LocalDate eDate = endDate.getValue();
+            Integer sh = startHour.getValue();
+            Integer sm = startMinute.getValue();
+            Integer eh = endHour.getValue();
+            Integer em = endMinute.getValue();
+
+            if (sDate != null && sh != null && sm != null) {
+                startAt = LocalDateTime.of(sDate, LocalTime.of(sh, sm));
+            }
+            if (eDate != null && eh != null && em != null) {
+                endAt = LocalDateTime.of(eDate, LocalTime.of(eh, em));
+            }
+
+            if (onSubmit != null) {
+                CreateQuestionDTO dto = new CreateQuestionDTO(
+                        statement,
+                        teacherId,
+                        options,
+                        correct,
+                        startAt,
+                        endAt
+                );
+                onSubmit.accept(dto);
+            }
+            // dialog closes; any further validation is done in controller/server
         });
 
         dialog.showAndWait();
@@ -303,6 +280,10 @@ public final class TeacherDialogs {
 
     /**
      * Shows a dialog for editing an existing question.
+     * <p>
+     * This dialog gathers the updated data and creates an {@link EditQuestionDTO}.
+     * It only enforces required-field checks so that {@link Option} instances
+     * are created with valid text; all business logic is delegated to the server.
      *
      * @param owner     owner window (may be {@code null})
      * @param q         question to edit
@@ -313,6 +294,7 @@ public final class TeacherDialogs {
                                               Question q,
                                               Integer teacherId,
                                               Consumer<EditQuestionDTO> onSubmit) {
+
         Dialog<ButtonType> dialog = new Dialog<>();
         if (owner != null) {
             dialog.initOwner(owner);
@@ -451,98 +433,91 @@ public final class TeacherDialogs {
 
         Button okButton = (Button) dialog.getDialogPane().lookupButton(ButtonType.OK);
         okButton.setText("Atualizar Pergunta");
+
         okButton.setOnAction(ev -> {
-            String statement = statementField.getText().trim();
-            if (statement.isEmpty()) {
-                AlertUtils.showError(owner, "Erro", "O enunciado não pode estar vazio.");
+            // ---------- minimal UI validation (required fields) ----------
+
+            String statement = statementField.getText();
+            if (statement == null || statement.trim().isEmpty()) {
+                AlertUtils.showError(owner, "Erro", "Preencha o enunciado.");
                 ev.consume();
                 return;
             }
+            statement = statement.trim();
 
-            int numOptions = numOptionsSpinner.getValue();
-            List<Option> options = new ArrayList<>();
+            Integer numOptionsVal = numOptionsSpinner.getValue();
+            int numOptions = (numOptionsVal == null ? 0 : numOptionsVal);
+            if (numOptions < 2) numOptions = 2;
+            if (numOptions > 4) numOptions = 4;
+
             TextField[] allOptions = {optA, optB, optC, optD};
+
+            for (int i = 0; i < numOptions && i < allOptions.length; i++) {
+                String txt = allOptions[i].getText();
+                if (txt == null || txt.trim().isEmpty()) {
+                    AlertUtils.showError(owner,
+                            "Erro",
+                            "Preencha todas as opções até ao número escolhido.");
+                    ev.consume();
+                    return;
+                }
+            }
+
+            // ---------- construir DTO ----------
+
             OptionLetter[] letters = OptionLetter.values();
-
-            int filledCount = 0;
-            for (int i = 0; i < numOptions; i++) {
-                if (!allOptions[i].getText().trim().isEmpty()) {
-                    filledCount++;
-                }
-            }
-            if (filledCount < 2) {
-                AlertUtils.showError(owner, "Erro", "A pergunta deve ter pelo menos duas respostas possíveis.");
-                ev.consume();
-                return;
-            }
-
-            List<String> texts = new ArrayList<>();
-            for (int i = 0; i < numOptions; i++) {
-                String optText = allOptions[i].getText().trim();
-                if (optText.isEmpty()) {
-                    AlertUtils.showError(owner, "Erro", "Preencha todas as respostas até ao número escolhido.");
-                    ev.consume();
-                    return;
-                }
-                texts.add(optText);
-            }
-
-            Set<String> seen = new HashSet<>();
-            for (String t : texts) {
-                String normal = t.toLowerCase();
-                if (!seen.add(normal)) {
-                    AlertUtils.showError(owner, "Erro", "As opções não podem conter respostas duplicadas");
-                    ev.consume();
-                    return;
-                }
-            }
-
-            // Create options after validations
-            for (int i = 0; i < numOptions; i++) {
-                options.add(new Option(letters[i], texts.get(i)));
-            }
-
-            LocalDate startD = startDate.getValue();
-            LocalDate endD = endDate.getValue();
-            if (startD == null || endD == null) {
-                AlertUtils.showError(owner, "Erro", "Datas de início e fim são obrigatórias.");
-                ev.consume();
-                return;
-            }
-
+            List<Option> options = new ArrayList<>();
             try {
-                LocalTime sTime = LocalTime.of(startHour.getValue(), startMinute.getValue());
-                LocalTime eTime = LocalTime.of(endHour.getValue(), endMinute.getValue());
-                LocalDateTime startAt = LocalDateTime.of(startD, sTime);
-                LocalDateTime endAt = LocalDateTime.of(endD, eTime);
-
-                if (!endAt.isAfter(startAt)) {
-                    AlertUtils.showError(owner, "Erro",
-                            "A data/hora de fim deve ser posterior à data/hora de início.");
-                    ev.consume();
-                    return;
+                for (int i = 0; i < numOptions && i < allOptions.length && i < letters.length; i++) {
+                    String txt = allOptions[i].getText().trim();
+                    options.add(new Option(letters[i], txt));
                 }
-
-                if (teacherId == null) {
-                    AlertUtils.showError(owner, "Erro", "Sessão inválida. Faça login novamente.");
-                    ev.consume();
-                    return;
-                }
-
-                EditQuestionDTO dto = new EditQuestionDTO(
-                        q.getId(), teacherId, statement, options,
-                        OptionLetter.valueOf(correctCombo.getValue()),
-                        startAt, endAt
-                );
-                if (onSubmit != null) {
-                    onSubmit.accept(dto);
-                }
-                // let dialog close
-            } catch (Exception e) {
-                AlertUtils.showError(owner, "Erro",
-                        "Formato de hora inválido (utilize HH:MM).");
+            } catch (IllegalArgumentException ex) {
+                AlertUtils.showError(owner, "Erro", ex.getMessage());
                 ev.consume();
+                return;
             }
+
+            OptionLetter correct = null;
+            String sel = correctCombo.getValue();
+            if (sel != null && !sel.isBlank()) {
+                try {
+                    correct = OptionLetter.valueOf(sel);
+                } catch (IllegalArgumentException ex) {
+                    // deixa o servidor validar
+                }
+            }
+
+            LocalDateTime startAt = null;
+            LocalDateTime endAt = null;
+
+            LocalDate sDate = startDate.getValue();
+            LocalDate eDate = endDate.getValue();
+            Integer sh = startHour.getValue();
+            Integer sm = startMinute.getValue();
+            Integer eh = endHour.getValue();
+            Integer em = endMinute.getValue();
+
+            if (sDate != null && sh != null && sm != null) {
+                startAt = LocalDateTime.of(sDate, LocalTime.of(sh, sm));
+            }
+            if (eDate != null && eh != null && em != null) {
+                endAt = LocalDateTime.of(eDate, LocalTime.of(eh, em));
+            }
+
+            if (onSubmit != null) {
+                EditQuestionDTO dto = new EditQuestionDTO(
+                        q.getId(),
+                        teacherId,
+                        statement,
+                        options,
+                        correct,
+                        startAt,
+                        endAt
+                );
+                onSubmit.accept(dto);
+            }
+            // dialog closes; server will validate semantics
         });
 
         dialog.showAndWait();
@@ -715,54 +690,5 @@ public final class TeacherDialogs {
         });
 
         dialog.showAndWait();
-    }
-
-    // --------------------------------------------------------------
-    //  PRIVATE HELPER METHODS (validation styling)
-    // --------------------------------------------------------------
-
-    /**
-     * Highlights a control with the error style.
-     *
-     * @param c control to highlight
-     */
-    private static void markError(Control c) {
-        if (c != null) {
-            String prev = c.getStyle();
-            if (prev == null) {
-                prev = "";
-            }
-            if (!prev.contains("-fx-border-color")) {
-                c.setStyle(prev + ";" + ERROR_STYLE);
-            } else {
-                c.setStyle(ERROR_STYLE);
-            }
-        }
-    }
-
-    /**
-     * Removes error highlighting from a control.
-     *
-     * @param c control to clear
-     */
-    private static void clearError(Control c) {
-        if (c != null) {
-            String s = c.getStyle();
-            if (s == null || s.isEmpty()) {
-                return;
-            }
-            c.setStyle(s.replace(ERROR_STYLE, "").replaceAll("^;|;$", ""));
-        }
-    }
-
-    /**
-     * Removes error highlighting from several controls.
-     *
-     * @param controls controls to clear
-     */
-    private static void clearErrors(Control... controls) {
-        for (Control c : controls) {
-            clearError(c);
-        }
     }
 }

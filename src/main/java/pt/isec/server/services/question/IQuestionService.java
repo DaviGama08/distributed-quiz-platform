@@ -59,4 +59,16 @@ public interface IQuestionService {
      * @throws Exception on DB errors
      */
     Question joinQuestion(JoinQuestionDTO dto) throws Exception;
+
+    /**
+     * Returns the teacher ID associated with the given question ID.
+     * <p>
+     * If no question is found, this method returns {@code null}.
+     *
+     * @param questionId the ID of the question to look up
+     * @return the teacher ID, or {@code null} if the question does not exist
+     * @throws Exception if a database access error occurs
+     */
+    Integer findTeacherIdByQuestionId(int questionId) throws Exception;
+
 }

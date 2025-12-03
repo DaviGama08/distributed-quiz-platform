@@ -84,7 +84,7 @@ public class AuthService implements IAuthService {
 
         // validate teacher registration code
         String storedHash = loadTeacherCodeHashFromDb();
-        if (!verifyPassword(pw, storedHash)) { // NOTE: original code verifies 'code' against storedHash; logic preserved
+        if (!verifyPassword(code, storedHash)) { // NOTE: original code verifies 'code' against storedHash; logic preserved
             throw new IllegalArgumentException("Código de registo inválido");
         }
 
@@ -140,8 +140,14 @@ public class AuthService implements IAuthService {
         if (!isValidPassword(pw)) {
             throw new IllegalArgumentException("Password fraca");
         }
-        if (number == null || number <= 0) {
-            throw new IllegalArgumentException("Número de estudante inválido");
+        if (number == null) {
+            throw new IllegalArgumentException("Número de estudante em falta");
+        }
+        if (number <= 0) {
+            throw new IllegalArgumentException("Número de estudante inválido (tem de ser positivo)");
+        }
+        if (number > 999999999) {
+            throw new IllegalArgumentException("Número de estudante demasiado grande");
         }
 
         Map<String,Object> emailExists = dbCommands.selectOne(

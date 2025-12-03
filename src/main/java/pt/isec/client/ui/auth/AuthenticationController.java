@@ -6,6 +6,7 @@ import pt.isec.client.ClientApplication;
 import pt.isec.client.core.ClientManager;
 import pt.isec.client.core.IClientControllerContext;
 import pt.isec.client.ui.IDisposableProp;
+import pt.isec.client.ui.util.AlertUtils;
 import pt.isec.client.ui.util.UiUtils;
 import pt.isec.common.dto.auth.AuthResponseDTO;
 
@@ -70,7 +71,7 @@ public class AuthenticationController implements IDisposableProp {
 
         clientControllerContext.addPropertyChangeListener(ClientManager.PROP_AUTHENTICATED, authListener);
         clientControllerContext.addPropertyChangeListener(ClientManager.PROP_LOGIN_OK, loginOkListener);
-        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_LOGIN_FAIL, loginFailListener);
+        clientControllerContext.addPropertyChangeListener(ClientManager.PROP_FAIL, loginFailListener);
         clientControllerContext.addPropertyChangeListener(ClientManager.PROP_REGISTER_OK, registerOkListener);
         clientControllerContext.addPropertyChangeListener(ClientManager.PROP_CONNECTION_STATUS, connectionStatusListener);
     }
@@ -105,6 +106,8 @@ public class AuthenticationController implements IDisposableProp {
 
     /**
      * Handles successful login responses.
+     * <p>
+     * Updates client-side session state and shows inline + modal feedback.
      */
     private void handleLoginSuccessResponse(PropertyChangeEvent evt) {
         AuthResponseDTO data = (AuthResponseDTO) evt.getNewValue();
@@ -118,24 +121,32 @@ public class AuthenticationController implements IDisposableProp {
         clientControllerContext.setUserName(data.name());
         clientControllerContext.setAuthenticated(true);
 
-        UiUtils.runOnUiThread(() ->
-                view.setLoginStatus("✔️ Login OK! A carregar dashboard...", Color.GREEN, false, true)
-        );
+        UiUtils.runOnUiThread(() -> {
+            view.setLoginStatus("✔️ Login OK! A carregar dashboard...", Color.GREEN, false, true);
+
+            AlertUtils.showInfo(
+                    stage,
+                    "Login efetuado",
+                    "Login efetuado com sucesso.\nA carregar o dashboard..."
+            );
+        });
     }
 
     /**
      * Handles both {@code LOGIN_FAIL} and generic {@code ERROR} responses.
      * <p>
-     * If we are in LOGIN mode, shows message in login form;
-     * if we are in REGISTER mode, shows message in register form.
+     * Shows feedback in the appropriate form (login/register) and via a modal dialog.
      */
     private void handleLoginFailResponse(PropertyChangeEvent evt) {
         String data = (String) evt.getNewValue();
+        String baseMsg = (data == null || data.isBlank()) ? "Ocorreu um erro." : data;
+
         UiUtils.runOnUiThread(() -> {
             if (mode == Mode.LOGIN) {
-                view.setLoginStatus("❌ Login Falhou: " + data, RED, false, true);
+                // Reuse helper to ensure label + modal are always shown
+                showLoginError("Login falhou: " + baseMsg);
             } else {
-                view.setRegisterStatus("❌ Registo Falhou: " + data, RED, true);
+                showRegisterError("Registo falhou: " + baseMsg);
             }
             authBusy = false;
             view.setAuthBusy(false);
@@ -144,6 +155,8 @@ public class AuthenticationController implements IDisposableProp {
 
     /**
      * Handles successful register responses.
+     * <p>
+     * Updates local state, shows inline success feedback and pops up a modal dialog.
      */
     private void handleRegisterOkResponse(PropertyChangeEvent evt) {
         AuthResponseDTO data = (AuthResponseDTO) evt.getNewValue();
@@ -163,10 +176,18 @@ public class AuthenticationController implements IDisposableProp {
                     true
             );
 
+            // Modal de confirmação de sucesso
+            AlertUtils.showInfo(
+                    stage,
+                    "Registo concluído",
+                    "A sua conta foi criada com sucesso.\n" +
+                            "Já pode iniciar sessão com os seus dados."
+            );
+
             view.clearRegisterFields();
             view.clearLoginFields();
 
-            if (data != null && data.email() != null) {
+            if (    data.email() != null) {
                 view.prefillLoginEmail(data.email());
             }
 
@@ -244,6 +265,17 @@ public class AuthenticationController implements IDisposableProp {
 
     /**
      * Login button handler.
+     * <p>
+     * Performs local field validation, shows user feedback (inline + modal)
+     * and, when valid, sends the login request to the server.
+     */
+    /**
+     * Login button handler.
+     * <p>
+     * Forwards the raw credentials to the server without performing local
+     * email/password validation. All validation is done on the server and
+     * any error message is propagated back to the UI via the login fail
+     * listener.
      */
     public void onLogin() throws InterruptedException {
         if (mode != Mode.LOGIN || authBusy) {
@@ -253,14 +285,8 @@ public class AuthenticationController implements IDisposableProp {
         String email = view.getLoginEmail();
         String password = view.getLoginPassword();
 
-        if (email.isEmpty() || password.isEmpty()) {
-            showLoginError("Por favor, preencha todos os campos.");
-            return;
-        }
-        if (!email.contains("@")) {
-            showLoginError("Email inválido.");
-            return;
-        }
+        // No client-side validation of email/password format or presence.
+        // The server is responsible for validating and returning a message.
 
         setAuthBusy(true);
         view.setLoginStatus("A autenticar...", BLUE, true, false);
@@ -270,6 +296,11 @@ public class AuthenticationController implements IDisposableProp {
 
     /**
      * Register button handler.
+     * <p>
+     * Forwards all registration data to the server without performing local
+     * validation of name/email/password or institutional code/student number.
+     * The server performs all validation and returns either a successful
+     * response or an error message that is shown in the UI.
      */
     public void onRegister() {
         if (mode != Mode.REGISTER || authBusy) {
@@ -282,35 +313,27 @@ public class AuthenticationController implements IDisposableProp {
         String password = view.getRegisterPassword();
         String extra = view.getRegisterExtra();
 
-        if (name.isEmpty() || email.isEmpty() || password.isEmpty() || extra.isEmpty()) {
-            showRegisterError("Por favor, preencha todos os campos.");
-            return;
-        }
-        if (!email.contains("@")) {
-            showRegisterError("Email inválido.");
-            return;
-        }
-        if (password.length() < 6) {
-            showRegisterError("Password deve ter no mínimo 6 caracteres.");
-            return;
-        }
+        // No client-side validation of fields; the server is the source of truth.
 
         setAuthBusy(true);
         view.setRegisterStatus("A registar...", BLUE, false);
 
         try {
             if ("STUDENT".equalsIgnoreCase(type)) {
-                int number;
-                try {
-                    number = Integer.parseInt(extra);
-                } catch (NumberFormatException e) {
-                    UiUtils.runOnUiThread(() ->
-                            showRegisterError("Número de estudante inválido.")
-                    );
-                    return;
+                // extra = student number (may be invalid/empty; server will validate)
+                Integer number = null;
+                String trimmedExtra = extra != null ? extra.trim() : null;
+                if (trimmedExtra != null && !trimmedExtra.isEmpty()) {
+                    try {
+                        number = Integer.parseInt(trimmedExtra);
+                    } catch (NumberFormatException ignored) {
+                        // Let the server handle invalid / null student number
+                        number = null;
+                    }
                 }
                 clientControllerContext.getAuthService().registerStudent(name, email, password, number);
             } else {
+                // Teacher registration: extra is the institutional teacher code
                 clientControllerContext.getAuthService().registerTeacher(name, email, password, extra);
             }
         } catch (Exception e) {
@@ -342,14 +365,43 @@ public class AuthenticationController implements IDisposableProp {
         UiUtils.runOnUiThread(() -> view.setAuthBusy(busy));
     }
 
+    /**
+     * Shows a login error both inline (status label) and via a modal dialog.
+     *
+     * @param message error message to display
+     */
     private void showLoginError(String message) {
-        view.setLoginStatus("❌ " + message, RED, false, true);
+        String msg = (message == null || message.isBlank())
+                ? "Ocorreu um erro ao efetuar o login."
+                : message;
+
+        view.setLoginStatus("❌ " + msg, RED, false, true);
+
+        AlertUtils.showError(
+                stage,
+                "Erro de autenticação",
+                msg
+        );
     }
 
+    /**
+     * Shows a register error both inline (status label) and via a modal dialog.
+     *
+     * @param message error message to display
+     */
     private void showRegisterError(String message) {
-        view.setRegisterStatus("❌ " + message, RED, true);
-    }
+        String msg = (message == null || message.isBlank())
+                ? "Ocorreu um erro ao efetuar o registo."
+                : message;
 
+        view.setRegisterStatus("❌ " + msg, RED, true);
+
+        AlertUtils.showError(
+                stage,
+                "Erro no registo",
+                msg
+        );
+    }
     /**
      * Resets the authentication view and shows it.
      */
@@ -373,7 +425,7 @@ public class AuthenticationController implements IDisposableProp {
     public void dispose() {
         clientControllerContext.removePropertyChangeListener(ClientManager.PROP_AUTHENTICATED, authListener);
         clientControllerContext.removePropertyChangeListener(ClientManager.PROP_LOGIN_OK, loginOkListener);
-        clientControllerContext.removePropertyChangeListener(ClientManager.PROP_LOGIN_FAIL, loginFailListener);
+        clientControllerContext.removePropertyChangeListener(ClientManager.PROP_FAIL, loginFailListener);
         clientControllerContext.removePropertyChangeListener(ClientManager.PROP_REGISTER_OK, registerOkListener);
         clientControllerContext.removePropertyChangeListener(ClientManager.PROP_CONNECTION_STATUS, connectionStatusListener);
     }

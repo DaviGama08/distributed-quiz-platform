@@ -122,7 +122,7 @@ public class AuthenticationController implements IDisposableProp {
         clientControllerContext.setAuthenticated(true);
 
         UiUtils.runOnUiThread(() -> {
-            view.setLoginStatus("✔️ Login OK! A carregar dashboard...", Color.GREEN, false, true);
+            view.setLoginStatus("✔️ Login OK! ", Color.GREEN, false, true);
 
             AlertUtils.showInfo(
                     stage,
@@ -311,30 +311,41 @@ public class AuthenticationController implements IDisposableProp {
         String name = view.getRegisterName();
         String email = view.getRegisterEmail();
         String password = view.getRegisterPassword();
-        String extra = view.getRegisterExtra();
+        String extra = view.getRegisterExtra(); // number (student) ou código (teacher)
 
-        // No client-side validation of fields; the server is the source of truth.
+        // 1) Cliente só garante que os campos estão preenchidos
+        if (name == null || name.isBlank()
+                || email == null || email.isBlank()
+                || password == null || password.isBlank()
+                || extra == null || extra.isBlank()) {
+
+            showRegisterError("Todos os campos são obrigatórios.");
+            return;
+        }
 
         setAuthBusy(true);
         view.setRegisterStatus("A registar...", BLUE, false);
 
         try {
             if ("STUDENT".equalsIgnoreCase(type)) {
-                // extra = student number (may be invalid/empty; server will validate)
-                Integer number = null;
-                String trimmedExtra = extra != null ? extra.trim() : null;
-                if (trimmedExtra != null && !trimmedExtra.isEmpty()) {
-                    try {
-                        number = Integer.parseInt(trimmedExtra);
-                    } catch (NumberFormatException ignored) {
-                        // Let the server handle invalid / null student number
-                        number = null;
-                    }
+                String trimmedExtra = extra.trim();
+
+                if (!trimmedExtra.matches("\\d+")) {
+                    showRegisterError("O número de estudante só pode conter dígitos (0-9).");
+                    setAuthBusy(false);
+                    return;
                 }
-                clientControllerContext.getAuthService().registerStudent(name, email, password, number);
+
+                Integer number = Integer.parseInt(trimmedExtra);
+                clientControllerContext
+                        .getAuthService()
+                        .registerStudent(name, email, password, number);
+
             } else {
-                // Teacher registration: extra is the institutional teacher code
-                clientControllerContext.getAuthService().registerTeacher(name, email, password, extra);
+                // Teacher: o código é tratado como string, validação fica 100% no servidor
+                clientControllerContext
+                        .getAuthService()
+                        .registerTeacher(name, email, password, extra);
             }
         } catch (Exception e) {
             UiUtils.runOnUiThread(() ->
@@ -343,6 +354,7 @@ public class AuthenticationController implements IDisposableProp {
             setAuthBusy(false);
         }
     }
+
 
     /**
      * Handler for changes in register type (student/teacher).

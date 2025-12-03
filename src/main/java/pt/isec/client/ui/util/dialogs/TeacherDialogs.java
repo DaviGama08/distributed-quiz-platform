@@ -22,9 +22,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.UnaryOperator;
 
 /**
  * Utility class that provides modal dialogs used by the teacher UI:
@@ -147,21 +149,42 @@ public final class TeacherDialogs {
         Label periodLabel = new Label("Período de Disponibilidade:");
         periodLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
         HBox periodBox = new HBox(8);
+        periodBox.setAlignment(Pos.CENTER_LEFT);
+
         DatePicker startDate = new DatePicker(LocalDate.now());
         startDate.setPromptText("Data início");
-        Spinner<Integer> startHour = new Spinner<>(0, 23, 9);
-        startHour.setPrefWidth(70);
-        Spinner<Integer> startMinute = new Spinner<>(0, 59, 0);
-        startMinute.setPrefWidth(70);
-        Label toLabel = new Label(" até ");
+
         DatePicker endDate = new DatePicker(LocalDate.now());
         endDate.setPromptText("Data fim");
-        Spinner<Integer> endHour = new Spinner<>(0, 23, 9);
-        endHour.setPrefWidth(70);
-        Spinner<Integer> endMinute = new Spinner<>(0, 59, 0);
-        endMinute.setPrefWidth(70);
-        periodBox.getChildren().addAll(startDate, startHour, new Label(":"), startMinute,
-                toLabel, endDate, endHour, new Label(":"), endMinute);
+
+        // ---- NOVO: TextFields para horas em vez de Spinners ----
+        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm");
+
+        TextField startTimeField = new TextField("09:00");
+        startTimeField.setPromptText("HH:mm");
+        startTimeField.setPrefWidth(70);
+
+        TextField endTimeField = new TextField("10:00");
+        endTimeField.setPromptText("HH:mm");
+        endTimeField.setPrefWidth(70);
+
+        UnaryOperator<TextFormatter.Change> timeFilter = change -> {
+            String newText = change.getControlNewText();
+            if (newText.length() > 5) return null;              // "HH:mm"
+            if (!newText.matches("[0-9:]*")) return null;       // só dígitos e ':'
+            return change;
+        };
+
+        startTimeField.setTextFormatter(new TextFormatter<>(timeFilter));
+        endTimeField.setTextFormatter(new TextFormatter<>(timeFilter));
+
+        Label toLabel = new Label(" até ");
+
+        periodBox.getChildren().addAll(
+                startDate, startTimeField,
+                toLabel,
+                endDate, endTimeField
+        );
 
         grid.add(statementLabel, 0, 0);
         grid.add(statementField, 0, 1, 2, 1);
@@ -245,16 +268,42 @@ public final class TeacherDialogs {
 
             LocalDate sDate = startDate.getValue();
             LocalDate eDate = endDate.getValue();
-            Integer sh = startHour.getValue();
-            Integer sm = startMinute.getValue();
-            Integer eh = endHour.getValue();
-            Integer em = endMinute.getValue();
 
-            if (sDate != null && sh != null && sm != null) {
-                startAt = LocalDateTime.of(sDate, LocalTime.of(sh, sm));
+            // NOVO: parsing das horas a partir dos TextFields (mantendo lógica base)
+            if (sDate != null) {
+                String sTimeText = startTimeField.getText();
+                if (sTimeText != null && !sTimeText.isBlank()) {
+                    try {
+                        LocalTime sTime = LocalTime.parse(sTimeText, timeFormatter);
+                        startAt = LocalDateTime.of(sDate, sTime);
+                    } catch (DateTimeParseException ex) {
+                        AlertUtils.showError(
+                                owner,
+                                "Hora de início inválida",
+                                "Use o formato HH:mm, por exemplo 09:30."
+                        );
+                        ev.consume();
+                        return;
+                    }
+                }
             }
-            if (eDate != null && eh != null && em != null) {
-                endAt = LocalDateTime.of(eDate, LocalTime.of(eh, em));
+
+            if (eDate != null) {
+                String eTimeText = endTimeField.getText();
+                if (eTimeText != null && !eTimeText.isBlank()) {
+                    try {
+                        LocalTime eTime = LocalTime.parse(eTimeText, timeFormatter);
+                        endAt = LocalDateTime.of(eDate, eTime);
+                    } catch (DateTimeParseException ex) {
+                        AlertUtils.showError(
+                                owner,
+                                "Hora de fim inválida",
+                                "Use o formato HH:mm, por exemplo 10:15."
+                        );
+                        ev.consume();
+                        return;
+                    }
+                }
             }
 
             if (onSubmit != null) {
@@ -268,7 +317,7 @@ public final class TeacherDialogs {
                 );
                 onSubmit.accept(dto);
             }
-            // dialog closes; any further validation is done in controller/server
+            // dialog closes; qualquer validação extra continua no servidor/controlador
         });
 
         dialog.showAndWait();
@@ -393,25 +442,41 @@ public final class TeacherDialogs {
         Label periodLabel = new Label("Período de Disponibilidade:");
         periodLabel.setFont(Font.font("Arial", FontWeight.BOLD, 13));
         HBox periodBox = new HBox(8);
+        periodBox.setAlignment(Pos.CENTER_LEFT);
+
         DatePicker startDate = new DatePicker(q.getStartAt().toLocalDate());
         startDate.setPromptText("Data início");
-        int qStartHour = q.getStartAt().getHour();
-        int qStartMinute = q.getStartAt().getMinute();
-        Spinner<Integer> startHour = new Spinner<>(0, 23, qStartHour);
-        startHour.setPrefWidth(70);
-        Spinner<Integer> startMinute = new Spinner<>(0, 59, qStartMinute);
-        startMinute.setPrefWidth(70);
-        Label toLabel = new Label(" até ");
         DatePicker endDate = new DatePicker(q.getEndAt().toLocalDate());
         endDate.setPromptText("Data fim");
-        int qEndHour = q.getEndAt().getHour();
-        int qEndMinute = q.getEndAt().getMinute();
-        Spinner<Integer> endHour = new Spinner<>(0, 23, qEndHour);
-        endHour.setPrefWidth(70);
-        Spinner<Integer> endMinute = new Spinner<>(0, 59, qEndMinute);
-        endMinute.setPrefWidth(70);
-        periodBox.getChildren().addAll(startDate, startHour, new Label(":"), startMinute,
-                toLabel, endDate, endHour, new Label(":"), endMinute);
+
+        // NOVO: TextFields em vez de Spinners para hora/minuto
+        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm");
+
+        TextField startTimeField = new TextField(q.getStartAt().toLocalTime().format(timeFormatter));
+        startTimeField.setPromptText("HH:mm");
+        startTimeField.setPrefWidth(70);
+
+        TextField endTimeField = new TextField(q.getEndAt().toLocalTime().format(timeFormatter));
+        endTimeField.setPromptText("HH:mm");
+        endTimeField.setPrefWidth(70);
+
+        UnaryOperator<TextFormatter.Change> timeFilter = change -> {
+            String newText = change.getControlNewText();
+            if (newText.length() > 5) return null;
+            if (!newText.matches("[0-9:]*")) return null;
+            return change;
+        };
+
+        startTimeField.setTextFormatter(new TextFormatter<>(timeFilter));
+        endTimeField.setTextFormatter(new TextFormatter<>(timeFilter));
+
+        Label toLabel = new Label(" até ");
+
+        periodBox.getChildren().addAll(
+                startDate, startTimeField,
+                toLabel,
+                endDate, endTimeField
+        );
 
         grid.add(statementLabel, 0, 0);
         grid.add(statementField, 0, 1, 2, 1);
@@ -493,16 +558,41 @@ public final class TeacherDialogs {
 
             LocalDate sDate = startDate.getValue();
             LocalDate eDate = endDate.getValue();
-            Integer sh = startHour.getValue();
-            Integer sm = startMinute.getValue();
-            Integer eh = endHour.getValue();
-            Integer em = endMinute.getValue();
 
-            if (sDate != null && sh != null && sm != null) {
-                startAt = LocalDateTime.of(sDate, LocalTime.of(sh, sm));
+            if (sDate != null) {
+                String sTimeText = startTimeField.getText();
+                if (sTimeText != null && !sTimeText.isBlank()) {
+                    try {
+                        LocalTime sTime = LocalTime.parse(sTimeText, timeFormatter);
+                        startAt = LocalDateTime.of(sDate, sTime);
+                    } catch (DateTimeParseException ex) {
+                        AlertUtils.showError(
+                                owner,
+                                "Hora de início inválida",
+                                "Use o formato HH:mm, por exemplo 09:30."
+                        );
+                        ev.consume();
+                        return;
+                    }
+                }
             }
-            if (eDate != null && eh != null && em != null) {
-                endAt = LocalDateTime.of(eDate, LocalTime.of(eh, em));
+
+            if (eDate != null) {
+                String eTimeText = endTimeField.getText();
+                if (eTimeText != null && !eTimeText.isBlank()) {
+                    try {
+                        LocalTime eTime = LocalTime.parse(eTimeText, timeFormatter);
+                        endAt = LocalDateTime.of(eDate, eTime);
+                    } catch (DateTimeParseException ex) {
+                        AlertUtils.showError(
+                                owner,
+                                "Hora de fim inválida",
+                                "Use o formato HH:mm, por exemplo 10:15."
+                        );
+                        ev.consume();
+                        return;
+                    }
+                }
             }
 
             if (onSubmit != null) {
@@ -517,7 +607,7 @@ public final class TeacherDialogs {
                 );
                 onSubmit.accept(dto);
             }
-            // dialog closes; server will validate semantics
+            // dialog fecha; semântica continua validada no servidor
         });
 
         dialog.showAndWait();

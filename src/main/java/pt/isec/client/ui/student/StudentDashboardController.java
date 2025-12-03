@@ -250,65 +250,6 @@ public class StudentDashboardController implements IDisposableProp {
         }
     }
 
-    // ----------------------------------------------------------
-    // PROFILE (view only)
-    // ----------------------------------------------------------
-
-    /**
-     * Opens a read-only dialog with the student's profile information.
-     */
-    public void onOpenProfile() {
-        Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle("Perfil do Estudante");
-        dialog.setHeaderText("Editar dados de perfil");
-
-        VBox content = new VBox(15);
-        content.setPadding(new Insets(20));
-
-        StackPane avatarCircle = new StackPane();
-        avatarCircle.getStyleClass().add("profile-avatar-circle");
-
-        String nameForInitials =
-                clientControllerContext.getUserName() != null
-                        ? clientControllerContext.getUserName()
-                        : clientControllerContext.getUserEmail();
-
-        Label initials = new Label(
-                UiUtils.getInitials(nameForInitials)
-        );
-        initials.getStyleClass().add("profile-avatar-initials");
-        avatarCircle.getChildren().add(initials);
-
-        String nameLabelValue =
-                clientControllerContext.getUserName() != null
-                        ? clientControllerContext.getUserName()
-                        : clientControllerContext.getUserEmail();
-
-        Label nameLabel = new Label(nameLabelValue);
-        nameLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
-
-        Label roleLabel = new Label("Estudante");
-        roleLabel.setFont(Font.font("Arial", 12));
-
-        Label emailLabel = new Label(clientControllerContext.getUserEmail());
-        emailLabel.setFont(Font.font("Arial", 12));
-
-        VBox infoBox = new VBox(4, nameLabel, roleLabel, emailLabel);
-        infoBox.setAlignment(Pos.CENTER_LEFT);
-
-        HBox header = new HBox(20, avatarCircle, infoBox);
-        header.setAlignment(Pos.CENTER_LEFT);
-
-        Label hint = new Label("O nome e o email são definidos pela instituição.\n" +
-                "Se precisar de alterar, contacte a secretaria.");
-        hint.setWrapText(true);
-        hint.setStyle("-fx-text-fill: #7f8c8d;");
-
-        content.getChildren().addAll(header, new Separator(), hint);
-        dialog.getDialogPane().setContent(content);
-        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
-        dialog.showAndWait();
-    }
 
     // ----------------------------------------------------------
     // ANSWER QUESTION

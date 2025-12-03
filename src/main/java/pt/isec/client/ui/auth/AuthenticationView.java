@@ -11,6 +11,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.TextAlignment;
 
 import java.util.Objects;
+import java.util.function.UnaryOperator;
 
 /**
  * Authentication view (login/register).
@@ -49,6 +50,7 @@ public class AuthenticationView {
     private TextField registerExtraField;
     private Button registerButton;
     private Label registerStatusLabel;
+    private TextFormatter<String> studentNumberFormatter;
 
     // Semi-transparent overlay to block the UI
     private StackPane busyOverlay;
@@ -304,9 +306,23 @@ public class AuthenticationView {
 
         registerExtraLabel = new Label("Número de Estudante");
         registerExtraLabel.getStyleClass().add("label-dark");
+
         registerExtraField = new TextField();
         registerExtraField.setPromptText("Ex: 123456");
         registerExtraField.getStyleClass().add("form-field");
+
+        // ---------- NOVO: TextFormatter apenas para NÚMERO DE ESTUDANTE ----------
+        UnaryOperator<TextFormatter.Change> digitsFilter = change -> {
+            String newText = change.getControlNewText();
+            if (newText.matches("\\d*")) { // só dígitos
+                return change;
+            }
+            return null; // rejeita letras, símbolos, etc.
+        };
+        studentNumberFormatter = new TextFormatter<>(digitsFilter);
+
+        // estado inicial do formulário é "Estudante"
+        registerExtraField.setTextFormatter(studentNumberFormatter);
 
         registerButton = new Button("CRIAR CONTA");
         registerButton.getStyleClass().add("primary-pill-button");
@@ -330,6 +346,7 @@ public class AuthenticationView {
         );
         return form;
     }
+
 
     /**
      * Switches the view to login mode.
@@ -403,12 +420,24 @@ public class AuthenticationView {
 
     public void setRegisterExtraLabel(String text) {
         registerExtraLabel.setText(text);
+
         if ("Número de Estudante".equalsIgnoreCase(text)) {
+            // Modo ALUNO: só números permitidos
             registerExtraField.setPromptText("Ex: 123456");
+            registerExtraField.setTextFormatter(studentNumberFormatter);
+
+            // limpa quaisquer caracteres não numéricos que já lá estejam
+            String current = registerExtraField.getText();
+            if (current != null) {
+                registerExtraField.setText(current.replaceAll("\\D", ""));
+            }
         } else {
+            // Modo DOCENTE: pode escrever letras e números (ex: DOCENTE2025)
             registerExtraField.setPromptText("Código fornecido pela instituição");
+            registerExtraField.setTextFormatter(null); // remove o filtro, volta a ser livre
         }
     }
+
 
     public void prefillLoginEmail(String email) {
         loginEmailField.setText(email);

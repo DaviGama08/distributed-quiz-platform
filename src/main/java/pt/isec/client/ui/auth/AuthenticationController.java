@@ -127,7 +127,7 @@ public class AuthenticationController implements IDisposableProp {
             AlertUtils.showInfo(
                     stage,
                     "Login efetuado",
-                    "Login efetuado com sucesso.\nA carregar o dashboard..."
+                    "Login efetuado com sucesso."
             );
         });
     }

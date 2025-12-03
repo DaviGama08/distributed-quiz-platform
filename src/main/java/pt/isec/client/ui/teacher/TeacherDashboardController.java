@@ -343,16 +343,31 @@ public class TeacherDashboardController implements IDisposableProp {
 
             Integer finalQid = qid;
 
-            // só tratar da parte visual na UI thread
+            // Notificação visual
             Platform.runLater(() ->
                     view.addNotification("Uma nova resposta foi submetida à pergunta ID " + finalQid + ".")
             );
 
-            // força recálculo da contagem dessa pergunta a partir do servidor:
-            // apagamos a entrada para esse ID e deixamos o fetchAnswerCountsSequentially
-            // voltar a pedir as respostas e a meter o count certo.
+            // Recarregar só essa pergunta
+            Integer teacherId = clientControllerContext.getUserId();
+            if (teacherId == null) {
+                return; // sessão inválida – não vale a pena continuar
+            }
+
+            Question q = findQuestionById(finalQid);
+            if (q == null) {
+                // Ainda não temos essa pergunta em memória; próximo auto-refresh vai buscá-la
+                return;
+            }
+
+            // Limpa cache da contagem só desta pergunta
             answersCountByQuestion.remove(finalQid);
-            fetchAnswerCountsSequentially();
+
+            // Pede ao servidor as respostas desta pergunta
+            pendingViewQuestion = q;
+            awaitingViewAnswers = true;
+            clientControllerContext.getAnswerService()
+                    .viewAnswersForTeacher(new ViewAnswersDTO(q.getId(), teacherId));
         };
 
         this.joinQuestionListener = evt -> {
@@ -541,10 +556,12 @@ public class TeacherDashboardController implements IDisposableProp {
         stage.setMaximized(true);
 
         Platform.runLater(() -> {
-            try { updateDashboardStats(); } catch (Exception ignored) {}
             try { refreshQuestions(); } catch (Exception ignored) {}
+
+            try { fetchAnswerCountsSequentially(); } catch (Exception ignored) {}
         });
     }
+
 
     private void setupPropertyChangeListeners() {
         clientControllerContext.addPropertyChangeListener(ClientManager.PROP_NOTIFICATION, notificationListener);
@@ -1254,4 +1271,13 @@ public class TeacherDashboardController implements IDisposableProp {
         autoRefreshThread.setDaemon(true);
         autoRefreshThread.start();
     }
+
+    private Question findQuestionById(Integer id) {
+        if (id == null) return null;
+        for (Question q : lastQuestions) {
+            if (id.equals(q.getId())) return q;
+        }
+        return null;
+    }
+
 }

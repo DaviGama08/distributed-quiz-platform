@@ -1,11 +1,14 @@
 package pt.isec.server.threads;
 
+import pt.isec.common.util.Log;
 import pt.isec.server.core.IServerThreadContext;
 import pt.isec.server.core.ServerManager;
-import pt.isec.common.util.Log;
 
 import java.io.IOException;
-import java.net.*;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Objects;
@@ -23,13 +26,21 @@ import java.util.Objects;
  * </ul>
  */
 public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
+
+    /** Socket receive timeout in milliseconds. */
     private static final int SOCKET_TIMEOUT_MS = 3000;
+    /** Interval between heartbeats in milliseconds. */
     private static final int HEARTBEAT_INTERVAL_MS = 5000;
+    /** Maximum number of retries when waiting for the principal. */
     private static final int RETRY_COUNT = 3;
+    /** Sleep interval between loop iterations in milliseconds. */
     private static final int SLEEP_INTERVAL_MS = 50;
+    /** UDP buffer size in bytes. */
     private static final int BUFFER_SIZE = 512;
 
+    /** Context with directory and database information. */
     private final IServerThreadContext threadInfo;
+    /** UDP socket used for directory communication. */
     private DatagramSocket socket;
 
     /**
@@ -46,6 +57,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
      * send heartbeats, and deregister on shutdown.
      */
     @Override
+    @SuppressWarnings("BusyWait")
     public void run() {
         try (DatagramSocket s = new DatagramSocket()) {
             socket = s;
@@ -59,8 +71,8 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                     "TYPE", "REGISTER",
                     "ID", threadInfo.id(),
                     "TCP", threadInfo.serverTcpIp() + ":" + threadInfo.serverTcpPort(), // this server TCP endpoint
-                    "DBV", String.valueOf(threadInfo.dbVersion()),                            // DB version
-                    "DBP", String.valueOf(threadInfo.dbCopyPort())                            // DB copy port
+                    "DBV", String.valueOf(threadInfo.dbVersion()),                      // DB version
+                    "DBP", String.valueOf(threadInfo.dbCopyPort())                      // DB copy port
             );
             send(s, dirAddr, dirPort, registerMsg);
 
@@ -118,7 +130,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
 
             long last = 0;
 
-            // HEARTBEAT — always send current DB version (managerTheardInfo.dbVersion())
+            // HEARTBEAT — always send current DB version (managerThreadInfo.dbVersion())
             while (threadInfo.isRunning()) {
                 long now = System.currentTimeMillis();
 
@@ -161,6 +173,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             try {
                 close();
             } catch (Exception ignore) {
+                // ignore
             }
         }
     }
@@ -170,14 +183,15 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
     /**
      * Simple DTO-like record holding directory response details.
      *
-     * @param ip  primary server IP
+     * @param ip   primary server IP
      * @param port primary server TCP port
      * @param dbv  DB version (may be {@code null})
      */
-    private record Endpoint(String ip, int port, Integer dbv) { }
+    private record Endpoint(String ip, int port, Integer dbv) {
+    }
 
     /**
-     * Builds a KEY=VALUE|KEY=VALUE|... style message from an array of key/value pairs.
+     * Builds a {@code KEY=VALUE|KEY=VALUE|...} style message from an array of key/value pairs.
      *
      * @param keyValue array of key/value pairs (must have even length)
      * @return formatted message
@@ -258,7 +272,9 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
 
             String ip = ipPort[0];
             int port = Integer.parseInt(ipPort[1]);
-            Integer dbv = null;
+
+            // Optional DBV=version field
+            Integer dbv = getInteger(body);
 
             return new Endpoint(ip, port, dbv);
         } catch (SocketTimeoutException e) {
@@ -271,7 +287,32 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
     }
 
     /**
-     * Closes the UDP socket if open.
+     * Extracts the optional {@code DBV} (database version) integer value
+     * from the directory response body.
+     *
+     * @param body full response body text
+     * @return parsed database version, or {@code null} if not present or invalid
+     */
+    private static Integer getInteger(String body) {
+        Integer dbv = null;
+        String dbvToken = "DBV=";
+        int idx = body.indexOf(dbvToken);
+        if (idx >= 0) {
+            int end = body.indexOf('|', idx + dbvToken.length());
+            String dbvStr = (end >= 0
+                    ? body.substring(idx + dbvToken.length(), end)
+                    : body.substring(idx + dbvToken.length()));
+            try {
+                dbv = Integer.parseInt(dbvStr.trim());
+            } catch (NumberFormatException ignore) {
+                // keep dbv as null if parsing fails
+            }
+        }
+        return dbv;
+    }
+
+    /**
+     * Closes the UDP socket if it is open.
      */
     @Override
     public void close() {

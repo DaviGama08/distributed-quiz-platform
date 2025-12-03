@@ -1,8 +1,12 @@
 package pt.isec.server.threads;
-
 import pt.isec.common.messages.TcpMessage;
-
-import java.io.*;
+import java.io.EOFException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.OutputStream;
+import java.io.Serializable;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.time.Duration;
@@ -162,73 +166,6 @@ public class NetworkTcpConnection implements AutoCloseable {
     }
 
     /* ===== legacy methods (kept for compatibility) ===== */
-
-    /**
-     * Sends all bytes from {@code src} using the raw {@link Socket#getOutputStream()}.
-     *
-     * @param src source stream
-     * @return total bytes sent
-     * @throws IOException if an I/O error occurs
-     */
-    public long sendStream(InputStream src) throws IOException {
-        try (src) {
-            byte[] buf = new byte[BUFFER_SIZE];
-            long total = 0;
-            int read;
-            OutputStream raw = socket.getOutputStream();
-            while ((read = src.read(buf)) >= 0) {
-                raw.write(buf, 0, read);
-                total += read;
-            }
-            raw.flush();
-            return total;
-        }
-    }
-
-    /**
-     * Reads until EOF from the {@link ObjectInputStream} and writes to {@code dst}.
-     * Kept for compatibility with older code.
-     *
-     * @param dst destination stream
-     * @return total bytes received
-     * @throws IOException if an I/O error occurs
-     */
-    public long receiveStreamAfterAck(OutputStream dst) throws IOException {
-        try (dst) {
-            byte[] buf = new byte[BUFFER_SIZE];
-            long total = 0;
-            int read;
-            InputStream raw = this.in; // use ObjectInputStream as InputStream
-            while ((read = raw.read(buf)) >= 0) {
-                dst.write(buf, 0, read);
-                total += read;
-            }
-            dst.flush();
-            return total;
-        }
-    }
-
-    /**
-     * Reads until EOF from the raw {@link Socket#getInputStream()} and writes to {@code dst}.
-     *
-     * @param dst destination stream
-     * @return total bytes received
-     * @throws IOException if an I/O error occurs
-     */
-    public long receiveTo(OutputStream dst) throws IOException {
-        try (dst) {
-            byte[] buf = new byte[BUFFER_SIZE];
-            long total = 0;
-            int read;
-            InputStream raw = socket.getInputStream();
-            while ((read = raw.read(buf)) >= 0) {
-                dst.write(buf, 0, read);
-                total += read;
-            }
-            dst.flush();
-            return total;
-        }
-    }
 
     /**
      * Returns the underlying {@link Socket} instance.

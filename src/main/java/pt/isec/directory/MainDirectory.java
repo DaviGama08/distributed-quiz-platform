@@ -1,5 +1,4 @@
 package pt.isec.directory;
-
 import org.fusesource.jansi.AnsiConsole;
 import pt.isec.common.util.Log;
 import pt.isec.directory.core.DirectoryManager;
@@ -11,11 +10,22 @@ import pt.isec.directory.core.DirectoryManager;
  * available servers and designates a primary one.
  */
 public class MainDirectory {
-    // Defaults
-    private static final int  DEF_UDP_PORT     = 9999;
-    private static final int  DEF_QUEUE        = 1024;
-    private static final int  DEF_MAX_PKT      = 65535;
-    private static final long DEF_TTL_MS       = 17_000L;
+
+    /* ===================== DEFAULT CONFIGURATION ===================== */
+
+    /** Default UDP port used by the directory. */
+    private static final int DEF_UDP_PORT = 9999;
+
+    /** Default queue capacity for incoming requests. */
+    private static final int DEF_QUEUE = 1024;
+
+    /** Default maximum UDP packet size. */
+    private static final int DEF_MAX_PKT = 65535;
+
+    /** Default time-to-live (in milliseconds) for server entries. */
+    private static final long DEF_TTL_MS = 17_000L;
+
+    /* ============================== MAIN ============================== */
 
     /**
      * Starts the directory with optional command line arguments:
@@ -28,13 +38,13 @@ public class MainDirectory {
      * @param args command line arguments
      */
     public static void main(String[] args) {
-        //Cores na consola
+        // Enable colored output in the console
         AnsiConsole.systemInstall();
 
-        int  udpPort       = DEF_UDP_PORT;
-        int  queueCapacity = DEF_QUEUE;
-        int  maxPacketSize = DEF_MAX_PKT;
-        long ttlMillis     = DEF_TTL_MS;
+        int udpPort       = DEF_UDP_PORT;
+        int queueCapacity = DEF_QUEUE;
+        int maxPacketSize = DEF_MAX_PKT;
+        long ttlMillis    = DEF_TTL_MS;
 
         try {
             switch (args.length) {
@@ -44,7 +54,7 @@ public class MainDirectory {
                     udpPort       = parseIntOr(args[0], DEF_UDP_PORT);
                     queueCapacity = parseIntOr(args[1], DEF_QUEUE);
                     maxPacketSize = parseIntOr(args[2], DEF_MAX_PKT);
-                    ttlMillis     = parseLongOr(args[3], DEF_TTL_MS);
+                    ttlMillis     = parseLongOr(args[3]);
                 }
                 default -> {
                     Log.info(MainDirectory.class, """
@@ -73,7 +83,10 @@ public class MainDirectory {
             // If your DirectoryService supports TTL as a parameter, wire it here.
 
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                try { ds.stop(); } catch (Exception ignored) {}
+                try {
+                    ds.stop();
+                } catch (Exception ignored) {
+                }
                 Log.info(MainDirectory.class, "Diretoria terminada.");
             }));
 
@@ -84,6 +97,8 @@ public class MainDirectory {
         }
     }
 
+    /* ========================== HELPERS ========================== */
+
     /**
      * Parses an integer or returns a default value if parsing fails.
      *
@@ -92,17 +107,24 @@ public class MainDirectory {
      * @return parsed int or {@code def} on error
      */
     private static int parseIntOr(String s, int def) {
-        try { return Integer.parseInt(s.trim()); } catch (Exception e) { return def; }
+        try {
+            return Integer.parseInt(s.trim());
+        } catch (Exception e) {
+            return def;
+        }
     }
 
     /**
-     * Parses a long or returns a default value if parsing fails.
+     * Parses a long or returns {@link #DEF_TTL_MS} if parsing fails.
      *
-     * @param s   string to parse
-     * @param def default value
-     * @return parsed long or {@code def} on error
+     * @param s string to parse
+     * @return parsed long or {@link #DEF_TTL_MS} on error
      */
-    private static long parseLongOr(String s, long def) {
-        try { return Long.parseLong(s.trim()); } catch (Exception e) { return def; }
+    private static long parseLongOr(String s) {
+        try {
+            return Long.parseLong(s.trim());
+        } catch (Exception e) {
+            return DEF_TTL_MS;
+        }
     }
 }

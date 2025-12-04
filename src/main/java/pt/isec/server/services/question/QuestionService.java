@@ -1,22 +1,43 @@
 package pt.isec.server.services.question;
 
-import pt.isec.common.dto.question.*;
-import pt.isec.server.core.IQuestionAnswerContext;
-import pt.isec.server.db.DbCommands;
+import pt.isec.common.dto.question.CreateQuestionDTO;
+import pt.isec.common.dto.question.CreateQuestionResponseDTO;
+import pt.isec.common.dto.question.DeleteQuestionDTO;
+import pt.isec.common.dto.question.EditQuestionDTO;
+import pt.isec.common.dto.question.JoinQuestionDTO;
+import pt.isec.common.dto.question.ListQuestionsDTO;
 import pt.isec.common.model.question.Option;
 import pt.isec.common.model.question.OptionLetter;
 import pt.isec.common.model.question.Question;
+import pt.isec.server.core.IQuestionAnswerContext;
+import pt.isec.server.db.DbCommands;
 
 import java.sql.DriverManager;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * Service responsible for creating, editing, listing and accessing questions.
+ * <p>
+ * This service encapsulates all business rules for question management and
+ * also takes care of generating the SQL statements that must be replicated
+ * to backup nodes through the {@link IQuestionAnswerContext#queue()}.
  */
 public class QuestionService implements IQuestionService {
+
+    /** Context used for DB replication and access to shared structures. */
     private final IQuestionAnswerContext context;
+
+    /** Helper that provides higher-level database commands. */
     private final DbCommands dbCommands;
 
     /**
@@ -29,6 +50,10 @@ public class QuestionService implements IQuestionService {
         this.context = context;
         this.dbCommands = dbCommands;
     }
+
+    /* =========================================================
+     *                     CRUD OPERATIONS
+     * ========================================================= */
 
     /**
      * Creates a question for a teacher, validates input, inserts it into the database
@@ -51,7 +76,7 @@ public class QuestionService implements IQuestionService {
         LocalDateTime startAt = dto.startAt();
         LocalDateTime endAt   = dto.endAt();
 
-        // ---------- validações básicas ----------
+        // ---------- basic validations ----------
         if (teacherId == null || teacherId <= 0) {
             throw new IllegalArgumentException("Identificador de docente inválido.");
         }
@@ -65,7 +90,7 @@ public class QuestionService implements IQuestionService {
             throw new IllegalArgumentException("Tem de indicar qual é a opção correta.");
         }
 
-        // ---------- opções: texto obrigatório + sem duplicados ----------
+        // ---------- options: text required + no duplicates ----------
         Set<String> normalizedTexts = new LinkedHashSet<>();
         for (Option o : options) {
             if (o == null || o.getText() == null || o.getText().isBlank()) {
@@ -77,7 +102,7 @@ public class QuestionService implements IQuestionService {
             }
         }
 
-        // garantir que a letra correta existe nas opções
+        // ensure the correct letter exists in the options
         boolean correctExists = options.stream()
                 .anyMatch(o -> o != null && correct.equals(o.getLetter()));
         if (!correctExists) {
@@ -85,7 +110,7 @@ public class QuestionService implements IQuestionService {
                     "A opção correta tem de corresponder a uma das opções disponíveis.");
         }
 
-        // ---------- datas/horas ----------
+        // ---------- dates/times ----------
         if (startAt == null || endAt == null) {
             throw new IllegalArgumentException("Data/hora de início e fim são obrigatórias.");
         }
@@ -108,8 +133,8 @@ public class QuestionService implements IQuestionService {
                     "A data/hora de fim deve ser posterior à data/hora atual.");
         }
 
-        // ---------- pergunta duplicada ----------
-        Map<String,Object> existing = dbCommands.selectOne(
+        // ---------- duplicate question ----------
+        Map<String, Object> existing = dbCommands.selectOne(
                 "SELECT id FROM question " +
                         "WHERE teacher_id = ? AND LOWER(TRIM(statement)) = LOWER(TRIM(?)) " +
                         "LIMIT 1",
@@ -120,7 +145,7 @@ public class QuestionService implements IQuestionService {
                     "Já existe uma pergunta com o mesmo enunciado para este docente.");
         }
 
-        // ---------- inserção + replicação ----------
+        // ---------- insertion + replication ----------
         String accessCode = UUID.randomUUID().toString().substring(0, 6).toUpperCase();
 
         final long[] qIdArr = new long[1];
@@ -154,9 +179,271 @@ public class QuestionService implements IQuestionService {
         return new CreateQuestionResponseDTO((int) qId, accessCode);
     }
 
+    /**
+     * Edits an existing question (when there are no answers registered),
+     * validates the new data, checks for duplicates and enqueues SQL for replication.
+     * <p>
+     * The same business rules as in {@link #createQuestion(CreateQuestionDTO)} are enforced:
+     * <ul>
+     *     <li>Owner teacher must be valid</li>
+     *     <li>Statement mandatory</li>
+     *     <li>At least two options</li>
+     *     <li>No duplicated option letters or texts</li>
+     *     <li>Correct option must exist in the list</li>
+     *     <li>Valid time window (end after start, not in the past)</li>
+     *     <li>No other question for the same teacher with the same statement
+     *         and start/end window (excluding the current one)</li>
+     * </ul>
+     *
+     * @param dto edit parameters
+     * @return {@code true} if the question was updated
+     * @throws Exception if DB access fails or answers already exist
+     */
+    @Override
+    public boolean editQuestion(EditQuestionDTO dto) throws Exception {
+        if (dto == null) {
+            throw new IllegalArgumentException("Dados da pergunta inválidos.");
+        }
+
+        Integer quizId    = dto.questionId();
+        Integer teacherId = dto.teacherId();
+        String statement  = dto.statement();
+        List<Option> options = dto.options();
+        OptionLetter correct = dto.correctOption();
+        LocalDateTime startAt = dto.startAt();
+        LocalDateTime endAt   = dto.endAt();
+
+        if (quizId == null || quizId <= 0) {
+            throw new IllegalArgumentException("ID da pergunta inválido.");
+        }
+        if (teacherId == null || teacherId <= 0) {
+            throw new IllegalArgumentException("ID do docente inválido.");
+        }
+
+        // Load original question to confirm ownership and get original dates
+        Map<String, Object> qRow = dbCommands.selectOne(
+                "SELECT id, start_at, end_at FROM question WHERE id = ? AND teacher_id = ?",
+                quizId,
+                teacherId
+        );
+        if (qRow == null) {
+            throw new IllegalArgumentException("Pergunta não encontrada ou não pertence ao docente.");
+        }
+
+        LocalDateTime originalStart =
+                LocalDateTime.parse((String) qRow.get("start_at"));
+        LocalDateTime originalEnd =
+                LocalDateTime.parse((String) qRow.get("end_at"));
+
+        if (statement == null || statement.isBlank()) {
+            throw new IllegalArgumentException("Preencha o enunciado.");
+        }
+        String normalizedStatement = statement.trim();
+
+        if (options == null || options.isEmpty()) {
+            throw new IllegalArgumentException("A pergunta deve ter, pelo menos, duas opções.");
+        }
+        if (correct == null) {
+            throw new IllegalArgumentException("Opção correta obrigatória.");
+        }
+
+        if (startAt == null || endAt == null) {
+            throw new IllegalArgumentException("Data/hora de início e fim são obrigatórias.");
+        }
+
+        // Always: end after start
+        if (!endAt.isAfter(startAt)) {
+            throw new IllegalArgumentException(
+                    "A data/hora de fim tem de ser posterior à data/hora de início.");
+        }
+
+        // Apply rules relative to "now" only if the window has changed
+        boolean timeWindowChanged =
+                !startAt.equals(originalStart) || !endAt.equals(originalEnd);
+
+        if (timeWindowChanged) {
+            LocalDateTime now = LocalDateTime.now();
+
+            if (startAt.isBefore(now)) {
+                throw new IllegalArgumentException("A pergunta não pode começar no passado.");
+            }
+
+            if (!endAt.isAfter(now)) {
+                throw new IllegalArgumentException(
+                        "A data/hora de fim tem de ser posterior à data/hora atual.");
+            }
+        }
+
+        // Cannot edit if answers already exist
+        Map<String, Object> ans = dbCommands.selectOne(
+                "SELECT 1 as one FROM answer WHERE question_id = ? LIMIT 1",
+                quizId
+        );
+        if (ans != null) {
+            throw new IllegalStateException("Não é possível editar pergunta com respostas registadas.");
+        }
+
+        /* --------- Validate options --------- */
+
+        List<Option> cleanedOptions = new ArrayList<>();
+        Set<OptionLetter> usedLetters = new HashSet<>();
+        Set<String> usedTexts = new HashSet<>();
+        boolean correctOptionExists = false;
+
+        for (Option opt : options) {
+            if (opt == null) {
+                throw new IllegalArgumentException("Opção inválida.");
+            }
+
+            OptionLetter letter = opt.getLetter();
+            if (letter == null) {
+                throw new IllegalArgumentException("Letra da opção não pode ser nula.");
+            }
+
+            String text = opt.getText();
+            if (text == null || text.isBlank()) {
+                throw new IllegalArgumentException("Todas as opções devem ter texto.");
+            }
+
+            String trimmedText = text.trim();
+            String textKey = trimmedText.toLowerCase(Locale.ROOT);
+
+            if (!usedLetters.add(letter)) {
+                throw new IllegalArgumentException("Não podem existir opções com a mesma letra.");
+            }
+
+            if (!usedTexts.add(textKey)) {
+                throw new IllegalArgumentException("Não podem existir opções com o mesmo texto.");
+            }
+
+            if (letter == correct) {
+                correctOptionExists = true;
+            }
+
+            cleanedOptions.add(new Option(letter, trimmedText));
+        }
+
+        if (cleanedOptions.size() < 2) {
+            throw new IllegalArgumentException("A pergunta deve ter, pelo menos, duas opções.");
+        }
+
+        if (!correctOptionExists) {
+            throw new IllegalArgumentException("A opção correta escolhida não existe na lista de opções.");
+        }
+
+        /* --------- Check for duplicate (other record) --------- */
+
+        Map<String, Object> duplicate = dbCommands.selectOne(
+                "SELECT id FROM question " +
+                        "WHERE teacher_id = ? " +
+                        "  AND id <> ? " +
+                        "  AND lower(trim(statement)) = lower(trim(?)) " +
+                        "  AND start_at = ? " +
+                        "  AND end_at   = ? " +
+                        "LIMIT 1",
+                teacherId,
+                quizId,
+                normalizedStatement,
+                startAt.toString(),
+                endAt.toString()
+        );
+        if (duplicate != null) {
+            throw new IllegalArgumentException(
+                    "Já existe outra pergunta idêntica (mesmo enunciado e período) para este docente."
+            );
+        }
+
+        /* --------- Update in transaction + replication --------- */
+
+        dbCommands.runInTransaction(tx -> {
+            tx.executeUpdate(
+                    "UPDATE question SET statement = ?, correct_option = ?, start_at = ?, end_at = ? " +
+                            "WHERE id = ? AND teacher_id = ?",
+                    normalizedStatement,
+                    correct.name(),
+                    startAt.toString(),
+                    endAt.toString(),
+                    quizId,
+                    teacherId
+            );
+            tx.executeUpdate("DELETE FROM option WHERE question_id = ?", quizId);
+            for (Option o : cleanedOptions) {
+                tx.executeUpdate(
+                        "INSERT INTO option (question_id, letter, text) VALUES (?, ?, ?)",
+                        quizId,
+                        o.getLetter().name(),
+                        o.getText()
+                );
+            }
+        });
+
+        List<String> aux = new ArrayList<>();
+
+        aux.add(
+                "UPDATE question SET statement='" + escape(normalizedStatement) +
+                        "', correct_option='" + correct.name() +
+                        "', start_at='" + startAt +
+                        "', end_at='" + endAt +
+                        "' WHERE id=" + quizId +
+                        " AND teacher_id=" + teacherId + ";"
+        );
+
+        aux.add("DELETE FROM option WHERE question_id=" + quizId + ";");
+
+        for (Option o : cleanedOptions) {
+            aux.add(
+                    "INSERT INTO option (question_id, letter, text) VALUES (" +
+                            quizId + ", '" + o.getLetter().name() + "', '" + escape(o.getText()) + "');"
+            );
+        }
+
+        context.queue().add(aux);
+        return true;
+    }
 
     /**
-     * Lists questions for a teacher with an optional filter (active, future, expired or null).
+     * Deletes a question if there are no answers registered
+     * and enqueues SQL statements for replication.
+     *
+     * @param dto delete parameters
+     * @return {@code true} if the question was deleted
+     * @throws Exception if DB access fails or answers already exist
+     */
+    @Override
+    public boolean deleteQuestion(DeleteQuestionDTO dto) throws Exception {
+        Integer qId = dto.questionId();
+        Integer teacherId = dto.teacherId();
+
+        Map<String, Object> ans = dbCommands.selectOne(
+                "SELECT 1 as one FROM answer WHERE question_id = ? LIMIT 1",
+                qId
+        );
+        if (ans != null) {
+            throw new IllegalStateException("Não é possível eliminar pergunta com respostas registadas");
+        }
+
+        dbCommands.runInTransaction(tx -> {
+            tx.executeUpdate("DELETE FROM option WHERE question_id = ?", qId);
+            tx.executeUpdate("DELETE FROM question WHERE id = ? AND teacher_id = ?", qId, teacherId);
+        });
+
+        List<String> aux = new ArrayList<>();
+
+        aux.add("DELETE FROM option WHERE question_id=" + qId + ";");
+        aux.add("DELETE FROM question WHERE id=" + qId + " AND teacher_id=" + teacherId + ";");
+
+        context.queue().add(aux);
+
+        return true;
+    }
+
+    /* =========================================================
+     *                        QUERIES
+     * ========================================================= */
+
+    /**
+     * Lists questions for a teacher with an optional filter
+     * (active, future, expired or {@code null} for all).
      *
      * @param dto list parameters (teacher and filter)
      * @return list of questions
@@ -265,268 +552,34 @@ public class QuestionService implements IQuestionService {
         );
     }
 
-    // Class: pt.isec.server.services.question.QuestionService
-
     /**
-     * Edits an existing question (when there are no answers registered),
-     * validates the new data, checks for duplicates and enqueues SQL for replication.
+     * Retrieves the teacher ID associated with a given question.
      * <p>
-     * The same business rules as in {@link #createQuestion(CreateQuestionDTO)} are enforced:
-     * <ul>
-     *     <li>Owner teacher must be valid</li>
-     *     <li>Statement mandatory</li>
-     *     <li>At least two options</li>
-     *     <li>No duplicated option letters or texts</li>
-     *     <li>Correct option must exist in the list</li>
-     *     <li>Valid time window (end after start, not in the past)</li>
-     *     <li>No other question for the same teacher with the same statement
-     *         and start/end window (excluding the current one)</li>
-     * </ul>
+     * Executes a lookup in the database for the question with the specified ID.
+     * If no matching record is found, this method returns {@code null}.
      *
-     * @param dto edit parameters
-     * @return {@code true} if the question was updated
-     * @throws Exception if DB access fails or answers already exist
+     * @param questionId the ID of the question to look up
+     * @return the teacher ID, or {@code null} if the question does not exist
+     * @throws Exception if a database access error occurs
      */
     @Override
-    public boolean editQuestion(EditQuestionDTO dto) throws Exception {
-        if (dto == null) {
-            throw new IllegalArgumentException("Dados da pergunta inválidos.");
-        }
-
-        Integer quizId    = dto.questionId();
-        Integer teacherId = dto.teacherId();
-        String statement  = dto.statement();
-        List<Option> options = dto.options();
-        OptionLetter correct = dto.correctOption();
-        LocalDateTime startAt = dto.startAt();
-        LocalDateTime endAt   = dto.endAt();
-
-        if (quizId == null || quizId <= 0) {
-            throw new IllegalArgumentException("ID da pergunta inválido.");
-        }
-        if (teacherId == null || teacherId <= 0) {
-            throw new IllegalArgumentException("ID do docente inválido.");
-        }
-
-        // Carregar pergunta original para confirmar ownership e obter as datas
-        Map<String, Object> qRow = dbCommands.selectOne(
-                "SELECT id, start_at, end_at FROM question WHERE id = ? AND teacher_id = ?",
-                quizId,
-                teacherId
+    public Integer findTeacherIdByQuestionId(int questionId) throws Exception {
+        Map<String, Object> row = dbCommands.selectOne(
+                "SELECT teacher_id FROM question WHERE id = ? LIMIT 1",
+                questionId
         );
-        if (qRow == null) {
-            throw new IllegalArgumentException("Pergunta não encontrada ou não pertence ao docente.");
+        if (row == null) {
+            return null;
         }
-
-        LocalDateTime originalStart =
-                LocalDateTime.parse((String) qRow.get("start_at"));
-        LocalDateTime originalEnd =
-                LocalDateTime.parse((String) qRow.get("end_at"));
-
-        if (statement == null || statement.isBlank()) {
-            throw new IllegalArgumentException("Preencha o enunciado.");
-        }
-        String normalizedStatement = statement.trim();
-
-        if (options == null || options.isEmpty()) {
-            throw new IllegalArgumentException("A pergunta deve ter, pelo menos, duas opções.");
-        }
-        if (correct == null) {
-            throw new IllegalArgumentException("Opção correta obrigatória.");
-        }
-
-        if (startAt == null || endAt == null) {
-            throw new IllegalArgumentException("Data/hora de início e fim são obrigatórias.");
-        }
-
-        // Sempre: fim depois do início
-        if (!endAt.isAfter(startAt)) {
-            throw new IllegalArgumentException(
-                    "A data/hora de fim tem de ser posterior à data/hora de início.");
-        }
-
-        // Só aplicar regras em relação ao "agora" se o período for ALTERADO
-        boolean timeWindowChanged =
-                !startAt.equals(originalStart) || !endAt.equals(originalEnd);
-
-        if (timeWindowChanged) {
-            LocalDateTime now = LocalDateTime.now();
-
-            if (startAt.isBefore(now)) {
-                throw new IllegalArgumentException("A pergunta não pode começar no passado.");
-            }
-
-            if (!endAt.isAfter(now)) {
-                throw new IllegalArgumentException(
-                        "A data/hora de fim tem de ser posterior à data/hora atual.");
-            }
-        }
-
-        // Não pode editar se já existirem respostas
-        Map<String, Object> ans = dbCommands.selectOne(
-                "SELECT 1 as one FROM answer WHERE question_id = ? LIMIT 1",
-                quizId
-        );
-        if (ans != null) {
-            throw new IllegalStateException("Não é possível editar pergunta com respostas registadas.");
-        }
-
-        /* --------- Validar opções --------- */
-
-        List<Option> cleanedOptions = new ArrayList<>();
-        java.util.Set<OptionLetter> usedLetters = new java.util.HashSet<>();
-        java.util.Set<String> usedTexts = new java.util.HashSet<>();
-        boolean correctOptionExists = false;
-
-        for (Option opt : options) {
-            if (opt == null) {
-                throw new IllegalArgumentException("Opção inválida.");
-            }
-
-            OptionLetter letter = opt.getLetter();
-            if (letter == null) {
-                throw new IllegalArgumentException("Letra da opção não pode ser nula.");
-            }
-
-            String text = opt.getText();
-            if (text == null || text.isBlank()) {
-                throw new IllegalArgumentException("Todas as opções devem ter texto.");
-            }
-
-            String trimmedText = text.trim();
-            String textKey = trimmedText.toLowerCase();
-
-            if (!usedLetters.add(letter)) {
-                throw new IllegalArgumentException("Não podem existir opções com a mesma letra.");
-            }
-
-            if (!usedTexts.add(textKey)) {
-                throw new IllegalArgumentException("Não podem existir opções com o mesmo texto.");
-            }
-
-            if (letter == correct) {
-                correctOptionExists = true;
-            }
-
-            cleanedOptions.add(new Option(letter, trimmedText));
-        }
-
-        if (cleanedOptions.size() < 2) {
-            throw new IllegalArgumentException("A pergunta deve ter, pelo menos, duas opções.");
-        }
-
-        if (!correctOptionExists) {
-            throw new IllegalArgumentException("A opção correta escolhida não existe na lista de opções.");
-        }
-
-        /* --------- Verificar duplicado (outro registo) --------- */
-
-        Map<String, Object> duplicate = dbCommands.selectOne(
-                "SELECT id FROM question " +
-                        "WHERE teacher_id = ? " +
-                        "  AND id <> ? " +
-                        "  AND lower(trim(statement)) = lower(trim(?)) " +
-                        "  AND start_at = ? " +
-                        "  AND end_at   = ? " +
-                        "LIMIT 1",
-                teacherId,
-                quizId,
-                normalizedStatement,
-                startAt.toString(),
-                endAt.toString()
-        );
-        if (duplicate != null) {
-            throw new IllegalArgumentException(
-                    "Já existe outra pergunta idêntica (mesmo enunciado e período) para este docente."
-            );
-        }
-
-        /* --------- Atualização em transação + replicação --------- */
-
-        dbCommands.runInTransaction(tx -> {
-            tx.executeUpdate(
-                    "UPDATE question SET statement = ?, correct_option = ?, start_at = ?, end_at = ? " +
-                            "WHERE id = ? AND teacher_id = ?",
-                    normalizedStatement,
-                    correct.name(),
-                    startAt.toString(),
-                    endAt.toString(),
-                    quizId,
-                    teacherId
-            );
-            tx.executeUpdate("DELETE FROM option WHERE question_id = ?", quizId);
-            for (Option o : cleanedOptions) {
-                tx.executeUpdate(
-                        "INSERT INTO option (question_id, letter, text) VALUES (?, ?, ?)",
-                        quizId,
-                        o.getLetter().name(),
-                        o.getText()
-                );
-            }
-        });
-
-        List<String> aux = new ArrayList<>();
-
-        aux.add(
-                "UPDATE question SET statement='" + escape(normalizedStatement) +
-                        "', correct_option='" + correct.name() +
-                        "', start_at='" + startAt +
-                        "', end_at='" + endAt +
-                        "' WHERE id=" + quizId +
-                        " AND teacher_id=" + teacherId + ";"
-        );
-
-        aux.add("DELETE FROM option WHERE question_id=" + quizId + ";");
-
-        for (Option o : cleanedOptions) {
-            aux.add(
-                    "INSERT INTO option (question_id, letter, text) VALUES (" +
-                            quizId + ", '" + o.getLetter().name() + "', '" + escape(o.getText()) + "');"
-            );
-        }
-
-        context.queue().add(aux);
-        return true;
+        return ((Number) row.get("teacher_id")).intValue();
     }
 
-    /**
-     * Deletes a question if there are no answers registered.
-     * Also enqueues SQL for replication.
-     *
-     * @param dto delete parameters
-     * @return {@code true} if the question was deleted
-     * @throws Exception if DB access fails or answers already exist
-     */
-    @Override
-    public boolean deleteQuestion(DeleteQuestionDTO dto) throws Exception {
-        Integer qId = dto.questionId();
-        Integer teacherId = dto.teacherId();
-
-        Map<String, Object> ans = dbCommands.selectOne(
-                "SELECT 1 as one FROM answer WHERE question_id = ? LIMIT 1",
-                qId
-        );
-        if (ans != null) {
-            throw new IllegalStateException("Não é possível eliminar pergunta com respostas registadas");
-        }
-
-        dbCommands.runInTransaction(tx -> {
-            tx.executeUpdate("DELETE FROM option WHERE question_id = ?", qId);
-            tx.executeUpdate("DELETE FROM question WHERE id = ? AND teacher_id = ?", qId, teacherId);
-        });
-
-        List<String> aux = new ArrayList<>();
-
-        aux.add("DELETE FROM option WHERE question_id=" + qId + ";");
-        aux.add("DELETE FROM question WHERE id=" + qId + " AND teacher_id=" + teacherId + ";");
-
-        context.queue().add(aux);
-
-        return true;
-    }
+    /* =========================================================
+     *                       PRIVATE HELPERS
+     * ========================================================= */
 
     /**
-     * Loads the options of a question.
+     * Loads all answer options for a given question.
      *
      * @param questionId question ID
      * @return list of options
@@ -534,7 +587,7 @@ public class QuestionService implements IQuestionService {
      */
     private List<Option> loadOptions(int questionId) throws Exception {
         List<Option> opts = new ArrayList<>();
-        try (var con = java.sql.DriverManager.getConnection(dbCommands.getUrl());
+        try (var con = DriverManager.getConnection(dbCommands.getUrl());
              var ps = con.prepareStatement(
                      "SELECT letter, text FROM option WHERE question_id = ? ORDER BY letter")) {
             ps.setInt(1, questionId);
@@ -553,32 +606,9 @@ public class QuestionService implements IQuestionService {
      * Escapes single quotes for safe SQL string literal construction.
      *
      * @param s input string
-     * @return escaped string (or empty string if {@code s} is null)
+     * @return escaped string (or empty string if {@code s} is {@code null})
      */
     private static String escape(String s) {
         return s == null ? "" : s.replace("'", "''");
     }
-
-    /**
-     * Retrieves the teacher ID associated with a given question.
-     * <p>
-     * Executes a lookup in the database for the question with the specified ID.
-     * If no matching record is found, this method returns {@code null}.
-     *
-     * @param questionId the ID of the question to look up
-     * @return the teacher ID, or {@code null} if the question does not exist
-     * @throws Exception if a database error occurs
-     */
-    @Override
-    public Integer findTeacherIdByQuestionId(int questionId) throws Exception {
-        Map<String, Object> row = dbCommands.selectOne(
-                "SELECT teacher_id FROM question WHERE id = ? LIMIT 1",
-                questionId
-        );
-        if (row == null) {
-            return null;
-        }
-        return ((Number) row.get("teacher_id")).intValue();
-    }
-
 }

@@ -1,5 +1,4 @@
 package pt.isec.client.ui.util;
-
 import javafx.application.Platform;
 
 /**
@@ -7,9 +6,7 @@ import javafx.application.Platform;
  */
 public final class UiUtils {
 
-    private UiUtils() {
-        // utility class
-    }
+    private UiUtils() {}
 
     /**
      * Ensures that the given runnable is executed on the JavaFX Application Thread.
@@ -29,33 +26,5 @@ public final class UiUtils {
         } else {
             Platform.runLater(runnable);
         }
-    }
-
-    /**
-     * Builds initials from a given text or name.
-     * <p>
-     * Examples:
-     * <ul>
-     *     <li>{@code "João Silva" -> "JS"}</li>
-     *     <li>{@code "Maria" -> "M"}</li>
-     *     <li>{@code null / empty -> "?"}</li>
-     * </ul>
-     *
-     * @param text full name or arbitrary text
-     * @return initials, or {@code "?"} if the text is {@code null} or blank
-     */
-    public static String getInitials(String text) {
-        if (text == null || text.isBlank()) {
-            return "?";
-        }
-
-        String[] parts = text.trim().split("\\s+");
-        if (parts.length == 1) {
-            return parts[0].substring(0, 1).toUpperCase();
-        }
-
-        char first = parts[0].charAt(0);
-        char last = parts[parts.length - 1].charAt(0);
-        return ("" + first + last).toUpperCase();
     }
 }

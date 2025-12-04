@@ -1,15 +1,19 @@
 package pt.isec.server.threads;
-
 import pt.isec.server.core.IServerThreadContext;
 import pt.isec.server.core.ServerManager;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;
 import pt.isec.common.util.Log;
-
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.net.*;
+import java.net.DatagramPacket;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.MulticastSocket;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -24,17 +28,24 @@ import java.util.concurrent.BlockingQueue;
  * <p>
  * Responsibilities:
  * <ul>
- *     <li>Primary node: sends multicast heartbeats, optionally with pending SQL</li>
- *     <li>Backup nodes: receive heartbeats, apply SQL or request DB copy</li>
- *     <li>Primary node: handles DB copy requests via a separate TCP server socket</li>
+ *     <li>Primary node: sends multicast heartbeats, optionally with pending SQL.</li>
+ *     <li>Backup nodes: receive heartbeats, apply SQL or request DB copy.</li>
+ *     <li>Primary node: handles DB copy requests via a separate TCP server socket.</li>
  * </ul>
  */
 public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
+
+    /** Interval between heartbeats in milliseconds (when there is no pending SQL). */
     private static final int HEARTBEAT_INTERVAL_MS = 5000;
+    /** Sleep time between loop iterations in milliseconds. */
     private static final int LOOP_SLEEP_MS = 50;
+    /** Multicast time-to-live. */
     private static final int MULTICAST_TTL = 1;
+    /** Receive timeout for the multicast socket (milliseconds). */
     private static final int RX_TIMEOUT_MS = 500;
+    /** Accept timeout for the DB copy server socket (milliseconds). */
     private static final int ACCEPT_TIMEOUT_MS = 500;
+    /** Buffer size for UDP packets. */
     private static final int BUFFER_SIZE = 4096;
 
     private final IServerThreadContext threadInfo;
@@ -53,12 +64,13 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
     /**
      * Main loop:
      * <ul>
-     *     <li>If primary, send heartbeats and pending SQL</li>
-     *     <li>If backup, receive heartbeats and apply SQL / request DB copy</li>
-     *     <li>Handle DB copy requests (primary side) via TCP</li>
+     *     <li>If primary, send heartbeats and pending SQL.</li>
+     *     <li>If backup, receive heartbeats and apply SQL or request DB copy.</li>
+     *     <li>Handle DB copy requests (primary side) via TCP.</li>
      * </ul>
      */
     @Override
+    @SuppressWarnings("BusyWait")
     public void run() {
         try (MulticastSocket _ms = new MulticastSocket(threadInfo.multicastPort());
              ServerSocket _ss = new ServerSocket(threadInfo.dbCopyPort())) {
@@ -70,10 +82,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
             _ms.setSoTimeout(RX_TIMEOUT_MS);
             _ms.setTimeToLive(MULTICAST_TTL);
             _ms.setNetworkInterface(threadInfo.multicastInterface());
-            try {
-                _ms.setLoopbackMode(false);
-            } catch (Throwable ignore) {
-            }
+            configureLoopbackMode(_ms);
 
             InetAddress grp = InetAddress.getByName(threadInfo.multicastGroup());
             _ms.joinGroup(new InetSocketAddress(grp, threadInfo.multicastPort()), threadInfo.multicastInterface());
@@ -97,7 +106,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                     handleBackupHeartbeatLoop(_ms, pkt);
                 }
 
-                // accept DB copy requests (primary side)
+                // Accept DB copy requests (primary side)
                 handleDbCopyAcceptLoop(_ss);
 
                 Thread.sleep(LOOP_SLEEP_MS);
@@ -112,17 +121,44 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
     }
 
     /**
+     * Closes multicast and DB copy sockets if open.
+     */
+    @Override
+    public void close() {
+        if (ms != null) {
+            try {
+                ms.close();
+            } catch (Exception ignore) {
+                // ignore
+            }
+        }
+        if (dbCopyServerSocket != null) {
+            try {
+                dbCopyServerSocket.close();
+            } catch (Exception ignore) {
+                // ignore
+            }
+        }
+    }
+
+    /* ===================================================================== */
+    /* ===============   PRIMARY / BACKUP LOOP HELPERS   ==================== */
+    /* ===================================================================== */
+
+    /**
      * Primary-only part of the loop: sends heartbeats, optionally including SQL statements.
      *
      * @param _ms      multicast socket
      * @param grp      multicast group
      * @param lastSent timestamp of last heartbeat
      * @param now      current time in millis
-     * @return new lastSent timestamp
+     * @return new {@code lastSent} timestamp
      * @throws IOException if sending the heartbeat fails
      */
-    private long handlePrimaryHeartbeatLoop(MulticastSocket _ms, InetAddress grp, long lastSent, long now)
-            throws IOException {
+    private long handlePrimaryHeartbeatLoop(MulticastSocket _ms,
+                                            InetAddress grp,
+                                            long lastSent,
+                                            long now) throws IOException {
 
         List<String> sqlToSend = null;
 
@@ -161,50 +197,49 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                 // ignore our own heartbeats
                 boolean fromMe = senderIp.equals(threadInfo.serverTcpIp()) && rxClientPort == threadInfo.serverTcpPort();
                 if (!fromMe) {
-
                     long rxVersion = extractLong(msg, "version");
                     boolean versionMismatch;
 
                     // Apply SQL updates encoded in base64
                     String sqlEncoded = extractString(msg, "sql");
                     if (sqlEncoded != null && !sqlEncoded.isBlank()) {
-                        Log.info(ClusterHeartbeatThread.class,
-                                "[MC] Heartbeat with SQL received from primary; applying incremental updates.");
+                        Log.info(ClusterHeartbeatThread.class, "[MC] Heartbeat with SQL received from primary; applying incremental updates.");
 
                         versionMismatch = rxVersion >= 0 && rxVersion != threadInfo.dbVersion() + 1;
 
                         if (versionMismatch) {
                             Log.error(ClusterHeartbeatThread.class,
-                                    "[MC] Unexpected DB version while applying SQL (expected=%d, received=%d). Shutting down server.",
-                                    threadInfo.dbVersion() + 1, rxVersion);
+                                    "[MC] Unexpected DB version while applying SQL (expected=%d, received=%d). " +
+                                            "Shutting down server.", threadInfo.dbVersion() + 1, rxVersion);
                             threadInfo.shutdownServer();
                             return;
                         }
-
                         byte[] bytes = Base64.getDecoder().decode(sqlEncoded);
                         String joined = new String(bytes, StandardCharsets.UTF_8);
 
                         String[] stmts = joined.split(";;");
                         for (String s : stmts) {
-                            s = s.trim();
-                            if (s.isEmpty()) {
+                            String trimmed = s.trim();
+                            if (trimmed.isEmpty()) {
                                 continue;
                             }
-                            threadInfo.getDb().executeUpdate(s);
+                            threadInfo.getDb().executeUpdate(trimmed);
                             Log.info(ClusterHeartbeatThread.class,
-                                    "[MC] SQL executed from heartbeat: %s", s);
+                                    "[MC] SQL executed from heartbeat: %s", trimmed);
                         }
                         threadInfo.setDbVersion(rxVersion);
                     } else {
 
                         int rxDbPort = (int) extractLong(msg, "dbPort");
 
-                        boolean missingDb = !Files.exists(threadInfo.dbPath());
+                        Path dbPath = threadInfo.dbPath();
+                        boolean missingDb = !Files.exists(dbPath);
 
                         if (missingDb) {
                             Log.error(ClusterHeartbeatThread.class,
-                                    "[MC] DB copy required: missingDb=%s, localVersion=%d, remoteVersion=%d, primary=%s:%d",
-                                    missingDb, threadInfo.dbVersion(), rxVersion, senderIp, rxDbPort);
+                                    "[MC] DB copy required: missingDb=%s, localVersion=%d, remoteVersion=%d, " +
+                                            "primary=%s:%d",
+                                    true, threadInfo.dbVersion(), rxVersion, senderIp, rxDbPort);
 
                             if (rxDbPort > 0) {
                                 if (threadInfo instanceof ServerManager sn) {
@@ -236,7 +271,8 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
 
                         if (versionMismatch) {
                             Log.error(ClusterHeartbeatThread.class,
-                                    "[MC] DB version mismatch detected (received=%d, local=%d). Shutting down server.",
+                                    "[MC] DB version mismatch detected (received=%d, local=%d). " +
+                                            "Shutting down server.",
                                     rxVersion, threadInfo.dbVersion());
                             threadInfo.shutdownServer();
                         }
@@ -267,33 +303,14 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
         } catch (Exception e) {
             if (threadInfo.isRunning()) {
                 Log.error(ClusterHeartbeatThread.class,
-                        "[DBCOPY] Error accepting DB copy request: %s", e.getMessage());
+                        "[DB COPY] Error accepting DB copy request: %s", e.getMessage());
             }
         }
     }
 
-    /**
-     * Extracts a long value from a semicolon-separated key=value payload.
-     *
-     * @param payload full payload string
-     * @param key     key to search for
-     * @return parsed long value or -1 on failure
-     */
-    private static long extractLong(String payload, String key) {
-        String needle = key + "=";
-        int i = payload.indexOf(needle);
-        if (i < 0) {
-            return -1;
-        }
-        int j = payload.indexOf(';', i + needle.length());
-        String raw = (j > 0 ? payload.substring(i + needle.length(), j)
-                : payload.substring(i + needle.length()));
-        try {
-            return Long.parseLong(raw.trim());
-        } catch (Exception e) {
-            return -1;
-        }
-    }
+    /* ===================================================================== */
+    /* ===================   HEARTBEAT / DB COPY I/O   ====================== */
+    /* ===================================================================== */
 
     /**
      * Sends a multicast heartbeat with optional SQL payload (base64 encoded).
@@ -323,25 +340,6 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
     }
 
     /**
-     * Extracts a string value from a semicolon-separated key=value payload.
-     *
-     * @param payload full payload string
-     * @param key     key to search for
-     * @return string value or {@code null} if not found
-     */
-    private static String extractString(String payload, String key) {
-        String needle = key + "=";
-        int i = payload.indexOf(needle);
-        if (i < 0) {
-            return null;
-        }
-        int j = payload.indexOf(';', i + needle.length());
-        String raw = (j > 0 ? payload.substring(i + needle.length(), j)
-                : payload.substring(i + needle.length()));
-        return raw.trim();
-    }
-
-    /**
      * Backup side: requests a DB copy from the primary and replaces the local DB file.
      *
      * @param primaryIp   primary server IP
@@ -358,10 +356,10 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
             conn.setReadTimeout(Duration.ofSeconds(30));
             conn.sendMessage(new TcpMessage<>(MessageType.DB_REQUEST_COPY, "please"));
 
-            var resp = conn.receiveMessage();
+            TcpMessage<?> resp = conn.receiveMessage();
             if (resp == null || resp.getType() != MessageType.ACK) {
                 Log.error(ClusterHeartbeatThread.class,
-                        "[DBCOPY/RQ] Invalid response to copy request (expected ACK copy-start).");
+                        "[DB COPY/RQ] Invalid response to copy request (expected ACK copy-start).");
                 return;
             }
 
@@ -373,19 +371,23 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                 total = conn.receiveExactly(fos, size);
             }
             Log.info(ClusterHeartbeatThread.class,
-                    "[DBCOPY/RQ] %d bytes received for DB copy -> %s%n", total, tmp);
+                    "[DB COPY/RQ] %d bytes received for DB copy -> %s%n", total, tmp);
 
             boolean moved = false;
             try {
-                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                Files.move(tmp, target,
+                        StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE);
                 moved = true;
             } catch (Exception ignore) {
+                // ignore and try fallback strategies
             }
             if (!moved) {
                 try {
                     Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
                     moved = true;
                 } catch (Exception ignore) {
+                    // ignore and try fallback strategies
                 }
             }
             if (!moved) {
@@ -395,25 +397,26 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                     moved = true;
                 } catch (Exception e) {
                     Log.error(ClusterHeartbeatThread.class,
-                            "[DBCOPY/RQ] Failed copy+delete when replacing DB file: %s", e.getMessage());
+                            "[DB COPY/RQ] Failed copy+delete when replacing DB file: %s", e.getMessage());
                 }
             }
 
             if (moved) {
                 Log.info(ClusterHeartbeatThread.class,
-                        "[DBCOPY/RQ] DB copy completed at %s (new version=%d)", target, rxVersion);
+                        "[DB COPY/RQ] DB copy completed at %s (new version=%d)", target, rxVersion);
                 threadInfo.setDbVersion(rxVersion);
             } else {
                 Log.error(ClusterHeartbeatThread.class,
-                        "[DBCOPY/RQ] Could not replace %s (temporary file left: %s)", target, tmp);
+                        "[DB COPY/RQ] Could not replace %s (temporary file left: %s)", target, tmp);
             }
 
         } catch (Exception e) {
             Log.error(ClusterHeartbeatThread.class,
-                    "[DBCOPY/RQ] Error during DB copy: %s", e.getMessage());
+                    "[DB COPY/RQ] Error during DB copy: %s", e.getMessage());
             try {
                 Files.deleteIfExists(tmp);
             } catch (Exception ignore) {
+                // ignore cleanup failure
             }
         }
     }
@@ -421,10 +424,11 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
     /**
      * Primary side: handles a single DB copy session for {@link MessageType#DB_REQUEST_COPY}.
      *
-     * @param s accepted socket for the DB copy session
+     * @param acceptedSocket accepted socket for the DB copy session
      */
-    private void handleDbCopySession(Socket s) {
-        try (NetworkTcpConnection connection = new NetworkTcpConnection(s)) {
+    private void handleDbCopySession(Socket acceptedSocket) {
+        try (Socket s = acceptedSocket;
+             NetworkTcpConnection connection = new NetworkTcpConnection(s)) {
 
             TcpMessage<?> req = connection.receiveMessage();
             if (req == null || req.getType() != MessageType.DB_REQUEST_COPY) {
@@ -446,36 +450,76 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
             try (FileInputStream fis = new FileInputStream(dbFile.toFile())) {
                 long sent = connection.sendStreamViaObjectOut(fis, size);
                 Log.info(ClusterHeartbeatThread.class,
-                        "[DBCOPY] %d bytes sent in DB copy -> %s%n", sent, dbFile);
+                        "[DB COPY] %d bytes sent in DB copy -> %s%n", sent, dbFile);
             }
 
         } catch (Exception e) {
             Log.error(ClusterHeartbeatThread.class,
-                    "[DBCOPY] Error in DB copy session: %s", e.getMessage());
-        } finally {
-            try {
-                s.close();
-            } catch (Exception ignore) {
-            }
+                    "[DB COPY] Error in DB copy session: %s", e.getMessage());
+        }
+    }
+
+    /* ===================================================================== */
+    /* =========================   UTIL METHODS   =========================== */
+    /* ===================================================================== */
+
+    /**
+     * Extracts a long value from a semicolon-separated {@code key=value} payload.
+     *
+     * @param payload full payload string
+     * @param key     key to search for
+     * @return parsed long value or {@code -1} on failure
+     */
+    private static long extractLong(String payload, String key) {
+        String needle = key + "=";
+        int i = payload.indexOf(needle);
+        if (i < 0) {
+            return -1;
+        }
+        int j = payload.indexOf(';', i + needle.length());
+        String raw = (j > 0 ? payload.substring(i + needle.length(), j)
+                : payload.substring(i + needle.length()));
+        try {
+            return Long.parseLong(raw.trim());
+        } catch (Exception e) {
+            return -1;
         }
     }
 
     /**
-     * Closes multicast and DB copy sockets if open.
+     * Extracts a string value from a semicolon-separated {@code key=value} payload.
+     *
+     * @param payload full payload string
+     * @param key     key to search for
+     * @return string value or {@code null} if not found
      */
-    @Override
-    public void close() {
-        if (ms != null) {
-            try {
-                ms.close();
-            } catch (Exception ignore) {
-            }
+    @SuppressWarnings("SameParameterValue")
+    private static String extractString(String payload, String key) {
+        String needle = key + "=";
+        int i = payload.indexOf(needle);
+        if (i < 0) {
+            return null;
         }
-        if (dbCopyServerSocket != null) {
-            try {
-                dbCopyServerSocket.close();
-            } catch (Exception ignore) {
-            }
+        int j = payload.indexOf(';', i + needle.length());
+        String raw = (j > 0 ? payload.substring(i + needle.length(), j)
+                : payload.substring(i + needle.length()));
+        return raw.trim();
+    }
+
+    /**
+     * Configures loopback mode for the multicast socket.
+     * <p>
+     * The method isolates the call to {@link MulticastSocket#setLoopbackMode(boolean)},
+     * which is deprecated, so that the associated warning can be suppressed in a single place.
+     *
+     * @param socket multicast socket to configure
+     */
+    @SuppressWarnings("deprecation")
+    private void configureLoopbackMode(MulticastSocket socket) {
+        try {
+            socket.setLoopbackMode(false);
+        } catch (Throwable ignore) {
+            // Some JVMs may not support this; ignore any failure.
         }
     }
 }

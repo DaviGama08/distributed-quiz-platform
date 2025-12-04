@@ -1,23 +1,34 @@
 package pt.isec.common.model.question;
 
+import java.io.Serial;
 import java.io.Serializable;
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Statistics of answers for a question.
  * <p>
  * Tracks how many answers were given for each option and computes percentages.
  */
+@SuppressWarnings("unused") // used as a DTO; many getters are not referenced directly in this module
 public class AnswerStatistics implements Serializable {
+
+    @Serial
     private static final long serialVersionUID = 1L;
+
+    /* ===================== FIELDS ===================== */
 
     private Integer questionId;
     private int totalAnswers;
     private Map<OptionLetter, Integer> countByOption;
-    private Map<OptionLetter, Double> percentageByOption;
+    private final Map<OptionLetter, Double> percentageByOption;
     private OptionLetter correctOption;
     private int correctAnswersCount;
     private double correctPercentage;
+
+    /* ===================== CONSTRUCTORS ===================== */
 
     /**
      * Creates an empty statistics object.
@@ -41,6 +52,8 @@ public class AnswerStatistics implements Serializable {
         this.correctAnswersCount = 0;
         this.correctPercentage = 0.0;
     }
+
+    /* ===================== BUSINESS METHODS ===================== */
 
     /**
      * Adds a single answer to the statistics.
@@ -70,6 +83,20 @@ public class AnswerStatistics implements Serializable {
     }
 
     /**
+     * Sets counts for each option directly (useful when loading from DB).
+     *
+     * @param countByOption map of option to answer count
+     */
+    public void setCountByOption(Map<OptionLetter, Integer> countByOption) {
+        this.countByOption = new HashMap<>(countByOption);
+        this.totalAnswers = countByOption.values().stream()
+                .mapToInt(Integer::intValue)
+                .sum();
+        this.correctAnswersCount = countByOption.getOrDefault(correctOption, 0);
+        recalculatePercentages();
+    }
+
+    /**
      * Recomputes percentages based on the current counts.
      */
     private void recalculatePercentages() {
@@ -86,55 +113,6 @@ public class AnswerStatistics implements Serializable {
         }
 
         correctPercentage = (correctAnswersCount * 100.0) / totalAnswers;
-    }
-
-    /**
-     * Sets counts for each option directly (useful when loading from DB).
-     *
-     * @param countByOption map of option to answer count
-     */
-    public void setCountByOption(Map<OptionLetter, Integer> countByOption) {
-        this.countByOption = new HashMap<>(countByOption);
-        this.totalAnswers = countByOption.values().stream().mapToInt(Integer::intValue).sum();
-        this.correctAnswersCount = countByOption.getOrDefault(correctOption, 0);
-        recalculatePercentages();
-    }
-
-    // Getters
-    public Integer getQuestionId() {
-        return questionId;
-    }
-
-    public int getTotalAnswers() {
-        return totalAnswers;
-    }
-
-    public Map<OptionLetter, Integer> getCountByOption() {
-        return Collections.unmodifiableMap(countByOption);
-    }
-
-    public Map<OptionLetter, Double> getPercentageByOption() {
-        return Collections.unmodifiableMap(percentageByOption);
-    }
-
-    public OptionLetter getCorrectOption() {
-        return correctOption;
-    }
-
-    public int getCorrectAnswersCount() {
-        return correctAnswersCount;
-    }
-
-    public int getIncorrectAnswersCount() {
-        return totalAnswers - correctAnswersCount;
-    }
-
-    public double getCorrectPercentage() {
-        return correctPercentage;
-    }
-
-    public double getIncorrectPercentage() {
-        return 100.0 - correctPercentage;
     }
 
     /**
@@ -190,14 +168,57 @@ public class AnswerStatistics implements Serializable {
         return totalAnswers > 0;
     }
 
-    // Setters
+    /* ===================== GETTERS ===================== */
+
+    public Integer getQuestionId() {
+        return questionId;
+    }
+
+    public int getTotalAnswers() {
+        return totalAnswers;
+    }
+
+    public Map<OptionLetter, Integer> getCountByOption() {
+        return Collections.unmodifiableMap(countByOption);
+    }
+
+    public Map<OptionLetter, Double> getPercentageByOption() {
+        return Collections.unmodifiableMap(percentageByOption);
+    }
+
+    public OptionLetter getCorrectOption() {
+        return correctOption;
+    }
+
+    public int getCorrectAnswersCount() {
+        return correctAnswersCount;
+    }
+
+    public int getIncorrectAnswersCount() {
+        return totalAnswers - correctAnswersCount;
+    }
+
+    public double getCorrectPercentage() {
+        return correctPercentage;
+    }
+
+    public double getIncorrectPercentage() {
+        return 100.0 - correctPercentage;
+    }
+
+    /* ===================== SETTERS ===================== */
+
     public void setQuestionId(Integer questionId) {
         this.questionId = questionId;
     }
 
     public void setCorrectOption(OptionLetter correctOption) {
         this.correctOption = correctOption;
+        this.correctAnswersCount = countByOption.getOrDefault(correctOption, 0);
+        recalculatePercentages();
     }
+
+    /* ===================== OBJECT OVERRIDES ===================== */
 
     @Override
     public String toString() {
@@ -209,15 +230,17 @@ public class AnswerStatistics implements Serializable {
 
         for (Map.Entry<OptionLetter, Integer> entry : countByOption.entrySet()) {
             sb.append(entry.getKey()).append(":").append(entry.getValue());
-            sb.append(" (").append(String.format("%.1f", percentageByOption.get(entry.getKey()))).append("%)");
+            sb.append(" (")
+                    .append(String.format("%.1f", percentageByOption.getOrDefault(entry.getKey(), 0.0)))
+                    .append("%)");
             if (entry.getKey().equals(correctOption)) {
-                sb.append("✓");
+                sb.append('✓');
             }
             sb.append(", ");
         }
 
         if (!countByOption.isEmpty()) {
-            sb.setLength(sb.length() - 2); // remove trailing comma
+            sb.setLength(sb.length() - 2); // remove trailing comma and space
         }
 
         sb.append("}}");

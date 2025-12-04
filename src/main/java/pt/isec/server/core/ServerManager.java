@@ -1,4 +1,6 @@
 package pt.isec.server.core;
+
+import pt.isec.common.util.Log;
 import pt.isec.server.db.DbCommands;
 import pt.isec.server.db.DbCreate;
 import pt.isec.server.services.auth.AuthService;
@@ -11,7 +13,6 @@ import pt.isec.server.threads.ClusterHeartbeatThread;
 import pt.isec.server.threads.ClientListenerThread;
 import pt.isec.server.threads.DirectoryHeartbeatThread;
 import pt.isec.server.threads.NetworkTcpConnection;
-import pt.isec.common.util.Log;
 
 import java.io.IOException;
 import java.net.*;
@@ -19,7 +20,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
-import java.util.*;
+import java.util.Comparator;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -39,16 +44,36 @@ import java.util.concurrent.atomic.AtomicLong;
  * </ul>
  */
 public class ServerManager implements IServerThreadContext, IQuestionAnswerContext {
+
+    /* ======================= CONSTANTS ======================= */
+
+    /** Default multicast group used by the cluster. */
+    private static final String DEFAULT_MULTICAST_GROUP = "230.30.30.30";
+
+    /** Default multicast port used by the cluster. */
+    private static final int DEFAULT_MULTICAST_PORT = 3030;
+
+    /* ======================= DB / SERVICES STATE ======================= */
+
     private volatile boolean dbInitialised = false;
     private DbCommands dbCommands;
 
-    // Exposed services
+    /** Application authentication service. */
     private IAuthService authService;
+    /** Application question management service. */
     private IQuestionService questionService;
+    /** Application answer management service. */
     private IAnswerService answerService;
 
+    /* ======================= SESSIONS / REPLICATION ======================= */
+
+    /** userId -> sessionId. */
     private final Map<Long, String> activeSessions = new ConcurrentHashMap<>();
+
+    /** Queue of SQL commands to replicate to other nodes. */
     private final BlockingQueue<List<String>> sqlToBroadcast = new LinkedBlockingQueue<>();
+
+    /* ======================= IDENTITY / NETWORK ======================= */
 
     private final String id;
     private final String serverIdShort;
@@ -59,12 +84,16 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
     private final String dirHost;
     private final int dirPort;
 
-    private final String multicastGroup = "230.30.30.30";
-    private final int multicastPort = 3030;
-    private NetworkInterface multicastInterface;
+    /** Network interface used for multicast. */
+    private final NetworkInterface multicastInterface;
 
+    /** Base directory for data files (including the .db file). */
     private final Path dataDir;
+
+    /** Absolute path of the SQLite database currently in use. */
     private volatile Path dbPath;
+
+    /* ======================= GLOBAL STATE / ROLE ======================= */
 
     private volatile boolean running = true;
     private volatile boolean isPrimary;
@@ -72,8 +101,15 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
     private final AtomicLong dbVersion = new AtomicLong(0);
     private final AtomicBoolean copying = new AtomicBoolean(false);
 
-    private Thread threadClusterHeartbeat, tDirectoryHeartbeat, threadClientListener;
+    /* ======================= MAIN THREADS ======================= */
 
+    private Thread threadClusterHeartbeat;
+    private Thread tDirectoryHeartbeat;
+    private Thread threadClientListener;
+
+    /* ======================= ACTIVE TCP CONNECTIONS ======================= */
+
+    /** userId -> current TCP connection (if any). */
     private final Map<Long, NetworkTcpConnection> activeClientConnections = new ConcurrentHashMap<>();
 
     /* ======================= CONSTRUCTOR ======================= */
@@ -107,11 +143,11 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
 
         this.multicastInterface = resolveMulticastInterface(mcIfIp);
         if (this.multicastInterface == null) {
-            throw new IllegalArgumentException("Interface de rede inválida para IP/critério: " + mcIfIp);
+            throw new IllegalArgumentException("Invalid network interface/IP for multicast: " + mcIfIp);
         }
 
         Log.info(ServerManager.class,
-                "[MC] interface multicast seleccionada: %s", multicastInterface.getName());
+                "[MC] interface multicast selecionada: %s", multicastInterface.getName());
         Log.info(ServerManager.class,
                 "[DB] caminho inicial da BD=%s (versão=%d, role=BACKUP)",
                 dbPath, dbVersion.get());
@@ -225,7 +261,7 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
     /**
      * Rebuilds the DB path using the current role (primary/backup) and short server id.
      * <p>
-     * Note: Currently not used on role change to preserve the same DB file.
+     * Note: currently not used on role change so that we keep the same DB file.
      */
     @SuppressWarnings("unused")
     private synchronized void refreshDbPath() {
@@ -260,7 +296,7 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
 
                 this.authService = new AuthService(qaContext, dbCommands);
                 this.questionService = new QuestionService(qaContext, dbCommands);
-                this.answerService   = new AnswerService(qaContext, dbCommands);
+                this.answerService = new AnswerService(qaContext, dbCommands);
 
                 Log.info(ServerManager.class,
                         "[DB] camada de dados inicializada em %s", dbPath);
@@ -278,24 +314,28 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
 
     /* ======================= SERVICES ======================= */
 
+    /** {@inheritDoc} */
     @Override
     public IAuthService getAuthService() {
         initDatabaseLayerIfNeeded();
         return authService;
     }
 
+    /** {@inheritDoc} */
     @Override
     public IQuestionService getQuestionService() {
         initDatabaseLayerIfNeeded();
         return questionService;
     }
 
+    /** {@inheritDoc} */
     @Override
     public IAnswerService getAnswerService() {
         initDatabaseLayerIfNeeded();
         return answerService;
     }
 
+    /** {@inheritDoc} */
     @Override
     public DbCommands getDb() {
         initDatabaseLayerIfNeeded();
@@ -304,16 +344,19 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
 
     /* ======================= SESSIONS / LOGIN ======================= */
 
+    /** {@inheritDoc} */
     @Override
     public boolean isUserLogged(long id) {
         return activeSessions.containsKey(id);
     }
 
+    /** {@inheritDoc} */
     @Override
     public void registerLogin(long id, String sessionId) {
         activeSessions.put(id, sessionId);
     }
 
+    /** {@inheritDoc} */
     @Override
     public void unregisterLogin(long id) {
         activeSessions.remove(id);
@@ -321,46 +364,55 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
 
     /* ======================= IDENTITY / NETWORK CONFIG ======================= */
 
+    /** {@inheritDoc} */
     @Override
     public String id() {
         return id;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String serverTcpIp() {
         return ip;
     }
 
+    /** {@inheritDoc} */
     @Override
     public int serverTcpPort() {
         return clientPort;
     }
 
+    /** {@inheritDoc} */
     @Override
     public int dbCopyPort() {
         return dbCopyPort;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String directoryHost() {
         return dirHost;
     }
 
+    /** {@inheritDoc} */
     @Override
     public int directoryPort() {
         return dirPort;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String multicastGroup() {
-        return multicastGroup;
+        return DEFAULT_MULTICAST_GROUP;
     }
 
+    /** {@inheritDoc} */
     @Override
     public int multicastPort() {
-        return multicastPort;
+        return DEFAULT_MULTICAST_PORT;
     }
 
+    /** {@inheritDoc} */
     @Override
     public NetworkInterface multicastInterface() {
         return multicastInterface;
@@ -368,21 +420,25 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
 
     /* ======================= GLOBAL STATE ======================= */
 
+    /** {@inheritDoc} */
     @Override
     public boolean isRunning() {
         return running;
     }
 
+    /** {@inheritDoc} */
     @Override
     public void shutdownServer() throws Exception {
         close();
     }
 
+    /** {@inheritDoc} */
     @Override
     public long dbVersion() {
         return dbVersion.get();
     }
 
+    /** {@inheritDoc} */
     @Override
     public void setDbVersion(long v) {
         long old = dbVersion.getAndSet(v);
@@ -392,6 +448,7 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public Path dbPath() {
         return dbPath;
@@ -418,6 +475,7 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public void registerClientConnection(long userId, NetworkTcpConnection conn) {
         if (conn == null) {
@@ -426,6 +484,7 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
         activeClientConnections.put(userId, conn);
     }
 
+    /** {@inheritDoc} */
     @Override
     public void unregisterClientConnection(long userId) {
         activeClientConnections.remove(userId);
@@ -433,16 +492,19 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
 
     /* ======================= REPLICATION / DB COPY ======================= */
 
+    /** {@inheritDoc} */
     @Override
     public boolean tryLockCopy() {
         return copying.compareAndSet(false, true);
     }
 
+    /** {@inheritDoc} */
     @Override
     public void unlockCopy() {
         copying.set(false);
     }
 
+    /** {@inheritDoc} */
     @Override
     public BlockingQueue<List<String>> queue() {
         return sqlToBroadcast;
@@ -450,11 +512,13 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
 
     /* ======================= PRIMARY/BACKUP ROLE ======================= */
 
+    /** {@inheritDoc} */
     @Override
     public boolean isPrimary() {
         return isPrimary;
     }
 
+    /** {@inheritDoc} */
     @Override
     public void setPrimary(String ip, int port) {
         boolean newIsPrimary = this.ip.equals(ip) && this.clientPort == port;
@@ -477,9 +541,9 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
      * </ul>
      */
     public void run() {
-        tDirectoryHeartbeat   = new Thread(new DirectoryHeartbeatThread(this), "directory-heartbeat");
-        threadClusterHeartbeat = new Thread(new ClusterHeartbeatThread(this),   "cluster-heartbeat");
-        threadClientListener  = new Thread(new ClientListenerThread(this),     "client-listener");
+        tDirectoryHeartbeat = new Thread(new DirectoryHeartbeatThread(this), "directory-heartbeat");
+        threadClusterHeartbeat = new Thread(new ClusterHeartbeatThread(this), "cluster-heartbeat");
+        threadClientListener = new Thread(new ClientListenerThread(this), "client-listener");
 
         threadClusterHeartbeat.start();
         tDirectoryHeartbeat.start();
@@ -504,7 +568,8 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
         for (NetworkTcpConnection conn : activeClientConnections.values()) {
             try {
                 conn.setReadTimeout(Duration.ofSeconds(1));
-            } catch (IOException ignored) {}
+            } catch (IOException ignored) {
+            }
         }
 
         // 3) wait for main threads to terminate (avoid joining the current thread)
@@ -513,22 +578,24 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
         if (tDirectoryHeartbeat != null && current != tDirectoryHeartbeat) {
             try {
                 tDirectoryHeartbeat.join();
-            } catch (InterruptedException ignored) {}
+            } catch (InterruptedException ignored) {
+            }
         }
 
         if (threadClusterHeartbeat != null && current != threadClusterHeartbeat) {
             try {
                 threadClusterHeartbeat.join();
-            } catch (InterruptedException ignored) {}
+            } catch (InterruptedException ignored) {
+            }
         }
 
         if (threadClientListener != null && current != threadClientListener) {
             try {
                 threadClientListener.join();
-            } catch (InterruptedException ignored) {}
+            } catch (InterruptedException ignored) {
+            }
         }
 
         Log.info(ServerManager.class, "Shutdown completo do servidor.");
     }
-
 }

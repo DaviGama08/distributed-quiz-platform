@@ -1,19 +1,14 @@
 package pt.isec.client.ui.util;
-
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
 import javafx.stage.Window;
-
-import java.util.Optional;
 
 /**
  * Utility class to handle common modal dialogs (information, error, confirmation).
  */
 public final class AlertUtils {
 
-    private AlertUtils() {
-        // utility class
-    }
+    private AlertUtils() {}
 
     /**
      * Shows an information dialog.

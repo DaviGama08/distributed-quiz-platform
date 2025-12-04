@@ -58,7 +58,6 @@ public class ResponseHandlerThread implements Runnable {
      *
      * @param response TCP message received from the server
      */
-    @SuppressWarnings("unchecked")
     private void processResponse(TcpMessage<? extends Serializable> response) {
         MessageType type = response.getType();
 

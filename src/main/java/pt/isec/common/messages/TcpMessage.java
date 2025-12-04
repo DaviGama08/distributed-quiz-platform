@@ -1,5 +1,4 @@
 package pt.isec.common.messages;
-
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
@@ -55,10 +54,6 @@ public class TcpMessage<T extends Serializable> implements Serializable {
         return msgType;
     }
 
-    public void setMsgType(MessageType msgType) {
-        this.msgType = msgType;
-    }
-
     /**
      * Because Java uses type erasure for generics, at runtime we cannot know
      * the real type of {@code T}. When the server receives a {@link TcpMessage},
@@ -78,10 +73,6 @@ public class TcpMessage<T extends Serializable> implements Serializable {
     public <U> U getDataAs(Class<U> expected) {
         return expected.cast(data);
     }
-
-    public Class<T> getPayloadType(){ return payloadType; }
-
-    public void setPayloadType(Class<T> p){ payloadType = p; }
 
     public T getData() {
         return data;

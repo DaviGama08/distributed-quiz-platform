@@ -1,5 +1,4 @@
 package pt.isec.common.dto.answer;
-
 import java.io.Serializable;
 
 /**

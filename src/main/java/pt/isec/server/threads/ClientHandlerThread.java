@@ -1,15 +1,24 @@
 package pt.isec.server.threads;
-
 import pt.isec.common.dto.answer.SubmitAnswerDTO;
 import pt.isec.common.dto.answer.ViewAnswersDTO;
-import pt.isec.common.dto.auth.*;
-import pt.isec.common.dto.question.*;
-import pt.isec.common.messages.TcpMessage;
+import pt.isec.common.dto.auth.AuthResponseDTO;
+import pt.isec.common.dto.auth.LoginRequestDTO;
+import pt.isec.common.dto.auth.RegisterStudentDTO;
+import pt.isec.common.dto.auth.RegisterTeacherDTO;
+import pt.isec.common.dto.auth.UpdateStudentDTO;
+import pt.isec.common.dto.auth.UpdateTeacherDTO;
+import pt.isec.common.dto.question.CreateQuestionDTO;
+import pt.isec.common.dto.question.CreateQuestionResponseDTO;
+import pt.isec.common.dto.question.DeleteQuestionDTO;
+import pt.isec.common.dto.question.EditQuestionDTO;
+import pt.isec.common.dto.question.JoinQuestionDTO;
+import pt.isec.common.dto.question.ListQuestionsDTO;
 import pt.isec.common.messages.MessageType;
-import pt.isec.server.core.IServerThreadContext;
+import pt.isec.common.messages.TcpMessage;
+import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.Question;
 import pt.isec.common.util.Log;
-
+import pt.isec.server.core.IServerThreadContext;
 import java.io.IOException;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
@@ -20,16 +29,27 @@ import java.util.List;
 /**
  * Thread responsible for handling all communication with a single client
  * for the duration of its TCP session.
+ * <p>
+ * The thread:
+ * <ul>
+ *     <li>Applies an initial timeout for the first message</li>
+ *     <li>Refuses the connection when this node is not the primary server</li>
+ *     <li>Processes all incoming {@link TcpMessage} instances until shutdown</li>
+ * </ul>
  */
 public class ClientHandlerThread implements Runnable, AutoCloseable {
+
+    /** Timeout, in seconds, for the very first message received from the client. */
     private static final int FIRST_MESSAGE_TIMEOUT_SEC = 30;
+
+    /** Special value used to disable the read timeout on the socket. */
     private static final Duration NO_TIMEOUT = Duration.ZERO;
 
     private final IServerThreadContext threadInfo;
     private final NetworkTcpConnection connection;
 
+    /** ID of the currently logged-in user for this connection, or {@code null}. */
     private Long loggerUserId = null;
-    private String sessionId = null;
 
     /**
      * Creates a new handler for a given client connection.
@@ -95,7 +115,6 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
         } catch (Exception e) {
             Log.error(ClientHandlerThread.class,
                     "[TCP] Client connection closed due to unexpected exception: %s", e.getMessage());
-            e.printStackTrace();
         } finally {
             Log.info(ClientHandlerThread.class,
                     "Client handler thread terminated (client connection closed).");
@@ -115,6 +134,9 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
 
     /**
      * Receives and processes messages from the client according to their {@link MessageType}.
+     * <p>
+     * Every case in the {@code switch} delegates to the appropriate service method and
+     * sends back the corresponding response message to the client.
      *
      * @param tcpMessage message received from the client
      * @throws Exception if a service call fails
@@ -166,7 +188,6 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
 
                     threadInfo.registerLogin(userId, res.sessionId());
                     this.loggerUserId = userId;
-                    this.sessionId = res.sessionId();
 
                     // Also register active connection to allow server-to-client notifications
                     try {
@@ -189,7 +210,6 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     }
                     threadInfo.unregisterLogin(loggerUserId);
                     loggerUserId = null;
-                    sessionId = null;
                 }
                 // Apply 30-second timeout again for a possible new session
                 connection.setReadTimeout(Duration.ofSeconds(FIRST_MESSAGE_TIMEOUT_SEC));
@@ -244,12 +264,11 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
             case LIST_QUESTIONS -> {
                 try {
                     ListQuestionsDTO dto = tcpMessage.getDataAs(ListQuestionsDTO.class);
-                    List<?> list = threadInfo.getQuestionService().listQuestions(dto);
-                    ArrayList<?> payload = new ArrayList<>(list);
-                    TcpMessage<ArrayList<?>> out = new TcpMessage<>(
+                    List<Question> list = threadInfo.getQuestionService().listQuestions(dto);
+                    // Use ArrayList as payload type because it is Serializable
+                    TcpMessage<ArrayList<Question>> out = new TcpMessage<>(
                             MessageType.LIST_QUESTIONS_RESPONSE,
-                            payload,
-                            (Class) ArrayList.class
+                            new ArrayList<>(list)
                     );
                     connection.sendMessage(out);
                 } catch (Exception e) {
@@ -294,12 +313,11 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
             case VIEW_ANSWERS -> {
                 try {
                     ViewAnswersDTO dto = tcpMessage.getDataAs(ViewAnswersDTO.class);
-                    List<?> list = threadInfo.getAnswerService().viewAnswers(dto);
-                    ArrayList<?> payload = new ArrayList<>(list);
-                    TcpMessage<ArrayList<?>> out = new TcpMessage<>(
+                    List<Answer> list = threadInfo.getAnswerService().viewAnswers(dto);
+                    // Use ArrayList as payload type because it is Serializable
+                    TcpMessage<ArrayList<Answer>> out = new TcpMessage<>(
                             MessageType.VIEW_ANSWERS_RESPONSE,
-                            payload,
-                            (Class) ArrayList.class
+                            new ArrayList<>(list)
                     );
                     connection.sendMessage(out);
                 } catch (Exception e) {
@@ -332,12 +350,11 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
             case LIST_ANSWERED_QUESTIONS -> {
                 try {
                     Integer studentId = tcpMessage.getDataAs(Integer.class);
-                    List<?> list = threadInfo.getAnswerService().getStudentHistory(studentId);
-                    ArrayList<?> payload = new ArrayList<>(list);
-                    TcpMessage<ArrayList<?>> out = new TcpMessage<>(
+                    List<Answer> list = threadInfo.getAnswerService().getStudentHistory(studentId);
+                    // Use ArrayList as payload type because it is Serializable
+                    TcpMessage<ArrayList<Answer>> out = new TcpMessage<>(
                             MessageType.LIST_ANSWERED_RESPONSE,
-                            payload,
-                            (Class) ArrayList.class
+                            new ArrayList<>(list)
                     );
                     connection.sendMessage(out);
                 } catch (Exception e) {

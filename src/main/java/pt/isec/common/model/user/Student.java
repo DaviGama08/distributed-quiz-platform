@@ -1,5 +1,5 @@
 package pt.isec.common.model.user;
-
+import java.io.Serial;
 import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -9,10 +9,16 @@ import java.util.Objects;
  * <p>
  * Identified by a unique {@code studentNumber}.
  */
+@SuppressWarnings("unused") // may be instantiated via reflection / serialization
 public final class Student extends User implements Serializable {
+
+    @Serial
     private static final long serialVersionUID = 1L;
 
-    private long studentNumber; // unique student number
+    /** Unique student number. */
+    private long studentNumber;
+
+    /* ===================== Constructors ===================== */
 
     /**
      * Default constructor.
@@ -45,20 +51,39 @@ public final class Student extends User implements Serializable {
      * @param studentNumber unique student number
      * @param createdAt     creation time
      */
-    public Student(long id, String name, String email, String passwordHash,
-                   long studentNumber, LocalDateTime createdAt) {
+    public Student(long id,
+                   String name,
+                   String email,
+                   String passwordHash,
+                   long studentNumber,
+                   LocalDateTime createdAt) {
         super(id, name, email, passwordHash, createdAt);
         validateStudentNumber(studentNumber);
         this.studentNumber = studentNumber;
     }
 
-    // getters/setters
-    public long getStudentNumber() { return studentNumber; }
+    /* ===================== Getters / Setters ===================== */
 
-    public void setStudentNumber(Integer studentNumber) {
+    /**
+     * Returns the unique student number.
+     *
+     * @return student number
+     */
+    public long getStudentNumber() {
+        return studentNumber;
+    }
+
+    /**
+     * Updates the student number.
+     *
+     * @param studentNumber new student number
+     */
+    public void setStudentNumber(long studentNumber) {
         validateStudentNumber(studentNumber);
         this.studentNumber = studentNumber;
     }
+
+    /* ===================== Validation helpers ===================== */
 
     /**
      * Validates the student number.
@@ -71,23 +96,26 @@ public final class Student extends User implements Serializable {
         }
     }
 
+    /* ===================== Type information ===================== */
+
     @Override
     public String getUserType() {
         return "student";
     }
 
-    // equals/hashCode
+    /* ===================== Object overrides ===================== */
+
     @Override
-    public boolean equals(Object o){
+    public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         if (!super.equals(o)) return false;
         Student student = (Student) o;
-        return Objects.equals(studentNumber, student.studentNumber);
+        return studentNumber == student.studentNumber;
     }
 
     @Override
-    public int hashCode(){
+    public int hashCode() {
         return Objects.hash(super.hashCode(), studentNumber);
     }
 

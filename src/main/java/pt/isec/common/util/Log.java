@@ -27,6 +27,8 @@ import java.io.PrintStream;
  */
 public final class Log {
 
+    /* ===================== STATIC INITIALIZATION ===================== */
+
     // Initialize Jansi once (ignore if it fails)
     static {
         try {
@@ -35,6 +37,9 @@ public final class Log {
         }
     }
 
+    /**
+     * Utility class – no instances allowed.
+     */
     private Log() {
         // static utility
     }
@@ -48,19 +53,19 @@ public final class Log {
      * @param message message text
      */
     public static void info(Class<?> source, String message) {
-        log("INFO", source, message, null, true);
+        log("INFO", source, message, null);
     }
 
     /**
      * Logs a formatted informational message.
      *
      * @param source source class
-     * @param format message format
+     * @param format message format compatible with {@link String#format(String, Object...)}
      * @param args   format arguments
      */
     public static void info(Class<?> source, String format, Object... args) {
         String msg = cleanFormat(format, args);
-        log("INFO", source, msg, null, true);
+        log("INFO", source, msg, null);
     }
 
     /* ===================== WARN methods ===================== */
@@ -72,19 +77,19 @@ public final class Log {
      * @param message message text
      */
     public static void warn(Class<?> source, String message) {
-        log("WARN", source, message, null, true);
+        log("WARN", source, message, null);
     }
 
     /**
      * Logs a formatted warning message.
      *
      * @param source source class
-     * @param format message format
+     * @param format message format compatible with {@link String#format(String, Object...)}
      * @param args   format arguments
      */
     public static void warn(Class<?> source, String format, Object... args) {
         String msg = cleanFormat(format, args);
-        log("WARN", source, msg, null, true);
+        log("WARN", source, msg, null);
     }
 
     /* ===================== ERROR methods ===================== */
@@ -96,19 +101,19 @@ public final class Log {
      * @param message message text
      */
     public static void error(Class<?> source, String message) {
-        log("ERROR", source, message, null, true);
+        log("ERROR", source, message, null);
     }
 
     /**
      * Logs a formatted error message.
      *
      * @param source source class
-     * @param format message format
+     * @param format message format compatible with {@link String#format(String, Object...)}
      * @param args   format arguments
      */
     public static void error(Class<?> source, String format, Object... args) {
         String msg = cleanFormat(format, args);
-        log("ERROR", source, msg, null, true);
+        log("ERROR", source, msg, null);
     }
 
     /**
@@ -119,11 +124,19 @@ public final class Log {
      * @param t       throwable to log
      */
     public static void error(Class<?> source, String message, Throwable t) {
-        log("ERROR", source, message, t, true);
+        log("ERROR", source, message, t);
     }
 
     /* ===================== Formatting helper ===================== */
 
+    /**
+     * Applies {@link String#format(String, Object...)} and trims a trailing
+     * platform-specific line separator, if present.
+     *
+     * @param format format string
+     * @param args   arguments referenced by the format specifiers
+     * @return formatted string without a trailing line separator
+     */
     private static String cleanFormat(String format, Object... args) {
         String msg = String.format(format, args);
         String nl = System.lineSeparator();
@@ -133,13 +146,23 @@ public final class Log {
         return msg;
     }
 
-    /* ===================== Core Logging ===================== */
+    /* ===================== Core logging ===================== */
 
+    /**
+     * Core logging implementation used by all public helpers.
+     * <p>
+     * Decides the color based on the log level and source package and prints
+     * the message to {@link System#out} or {@link System#err}.
+     *
+     * @param level   log level: {@code "INFO"}, {@code "WARN"} or {@code "ERROR"}
+     * @param source  source class (may be {@code null})
+     * @param message plain message text (no trailing newline)
+     * @param t       optional throwable to print (may be {@code null})
+     */
     private static void log(String level,
                             Class<?> source,
                             String message,
-                            Throwable t,
-                            boolean newline) {
+                            Throwable t) {
 
         String className = (source != null ? source.getSimpleName() : "UNKNOWN");
         String plainPrefix = "[" + level + "][" + className + "] ";
@@ -148,7 +171,7 @@ public final class Log {
         // Decide output stream
         PrintStream ps = "ERROR".equals(level) ? System.err : System.out;
 
-        String toPrint = plainLine;
+        String toPrint;
 
         try {
             // For WARN & ERROR, color the entire line
@@ -182,22 +205,20 @@ public final class Log {
             toPrint = plainLine;
         }
 
-        if (newline) {
-            ps.println(toPrint);
-        } else {
-            ps.print(toPrint);
-        }
+        ps.println(toPrint);
 
         if (t != null) {
             t.printStackTrace(ps);
         }
     }
 
+    /* ===================== Color resolution ===================== */
+
     /**
      * Selects RGB color based on package for INFO messages.
      *
      * @param source source class
-     * @return {r,g,b} or {@code null} (no color)
+     * @return array {@code {r,g,b}} or {@code null} (no color)
      */
     private static int[] resolveColor(Class<?> source) {
         if (source == null) {
@@ -212,7 +233,7 @@ public final class Log {
         }
 
         if (pkg.startsWith("pt.isec.server")) {
-            // Blue
+            // Blue (DodgerBlue)
             return new int[]{30, 144, 255};
         }
 

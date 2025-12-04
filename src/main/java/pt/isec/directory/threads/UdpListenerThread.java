@@ -1,9 +1,7 @@
 package pt.isec.directory.threads;
-
 import pt.isec.common.messages.UdpMessage;
 import pt.isec.common.util.Log;
 import pt.isec.directory.core.IDirectoryThreadContext;
-
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -19,21 +17,21 @@ import java.net.SocketTimeoutException;
  *     <li>Wrap them into {@link UdpMessage}</li>
  *     <li>Push them into the shared queue for worker threads</li>
  * </ul>
- *
+ * <p>
  * Protocol (text, {@code KEY=VALUE} pairs separated by {@code '|'}):
- *
+ * <p>
  * <b>Client messages (no VER):</b>
  * <ul>
  *     <li>{@code TYPE=LOGIN}</li>
  * </ul>
- *
+ * <p>
  * <b>Server messages:</b>
  * <ul>
  *     <li>{@code TYPE=REGISTER   | ID=&lt;serverId&gt; | TCP=&lt;ip:port&gt; | DBV=&lt;dbVersion&gt;}</li>
  *     <li>{@code TYPE=HEARTBEAT  | ID=&lt;serverId&gt; | DBV=&lt;dbVersion&gt;}</li>
  *     <li>{@code TYPE=DEREGISTER | ID=&lt;serverId&gt;}</li>
  * </ul>
- *
+ * <p>
  * Replies (text):
  * <ul>
  *     <li>{@code "200 OK"}</li>
@@ -44,19 +42,42 @@ import java.net.SocketTimeoutException;
  *     <li>{@code "500 ERROR &lt;reason&gt;"}</li>
  * </ul>
  */
+@SuppressWarnings("ClassCanBeRecord")
 public class UdpListenerThread implements Runnable {
+
+    /* ======================= FIELDS ======================= */
+
     private final IDirectoryThreadContext threadInfo;
 
+    /* ======================= CONSTRUCTOR ======================= */
+
+    /**
+     * Creates a new UDP listener bound to the given directory context.
+     *
+     * @param threadInfo directory thread context providing socket, configuration and queue
+     */
     public UdpListenerThread(IDirectoryThreadContext threadInfo) {
         this.threadInfo = threadInfo;
     }
 
+    /* ======================= MAIN LOOP ======================= */
+
+    /**
+     * Main listening loop:
+     * <ul>
+     *     <li>Blocks on {@link DatagramSocket#receive(DatagramPacket)}</li>
+     *     <li>Copies the received bytes into a fresh array</li>
+     *     <li>Enqueues a {@link UdpMessage} in the shared queue</li>
+     * </ul>
+     * Socket and queue errors are logged; on shutdown the loop exits cleanly.
+     */
     @Override
     public void run() {
         DatagramSocket socket = threadInfo.socket();
         Log.info(UdpListenerThread.class,
                 "Directoria UDP a escutar na porta %d...", threadInfo.udpPort());
-        byte[] buffer         = new byte[threadInfo.maxPacketSize()];
+
+        byte[] buffer = new byte[threadInfo.maxPacketSize()];
         DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
 
         while (threadInfo.isRunning()) {
@@ -71,38 +92,41 @@ public class UdpListenerThread implements Runnable {
                 );
 
             } catch (SocketTimeoutException ste) {
-                // optional: socket configured with timeout; just re-check loop condition
+                // Socket configured with timeout; simply re-check loop condition and continue.
             } catch (SocketException se) {
-                // socket intentionally closed on shutdown will cause SocketException here
+                // Socket intentionally closed on shutdown will cause SocketException here.
                 if (!threadInfo.isRunning() || socket.isClosed()) {
-                    // ordered shutdown – exit loop quietly
+                    // Ordered shutdown – exit loop quietly.
                     break;
                 }
                 Log.error(UdpListenerThread.class,
                         "Erro de socket UDP: " + se.getMessage(), se);
-                try {
-                    Thread.sleep(50);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
+                pauseAfterError();
             } catch (IOException e) {
                 if (threadInfo.isRunning()) {
                     Log.error(UdpListenerThread.class,
                             "Erro a receber UDP: " + e.getMessage(), e);
                 }
-                try {
-                    Thread.sleep(50);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
+                pauseAfterError();
             } catch (InterruptedException ie) {
-                // thread interrupted while blocked on queue.put()
+                // Thread interrupted while blocked on queue.put().
                 Thread.currentThread().interrupt();
                 break;
             }
         }
-        Log.info(UdpListenerThread.class,"UdpListenerThread terminou.");
+        Log.info(UdpListenerThread.class, "UdpListenerThread terminou.");
+    }
+
+    /* ======================= INTERNAL HELPERS ======================= */
+
+    /**
+     * Short pause used after non-fatal socket/IO errors to avoid tight spinning.
+     */
+    private static void pauseAfterError() {
+        try {
+            Thread.sleep(50);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

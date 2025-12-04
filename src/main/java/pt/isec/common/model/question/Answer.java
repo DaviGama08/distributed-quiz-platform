@@ -1,14 +1,22 @@
 package pt.isec.common.model.question;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.Objects;
 
 /**
  * Represents a student's answer to a question.
+ * <p>
+ * This class is designed to be used both on the server and client side
+ * as a simple DTO for transporting answer data.
  */
 public final class Answer implements Serializable {
+
+    @Serial
     private static final long serialVersionUID = 1L;
+
+    /* ======================= FIELDS ======================= */
 
     private Integer id;
     private Integer studentId;
@@ -21,23 +29,25 @@ public final class Answer implements Serializable {
     private String studentEmail;
     private String questionStatement;
 
+    /* ======================= CONSTRUCTORS ======================= */
+
     /**
-     * Default constructor (for serialization frameworks).
+     * Default constructor (intended for serialization frameworks).
      */
     public Answer() {}
 
     /**
      * Constructs a full answer object.
      *
-     * @param id                answer id
-     * @param studentId         student id
-     * @param studentNumber     student number
-     * @param questionId        question id
+     * @param id                answer identifier
+     * @param studentId         student database identifier
+     * @param studentNumber     student number (external identifier)
+     * @param questionId        question identifier
      * @param selectedOption    chosen option letter
-     * @param answeredAt        answer date/time
-     * @param isCorrect         whether the answer is correct
-     * @param studentName       student name
-     * @param studentEmail      student email
+     * @param answeredAt        date/time when the answer was given
+     * @param isCorrect         {@code true} if the answer is correct
+     * @param studentName       student full name
+     * @param studentEmail      student email address
      * @param questionStatement question statement text
      */
     public Answer(Integer id,
@@ -50,6 +60,7 @@ public final class Answer implements Serializable {
                   String studentName,
                   String studentEmail,
                   String questionStatement) {
+
         this.id = id;
         this.studentId = studentId;
         this.studentNumber = studentNumber;
@@ -62,47 +73,149 @@ public final class Answer implements Serializable {
         this.questionStatement = questionStatement;
     }
 
-    // getters/setters
-    public Integer getId() {return id;}
-    public void setId(Integer id) {this.id = id;}
+    /* ======================= GETTERS ======================= */
 
-    public Integer getStudentId() {return studentId;}
-    public void setStudentId(Integer studentId) {
-        this.studentId = studentId;
+    /**
+     * @return answer identifier
+     */
+    public Integer getId() {
+        return id;
     }
 
-    public Integer getStudentNumber() { return studentNumber; }
-    public void setStudentNumber(Integer studentNumber) { this.studentNumber = studentNumber; }
-
-    public String getQuestionStatement() {
-        return questionStatement;
+    /**
+     * @return student database identifier
+     */
+    @SuppressWarnings("unused") // kept for future use / frameworks
+    public Integer getStudentId() {
+        return studentId;
     }
 
+    /**
+     * @return student number (external identifier)
+     */
+    public Integer getStudentNumber() {
+        return studentNumber;
+    }
+
+    /**
+     * @return question identifier
+     */
+    public Integer getQuestionId() {
+        return questionId;
+    }
+
+    /**
+     * @return selected option letter
+     */
+    public OptionLetter getSelectedOption() {
+        return selectedOption;
+    }
+
+    /**
+     * @return date/time when the answer was given
+     */
+    public LocalDateTime getAnsweredAt() {
+        return answeredAt;
+    }
+
+    /**
+     * @return {@code true} if the answer is correct
+     */
+    public boolean isCorrect() {
+        return isCorrect;
+    }
+
+    /**
+     * @return student full name
+     */
     public String getStudentName() {
         return studentName;
     }
 
+    /**
+     * @return student email address
+     */
     public String getStudentEmail() {
         return studentEmail;
     }
 
-    public Integer getQuestionId() {return questionId;}
+    /**
+     * @return question statement text
+     */
+    public String getQuestionStatement() {
+        return questionStatement;
+    }
+
+    /* ======================= SETTERS ======================= */
+
+    /**
+     * Sets the answer identifier.
+     *
+     * @param id new identifier
+     */
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    /**
+     * Sets the student identifier.
+     *
+     * @param studentId student database identifier
+     */
+    @SuppressWarnings("unused") // kept for symmetry and possible framework binding
+    public void setStudentId(Integer studentId) {
+        this.studentId = studentId;
+    }
+
+    /**
+     * Sets the student number.
+     *
+     * @param studentNumber student number (external identifier)
+     */
+    @SuppressWarnings("unused") // may be used by mappers / frameworks
+    public void setStudentNumber(Integer studentNumber) {
+        this.studentNumber = studentNumber;
+    }
+
+    /**
+     * Sets the question identifier.
+     *
+     * @param questionId question identifier
+     */
     public void setQuestionId(Integer questionId) {
         this.questionId = questionId;
     }
 
-    public OptionLetter getSelectedOption() {return selectedOption;}
+    /**
+     * Sets the selected option.
+     *
+     * @param selectedOption chosen option letter
+     */
+    @SuppressWarnings("unused") // currently unused, kept for completeness
     public void setSelectedOption(OptionLetter selectedOption) {
         this.selectedOption = selectedOption;
     }
 
-    public LocalDateTime getAnsweredAt() {return answeredAt;}
+    /**
+     * Sets the answer date/time.
+     *
+     * @param answeredAt date/time when the answer was given
+     */
+    @SuppressWarnings("unused") // currently unused, kept for completeness
     public void setAnsweredAt(LocalDateTime answeredAt) {
         this.answeredAt = answeredAt;
     }
 
-    public boolean isCorrect() {return isCorrect;}
-    public void setCorrect(boolean correct) {this.isCorrect = correct;}
+    /**
+     * Sets whether the answer is correct.
+     *
+     * @param correct {@code true} if the answer is correct
+     */
+    public void setCorrect(boolean correct) {
+        this.isCorrect = correct;
+    }
+
+    /* ======================= OVERRIDDEN METHODS ======================= */
 
     @Override
     public String toString() {
@@ -120,8 +233,7 @@ public final class Answer implements Serializable {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        Answer answer = (Answer) o;
+        if (!(o instanceof Answer answer)) return false;
         return isCorrect == answer.isCorrect &&
                 Objects.equals(id, answer.id) &&
                 Objects.equals(studentId, answer.studentId) &&
@@ -136,7 +248,10 @@ public final class Answer implements Serializable {
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, studentId, studentNumber, questionId, selectedOption,
-                answeredAt, isCorrect, studentName, studentEmail, questionStatement);
+        return Objects.hash(
+                id, studentId, studentNumber, questionId,
+                selectedOption, answeredAt, isCorrect,
+                studentName, studentEmail, questionStatement
+        );
     }
 }

@@ -7,7 +7,6 @@ import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.Option;
 import pt.isec.common.model.question.Question;
 import pt.isec.common.util.Log;
-
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -22,9 +21,7 @@ import java.util.List;
  */
 public final class CsvExportUtils {
 
-    private CsvExportUtils() {
-        // utility class
-    }
+    private CsvExportUtils() {}
 
     /**
      * Exports the answers for a given question to a CSV file.

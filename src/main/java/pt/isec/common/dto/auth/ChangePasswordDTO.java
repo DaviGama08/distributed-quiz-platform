@@ -1,5 +1,4 @@
 package pt.isec.common.dto.auth;
-
 import java.io.Serializable;
 
 /**

@@ -1,6 +1,4 @@
 package pt.isec.server.core;
-
-import pt.isec.common.messages.TcpMessage;
 import pt.isec.server.db.DbCommands;
 import pt.isec.server.services.auth.IAuthService;
 import pt.isec.server.services.question.IAnswerService;
@@ -241,6 +239,4 @@ public interface IServerThreadContext {
      * @param userId user identifier
      */
     void unregisterClientConnection(long userId);
-
-    void sendToUser(long userId, TcpMessage<?> msg);
 }

@@ -1,4 +1,5 @@
 package pt.isec.server.db;
+
 import java.sql.*;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -14,6 +15,7 @@ import java.util.function.Consumer;
  *   <li>{@link #runInTransaction(TransactionWork)} – transactional block using {@link Transaction}</li>
  * </ul>
  */
+@SuppressWarnings({ "SqlSourceToSinkFlow", "DuplicatedCode" })
 public final class DbCommands {
 
     /* ========================= 0) CONFIG ========================= */
@@ -31,8 +33,7 @@ public final class DbCommands {
      * @param url             JDBC URL for SQLite
      * @param onVersionChange callback to invoke when DB version changes
      */
-    public DbCommands(String url,
-                      Consumer<Long> onVersionChange) {
+    public DbCommands(String url, Consumer<Long> onVersionChange) {
         this.url = url;
         this.onVersionChange = onVersionChange;
     }
@@ -74,18 +75,16 @@ public final class DbCommands {
      * @return DB version or {@code -1} if missing or {@code NULL}
      */
     public long get_db_version() {
-        String sql = "SELECT db_version FROM config WHERE id = 1";
-        try (Connection c = openConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
-            try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) {
-                    return -1L;
-                }
-                long v = rs.getLong("db_version");
-                if (rs.wasNull()) {
-                    return -1L;
-                }
-                return v;
+        final String sql = "SELECT db_version FROM config WHERE id = 1";
+        try (Connection c = openConnection();
+             PreparedStatement ps = c.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+
+            if (!rs.next()) {
+                return -1L;
             }
+            long v = rs.getLong("db_version");
+            return rs.wasNull() ? -1L : v;
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -98,18 +97,15 @@ public final class DbCommands {
      * @return DB version or {@code -1} if missing or {@code NULL}
      */
     private long get_db_version(Connection c) {
-        String sql = "SELECT db_version FROM config WHERE id = 1";
-        try (PreparedStatement ps = c.prepareStatement(sql)) {
-            try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) {
-                    return -1L;
-                }
-                long v = rs.getLong("db_version");
-                if (rs.wasNull()) {
-                    return -1L;
-                }
-                return v;
+        final String sql = "SELECT db_version FROM config WHERE id = 1";
+        try (PreparedStatement ps = c.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+
+            if (!rs.next()) {
+                return -1L;
             }
+            long v = rs.getLong("db_version");
+            return rs.wasNull() ? -1L : v;
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -125,7 +121,9 @@ public final class DbCommands {
      * @return number of affected rows
      */
     public int executeUpdate(String sql, Object... args) {
-        try (Connection c = openConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+        try (Connection c = openConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
+
             bind(ps, args);
             int x = ps.executeUpdate();
             if (x > 0) {
@@ -145,7 +143,9 @@ public final class DbCommands {
      * @return row as {@code Map&lt;String,Object&gt;} or {@code null} if no row
      */
     public Map<String, Object> selectOne(String sql, Object... args) {
-        try (Connection c = openConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+        try (Connection c = openConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
+
             bind(ps, args);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
@@ -164,7 +164,7 @@ public final class DbCommands {
      * @param c open connection
      */
     private void update_db_version(Connection c) {
-        String sql = "UPDATE config SET db_version = db_version + 1 WHERE id = 1";
+        final String sql = "UPDATE config SET db_version = db_version + 1 WHERE id = 1";
         try (PreparedStatement ps = c.prepareStatement(sql)) {
             ps.executeUpdate();
             long v = get_db_version(c);
@@ -217,7 +217,7 @@ public final class DbCommands {
     /**
      * Transaction context wrapper that reuses the same {@link Connection}.
      */
-    public final class Transaction {
+    public static final class Transaction {
         private final Connection connection;
         private String executedSql;
 
@@ -230,16 +230,16 @@ public final class DbCommands {
          *
          * @param sql  SQL statement with {@code ?} placeholders
          * @param args arguments for placeholders
-         * @return number of affected rows
          */
-        public int executeUpdate(String sql, Object... args) {
+        @SuppressWarnings("unusedReturnValue")
+        public void executeUpdate(String sql, Object... args) {
             try (PreparedStatement ps = connection.prepareStatement(sql)) {
                 bind(ps, args);
                 int x = ps.executeUpdate();
                 if (x > 0) {
-                    executedSql = sql;  // recorded for potential debugging or external use
+                    // recorded for potential debugging or external use
+                    executedSql = sql;
                 }
-                return x;
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }
@@ -252,6 +252,7 @@ public final class DbCommands {
          * @param args arguments for placeholders
          * @return row as {@code Map&lt;String,Object&gt;} or {@code null} if no row
          */
+        @SuppressWarnings("unused")
         public Map<String, Object> selectOne(String sql, Object... args) {
             try (PreparedStatement ps = connection.prepareStatement(sql)) {
                 bind(ps, args);
@@ -267,7 +268,7 @@ public final class DbCommands {
         }
 
         /**
-         * Returns the last {@code ROWID} generated by an INSERT on this connection (SQLite).
+         * Returns the last {@code rowid} generated by an INSERT on this connection (SQLite).
          *
          * @return last inserted row id or {@code -1} on failure
          */
@@ -285,6 +286,7 @@ public final class DbCommands {
          *
          * @return SQL string or {@code null}
          */
+        @SuppressWarnings("unused")
         String getExecutedSql() {
             return executedSql;
         }
@@ -293,7 +295,7 @@ public final class DbCommands {
     /* ========================= 3) INTERNAL HELPERS ========================= */
 
     /**
-     * Opens a new {@link Connection} and applies useful PRAGMAs for SQLite.
+     * Opens a new {@link Connection} and applies useful SQLite pragma directives.
      *
      * @return open connection
      * @throws SQLException if an error occurs

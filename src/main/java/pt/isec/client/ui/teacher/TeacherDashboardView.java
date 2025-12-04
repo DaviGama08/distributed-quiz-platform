@@ -1,5 +1,4 @@
 package pt.isec.client.ui.teacher;
-
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -15,6 +14,10 @@ import javafx.scene.text.FontWeight;
  */
 public class TeacherDashboardView {
 
+    // -------------------------------------------------------------------------
+    // FIELDS
+    // -------------------------------------------------------------------------
+
     private String userEmail;
     private String userName;
 
@@ -29,27 +32,33 @@ public class TeacherDashboardView {
     private Scene scene;
     private Label welcomeLabel;
     private Label emailLabel;
-    private Label headerEmailLabel;
     private TextArea notificationArea;
     private VBox mainContentArea;
 
     // Buttons
     private Button createQuestionBtn;
-    private Button listQuestionsBtn; // kept for compatibility
     private Button logoutBtn;
     private Button manageQuestionsBtn;
     private Button profileBtn;
 
+    // -------------------------------------------------------------------------
+    // CONSTRUCTOR
+    // -------------------------------------------------------------------------
+
     /**
      * Creates a new teacher dashboard view.
      *
-     * @param userName teacher name
+     * @param userName  teacher name
      * @param userEmail teacher email
      */
     public TeacherDashboardView(String userName, String userEmail) {
         this.userName = userName;
         this.userEmail = userEmail;
     }
+
+    // -------------------------------------------------------------------------
+    // VIEW CREATION
+    // -------------------------------------------------------------------------
 
     /**
      * Builds the scene and all UI components.
@@ -74,9 +83,15 @@ public class TeacherDashboardView {
                 scene.getStylesheets().add(cssUrl.toExternalForm());
             }
         } catch (Exception ignored) {
+            // CSS is optional – ignore loading failures
         }
     }
 
+    /**
+     * Creates the top header of the dashboard (welcome + email).
+     *
+     * @return header container
+     */
     private VBox createHeader() {
         VBox header = new VBox(10);
         header.getStyleClass().add("dashboard-header-dark");
@@ -93,6 +108,11 @@ public class TeacherDashboardView {
         return header;
     }
 
+    /**
+     * Creates the profile card (avatar + name + role).
+     *
+     * @return profile card node
+     */
     private VBox createProfileCard() {
         VBox box = new VBox(8);
         box.getStyleClass().add("profile-card");
@@ -105,6 +125,9 @@ public class TeacherDashboardView {
         initialsLabel.getStyleClass().add("profile-avatar-initials");
         avatar.getChildren().add(initialsLabel);
 
+        // Keep a reference so we can update initials later
+        avatarInitialsLabel = initialsLabel;
+
         profileNameLabel = new Label(userName != null ? userName : "Docente");
         profileNameLabel.getStyleClass().add("profile-name-label");
 
@@ -115,6 +138,11 @@ public class TeacherDashboardView {
         return box;
     }
 
+    /**
+     * Creates the left sidebar with profile card and menu buttons.
+     *
+     * @return sidebar node
+     */
     private VBox createSidebar() {
         VBox sidebar = new VBox(12);
         sidebar.getStyleClass().add("dashboard-sidebar-dark");
@@ -144,6 +172,12 @@ public class TeacherDashboardView {
         return sidebar;
     }
 
+    /**
+     * Helper method to create a sidebar menu button.
+     *
+     * @param text button text
+     * @return configured button
+     */
     private Button createMenuButton(String text) {
         Button btn = new Button(text);
         btn.getStyleClass().add("sidebar-button-dark");
@@ -151,28 +185,29 @@ public class TeacherDashboardView {
         return btn;
     }
 
+    /**
+     * Generates initials from a name or email.
+     *
+     * @param text full name or email
+     * @return initials string (1–2 characters)
+     */
     private String getInitials(String text) {
         if (text == null || text.isBlank()) {
             return "?";
         }
         String[] parts = text.trim().split("\\s+");
         if (parts.length == 1) {
-            return parts[0].substring(0, 1).toUpperCase();
+            char first = parts[0].charAt(0);
+            return String.valueOf(first).toUpperCase();
         }
-        return (parts[0].substring(0, 1) + parts[parts.length - 1].substring(0, 1)).toUpperCase();
+        char first = parts[0].charAt(0);
+        char last = parts[parts.length - 1].charAt(0);
+        return ("" + first + last).toUpperCase();
     }
 
-    @SuppressWarnings("unused")
-    private String deriveNameFromEmail(String email) {
-        if (email == null || !email.contains("@")) {
-            return "Docente";
-        }
-        String part = email.substring(0, email.indexOf('@'));
-        if (part.isEmpty()) {
-            return "Docente";
-        }
-        return Character.toUpperCase(part.charAt(0)) + part.substring(1);
-    }
+    // -------------------------------------------------------------------------
+    // PUBLIC API – PROFILE & WELCOME
+    // -------------------------------------------------------------------------
 
     /**
      * Updates the profile name in card and header.
@@ -195,14 +230,9 @@ public class TeacherDashboardView {
         }
     }
 
-    /**
-     * Returns the current profile name displayed in the view.
-     *
-     * @return profile name
-     */
-    public String getProfileName() {
-        return profileNameLabel != null ? profileNameLabel.getText() : userName;
-    }
+    // -------------------------------------------------------------------------
+    // MAIN CONTENT / DASHBOARD
+    // -------------------------------------------------------------------------
 
     /**
      * Shows the default welcome view with summary cards and notifications.
@@ -230,29 +260,14 @@ public class TeacherDashboardView {
         HBox cards = new HBox(30);
         cards.setAlignment(Pos.CENTER);
 
-        VBox totalCard = new VBox(8);
-        totalCard.getStyleClass().add("info-card-dark");
         totalQuestionsValueLabel = new Label("0");
-        totalQuestionsValueLabel.getStyleClass().add("info-card-value-dark");
-        Label totalLabel = new Label("Total de Perguntas");
-        totalLabel.getStyleClass().add("info-card-title-dark");
-        totalCard.getChildren().addAll(totalQuestionsValueLabel, totalLabel);
+        VBox totalCard = createInfoCard(totalQuestionsValueLabel, "Total de Perguntas");
 
-        VBox activeCard = new VBox(8);
-        activeCard.getStyleClass().add("info-card-dark");
         activeQuestionsValueLabel = new Label("0");
-        activeQuestionsValueLabel.getStyleClass().add("info-card-value-dark");
-        Label activeLabel = new Label("Perguntas Ativas");
-        activeLabel.getStyleClass().add("info-card-title-dark");
-        activeCard.getChildren().addAll(activeQuestionsValueLabel, activeLabel);
+        VBox activeCard = createInfoCard(activeQuestionsValueLabel, "Perguntas Ativas");
 
-        VBox answersCard = new VBox(8);
-        answersCard.getStyleClass().add("info-card-dark");
         answersReceivedValueLabel = new Label("0");
-        answersReceivedValueLabel.getStyleClass().add("info-card-value-dark");
-        Label answersLabel = new Label("Respostas Recebidas");
-        answersLabel.getStyleClass().add("info-card-title-dark");
-        answersCard.getChildren().addAll(answersReceivedValueLabel, answersLabel);
+        VBox answersCard = createInfoCard(answersReceivedValueLabel, "Respostas Recebidas");
 
         cards.getChildren().addAll(totalCard, activeCard, answersCard);
 
@@ -267,11 +282,31 @@ public class TeacherDashboardView {
     }
 
     /**
+     * Creates a statistic card (value + label) for the dashboard.
+     *
+     * @param valueLabel label that shows the numeric value
+     * @param titleText  text describing the metric
+     * @return configured card node
+     */
+    private VBox createInfoCard(Label valueLabel, String titleText) {
+        VBox card = new VBox(8);
+        card.getStyleClass().add("info-card-dark");
+
+        valueLabel.getStyleClass().add("info-card-value-dark");
+
+        Label titleLabel = new Label(titleText);
+        titleLabel.getStyleClass().add("info-card-title-dark");
+
+        card.getChildren().addAll(valueLabel, titleLabel);
+        return card;
+    }
+
+    /**
      * Updates the numeric statistics shown in the info cards.
      *
-     * @param totalQuestions   total number of questions
-     * @param activeQuestions  number of active questions
-     * @param totalAnswers     total number of answers received
+     * @param totalQuestions  total number of questions
+     * @param activeQuestions number of active questions
+     * @param totalAnswers    total number of answers received
      */
     public void updateStats(int totalQuestions, int activeQuestions, int totalAnswers) {
         if (totalQuestionsValueLabel != null) {
@@ -285,21 +320,9 @@ public class TeacherDashboardView {
         }
     }
 
-    /**
-     * Updates the welcome message with the given name.
-     *
-     * @param name teacher name
-     */
-    public void setWelcomeName(String name) {
-        if (welcomeLabel == null) {
-            return;
-        }
-        if (name == null || name.trim().isEmpty()) {
-            welcomeLabel.setText("Bem-vindo, Docente!");
-        } else {
-            welcomeLabel.setText("Bem-vindo, " + name + "!");
-        }
-    }
+    // -------------------------------------------------------------------------
+    // SCENE / CONTROLLER WIRING
+    // -------------------------------------------------------------------------
 
     /**
      * Gets the JavaFX scene for this view.
@@ -316,22 +339,26 @@ public class TeacherDashboardView {
      * @param controller teacher dashboard controller
      */
     public void registerHandlers(TeacherDashboardController controller) {
-        profileBtn.setOnAction(e -> controller.onEditProfile());
-        createQuestionBtn.setOnAction(e -> controller.onCreateQuestion());
-        manageQuestionsBtn.setOnAction(e -> controller.onManageQuestions());
-        logoutBtn.setOnAction(e -> controller.onLogout());
+        profileBtn.setOnAction(_ -> controller.onEditProfile());
+        createQuestionBtn.setOnAction(_ -> controller.onCreateQuestion());
+        manageQuestionsBtn.setOnAction(_ -> controller.onManageQuestions());
+        logoutBtn.setOnAction(_ -> controller.onLogout());
 
         if (profileCard != null) {
-            profileCard.setOnMouseClicked(e -> controller.onEditProfile());
+            profileCard.setOnMouseClicked(_ -> controller.onEditProfile());
         }
     }
 
     /**
-     * Hook for future UI updates.
+     * Hook for future UI updates (kept for API symmetry).
      */
     public void update() {
         // nothing extra for now
     }
+
+    // -------------------------------------------------------------------------
+    // NOTIFICATIONS / USER INFO
+    // -------------------------------------------------------------------------
 
     /**
      * Appends a timestamped notification message to the notification area.
@@ -356,13 +383,7 @@ public class TeacherDashboardView {
      */
     public void updateUserInfo(String name, String email) {
         if (name != null && !name.isBlank()) {
-            this.userName = name;
-            if (profileNameLabel != null) {
-                profileNameLabel.setText(name);
-            }
-            if (welcomeLabel != null) {
-                welcomeLabel.setText("Bem-vindo, " + name + "!");
-            }
+            setProfileName(name);
         }
 
         if (email != null && !email.isBlank()) {

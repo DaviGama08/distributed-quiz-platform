@@ -1,5 +1,4 @@
 package pt.isec.client.ui.student;
-
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;

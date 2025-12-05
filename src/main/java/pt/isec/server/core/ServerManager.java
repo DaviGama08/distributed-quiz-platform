@@ -135,9 +135,9 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
         this.dirHost = dirHost;
         this.dirPort = dirPort;
 
-        this.dataDir = (initialDbPath.getParent() != null)
-                ? initialDbPath.getParent().toAbsolutePath()
-                : Paths.get(".").toAbsolutePath();
+        this.dataDir = (initialDbPath.getParent() != null) //verifica se existe o diretório
+                ? initialDbPath.getParent().toAbsolutePath() //se existir usa o diretório
+                : Paths.get(".").toAbsolutePath(); //se não obtem o diretório atual
 
         this.isPrimary = false;
 
@@ -230,11 +230,13 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
         }
 
         Path newest = findNewestDbInDir(dataDir);
+        //TODO Servidor: evita apagar ficheiros existentes
         if (newest != null) {
             this.dbPath = newest.toAbsolutePath();
             Log.info(ServerManager.class,
                     "[DB] PRIMARY: a usar a BD mais recente no diretório: %s", this.dbPath);
         } else {
+            //TODO Servidor: esquema de nomeação dos ficheiros SQLite (".db")
             String name = String.format("quiz-%s.db", serverIdShort);
             this.dbPath = dataDir.resolve(name).toAbsolutePath();
             Log.info(ServerManager.class,

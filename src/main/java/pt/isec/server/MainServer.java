@@ -71,15 +71,12 @@ public class MainServer {
         // Ensure data directory exists
         Files.createDirectories(dataDir);
 
-        // Distinct file per server (avoids collisions)
-        Path dbFile = dataDir.resolve("quiz-" + clientPort + ".db");
-
         Log.info(MainServer.class, "[DB] dir : %s", dataDir);
-        Log.info(MainServer.class, "[DB] file: %s (exists=%s)", dbFile, Files.exists(dbFile));
+        Log.info(MainServer.class, "[DB] file: %s (exists=%s)", dataDir, Files.exists(dataDir));
 
         // Do not use try-with-resources here, we want the server to stay alive
         ServerManager serverManager =
-                new ServerManager(dirHost, dirPort, multicastInterfaceIp, clientPort, dbCopyPort, dbFile);
+                new ServerManager(dirHost, dirPort, multicastInterfaceIp, clientPort, dbCopyPort, dataDir);
 
         // Catch CTRL+C
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {

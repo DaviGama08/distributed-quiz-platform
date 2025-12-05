@@ -16,6 +16,7 @@ VALUES (
            '210000:NepZ5Es/L7S10U9V0cugyA==:BsxS/RicF9Nh8cV8j1rO76DqKf79Qk2R28POliuu1S8='
        );
 
+
 -- Docentes
 CREATE TABLE IF NOT EXISTS teacher (
                                        id            INTEGER PRIMARY KEY AUTOINCREMENT,

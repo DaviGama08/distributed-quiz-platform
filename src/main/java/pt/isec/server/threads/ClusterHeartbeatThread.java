@@ -4,6 +4,8 @@ import pt.isec.server.core.ServerManager;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;
 import pt.isec.common.util.Log;
+import pt.isec.server.db.DbCommands;
+
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -183,7 +185,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
      */
     private void handleBackupHeartbeatLoop(MulticastSocket _ms, DatagramPacket pkt) {
         try {
-            _ms.receive(pkt);
+            _ms.receive(pkt); //recebe o packet
             String senderIp = pkt.getAddress().getHostAddress();
             String msg = new String(pkt.getData(), 0, pkt.getLength(), StandardCharsets.UTF_8);
 
@@ -212,17 +214,23 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                         byte[] bytes = Base64.getDecoder().decode(sqlEncoded);
                         String joined = new String(bytes, StandardCharsets.UTF_8);
 
-                        String[] stmts = joined.split(";;");
-                        for (String s : stmts) {
-                            String trimmed = s.trim();
-                            if (trimmed.isEmpty()) {
-                                continue;
+                        DbCommands db = threadInfo.getDb(); //obtem a base de dados
+
+                        //Considera tudo apenas uma só transação. Incrementa apenas 1 por transação
+                        db.runInTransaction(tx -> {
+                            String[] stmts = joined.split(";;");
+                            for (String s : stmts) {
+                                String trimmed = s.trim();
+                                if (trimmed.isEmpty()) {
+                                    continue;
+                                }
+                                tx.executeUpdate(trimmed);
+                                Log.info(ClusterHeartbeatThread.class,
+                                        "[MC] SQL executed from heartbeat: %s", trimmed);
                             }
-                            threadInfo.getDb().executeUpdate(trimmed);
-                            Log.info(ClusterHeartbeatThread.class,
-                                    "[MC] SQL executed from heartbeat: %s", trimmed);
-                        }
-                        threadInfo.setDbVersion(rxVersion);
+                        });
+
+                        //threadInfo.setDbVersion(rxVersion);
                     } else {
 
                         int rxDbPort = (int) extractLong(msg, "dbPort");

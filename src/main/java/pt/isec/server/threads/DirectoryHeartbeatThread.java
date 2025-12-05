@@ -93,7 +93,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             // version from directory: -1 = first time
             if (reply.dbv != null) {
                 if (reply.dbv == -1 && iAmPrimary) {
-                    threadInfo.setDbVersion(1); // first time: create quiz-01.db
+                    threadInfo.setDbVersion(1);
                 } else if (reply.dbv >= 0) {
                     threadInfo.setDbVersion(reply.dbv);
                 }
@@ -108,7 +108,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                         node.initDatabaseLayerIfNeeded();
                     } catch (Exception e) {
                         Log.error(DirectoryHeartbeatThread.class,
-                                "[DB] Failed to initialize primary server database: %socket", e.getMessage());
+                                "[DB] Failed to initialize primary server database: %s", e.getMessage());
                     }
                 } else {
                     // backup: define local DB path
@@ -125,7 +125,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             }
 
             Log.info(DirectoryHeartbeatThread.class,
-                    "[DIR] Current primary server: %socket:%d | isPrimary=%socket | dbVersion=%d",
+                    "[DIR] Current primary server: %s:%d | isPrimary=%s | dbVersion=%d",
                     reply.ip, reply.port, iAmPrimary, threadInfo.dbVersion());
 
             long last = 0;
@@ -150,7 +150,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                             Objects.equals(cur.ip, threadInfo.serverTcpIp()) &&
                                     cur.port == threadInfo.serverTcpPort();
                     Log.info(DirectoryHeartbeatThread.class,
-                            "[DIR] Primary reported by directory: %socket:%d | isPrimary=%socket",
+                            "[DIR] Primary reported by directory: %s:%d | isPrimary=%s",
                             cur.ip, cur.port, iAmPrimary);
                 }
                 Thread.sleep(SLEEP_INTERVAL_MS);

@@ -170,8 +170,7 @@ public class ResponseHandlerThread implements Runnable {
                 } else if (d instanceof String s) {
                     try {
                         tInfo.setPropAnswerSubmitted(Integer.parseInt(s));
-                    } catch (Exception ignored) {
-                    }
+                    } catch (Exception ignored) {}
                 }
             }
 

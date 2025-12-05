@@ -355,8 +355,7 @@ public class TeacherDashboardController implements IDisposableProp {
             } else if (v instanceof String) {
                 try {
                     qid = Integer.parseInt((String) v);
-                } catch (Exception ignored) {
-                }
+                } catch (Exception ignored) {}
             }
             if (qid == null) {
                 return;

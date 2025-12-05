@@ -1,6 +1,8 @@
 package pt.isec.client.ui.util.dialogs;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.control.*;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.Modality;
 import javafx.stage.Window;
@@ -178,12 +180,32 @@ public final class StudentDialogs {
 
     /**
      * Shows a dialog with the student's answer history.
+     * <p>
+     * The dialog allows the user to apply a local filter on the records displayed:
+     * <ul>
+     *     <li>"Todas"      - all answers</li>
+     *     <li>"Corretas"   - only correct answers</li>
+     *     <li>"Incorretas" - only incorrect answers</li>
+     * </ul>
+     * The initial filter is defined by the {@code currentFilter} parameter and,
+     * whenever the user changes the filter in the ComboBox, the
+     * {@code onFilterChanged} callback is invoked with the new value.
      *
-     * @param owner   window owner
-     * @param history list of answers to display
+     * @param owner           parent window of the dialog (may be {@code null})
+     * @param history         list of answers to display; if {@code null} or empty,
+     *                        a simple message is shown instead of the table
+     * @param currentFilter   filter currently selected in the controller
+     *                        (for example, "Todas", "Corretas" or "Incorretas");
+     *                        if {@code null} or not present in the ComboBox items,
+     *                        "Todas" is used as default
+     * @param onFilterChanged callback invoked whenever the user changes the filter
+     *                        in the ComboBox; receives the newly selected filter;
+     *                        may be {@code null}
      */
     public static void showHistoryDialog(Window owner,
-                                         List<Answer> history) {
+                                         List<Answer> history,
+                                         String currentFilter,
+                                         Consumer<String> onFilterChanged) {
         Dialog<Void> dialog = new Dialog<>();
         if (owner != null) {
             dialog.initOwner(owner);
@@ -198,10 +220,35 @@ public final class StudentDialogs {
         content.setPrefWidth(600);
 
         if (history == null || history.isEmpty()) {
+            // No history available: show a simple informative label
             Label noDataLabel = new Label("Ainda não respondeu a nenhuma pergunta.");
             noDataLabel.setStyle("-fx-text-fill: #7f8c8d; -fx-font-size: 14;");
             content.getChildren().add(noDataLabel);
         } else {
+            // ----------------- Filters (ComboBox) -----------------
+            HBox filters = new HBox(10);
+            filters.setAlignment(Pos.CENTER_LEFT);
+
+            Label filterLabel = new Label("Filtrar:");
+            filterLabel.setStyle("-fx-font-weight: bold;");
+
+            ComboBox<String> filterCombo = new ComboBox<>();
+            // Available filters in the UI (Portuguese labels)
+            filterCombo.getItems().addAll("Todas", "Corretas", "Incorretas");
+
+            // Initial filter coming from the controller
+            String initialFilter = (currentFilter != null ? currentFilter : "Todas");
+            if (!filterCombo.getItems().contains(initialFilter)) {
+                initialFilter = "Todas";
+            }
+            filterCombo.setValue(initialFilter);
+
+            filters.getChildren().addAll(filterLabel, filterCombo);
+
+            // ----------------- Table -----------------
+            // Keep the original history list so we can re-apply filters at any time
+            List<Answer> originalHistory = new ArrayList<>(history);
+
             TableView<Answer> table = new TableView<>();
             table.setPrefHeight(300);
             table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
@@ -238,13 +285,68 @@ public final class StudentDialogs {
             );
 
             table.getColumns().addAll(dateCol, questionCol, answerCol, resultCol);
-            table.getItems().addAll(history);
 
-            content.getChildren().add(table);
+            content.getChildren().addAll(filters, table);
+
+            // ----------------- Logic to apply filter to the table -----------------
+            Consumer<String> applyFilterToTable = sel -> {
+                table.getItems().clear();
+                table.getSortOrder().clear();
+
+                switch (sel) {
+                    case "Corretas":
+                        // Only correct answers
+                        for (Answer a : originalHistory) {
+                            if (a.isCorrect()) {
+                                table.getItems().add(a);
+                            }
+                        }
+                        break;
+
+                    case "Incorretas":
+                        // Only incorrect answers
+                        for (Answer a : originalHistory) {
+                            if (!a.isCorrect()) {
+                                table.getItems().add(a);
+                            }
+                        }
+                        break;
+
+                    case "Todas":
+                    default:
+                        // Default behavior: show all answers
+                        table.getItems().addAll(originalHistory);
+                        break;
+                }
+
+                // Optional: always sort by date (most recent first)
+                if (!table.getItems().isEmpty()) {
+                    dateCol.setSortType(TableColumn.SortType.DESCENDING);
+                    table.getSortOrder().add(dateCol);
+                    table.sort();
+                }
+            };
+
+            // Apply the initial filter coming from the controller
+            applyFilterToTable.accept(initialFilter);
+
+            // ----------------- ComboBox listener -----------------
+            filterCombo.valueProperty().addListener((obs, oldVal, newVal) -> {
+                String sel = (newVal != null ? newVal : "Todas");
+
+                // Update table (UI)
+                applyFilterToTable.accept(sel);
+
+                // Notify controller about the new filter (state)
+                if (onFilterChanged != null) {
+                    onFilterChanged.accept(sel);
+                }
+            });
         }
 
-        dialog.getDialogPane().setContent(content);
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.getDialogPane().setContent(content);
         dialog.showAndWait();
     }
+
 }

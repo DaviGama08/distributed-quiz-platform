@@ -155,6 +155,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     RegisterStudentDTO dto = tcpMessage.getDataAs(RegisterStudentDTO.class);
                     AuthResponseDTO res = threadInfo.getAuthService().registerStudent(dto);
                     connection.sendMessage(new TcpMessage<>(MessageType.REGISTER_OK, res, AuthResponseDTO.class));
+                    Log.info(ClientHandlerThread.class, "[TCP] Student registered successfully.");
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
                 }
@@ -165,6 +166,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     RegisterTeacherDTO dto = tcpMessage.getDataAs(RegisterTeacherDTO.class);
                     AuthResponseDTO res = threadInfo.getAuthService().registerTeacher(dto);
                     connection.sendMessage(new TcpMessage<>(MessageType.REGISTER_OK, res, AuthResponseDTO.class));
+                    Log.info(ClientHandlerThread.class, "[TCP] Teacher registered successfully.");
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
                 }
@@ -182,6 +184,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                         if (threadInfo.isUserLogged(userId)) {
                             threadInfo.unregisterClientConnection(userId);
                             threadInfo.unregisterLogin(userId);
+                            Log.error(ClientHandlerThread.class, "[TCP] Client already logged in.");
                         }
                     } catch (Exception ignored) {
                     }
@@ -197,6 +200,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
 
                     connection.sendMessage(new TcpMessage<>(MessageType.LOGIN_OK, res, AuthResponseDTO.class));
                     connection.setReadTimeout(NO_TIMEOUT);
+                    Log.info(ClientHandlerThread.class, "[TCP] Login successfully.");
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.LOGIN_FAIL, e.getMessage(), String.class));
                 }
@@ -215,6 +219,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                 connection.setReadTimeout(Duration.ofSeconds(FIRST_MESSAGE_TIMEOUT_SEC));
                 // Send logout confirmation
                 connection.sendMessage(new TcpMessage<>(MessageType.ACK, "logout-ok", String.class));
+                Log.info(ClientHandlerThread.class, "[TCP] Logout successfully. Good bye.");
             }
 
             /* ========= QUESTIONS (TEACHER) ========= */
@@ -225,6 +230,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     CreateQuestionResponseDTO res = threadInfo.getQuestionService().createQuestion(dto);
                     connection.sendMessage(new TcpMessage<>(MessageType.CREATE_QUESTION_RESPONSE, res,
                             CreateQuestionResponseDTO.class));
+                    Log.info(ClientHandlerThread.class, "[TCP] Question created successfully.");
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.CREATE_QUESTION_FAIL, e.getMessage(), String.class));
                 }
@@ -239,6 +245,10 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                             ok ? "edit-ok" : "edit-fail",
                             String.class
                     ));
+                    if(ok)
+                        Log.info(ClientHandlerThread.class, "[TCP] Question edited successfully.");
+                    else
+                        Log.error(ClientHandlerThread.class, "[TCP] Question edited failed.");
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.EDIT_QUESTION_FAIL, e.getMessage(), String.class));
                 }
@@ -253,6 +263,10 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                             ok ? "delete-ok" : "delete-fail",
                             String.class
                     ));
+                    if(ok)
+                        Log.info(ClientHandlerThread.class, "[TCP] Question deleted successfully.");
+                    else
+                        Log.error(ClientHandlerThread.class, "[TCP] Question delete failed.");
                 } catch (IllegalStateException e) {
                     // question with answers, etc.
                     connection.sendMessage(new TcpMessage<>(MessageType.NACK, e.getMessage(), String.class));

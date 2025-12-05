@@ -236,7 +236,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                         boolean missingDb = !Files.exists(dbPath);
 
                         if (missingDb) {
-                            Log.error(ClusterHeartbeatThread.class,
+                            Log.warn(ClusterHeartbeatThread.class,
                                     "[MC] DB copy required: missingDb=%s, localVersion=%d, remoteVersion=%d, " +
                                             "primary=%s:%d",
                                     true, threadInfo.dbVersion(), rxVersion, senderIp, rxDbPort);

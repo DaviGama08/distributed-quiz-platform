@@ -135,7 +135,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                 long now = System.currentTimeMillis();
 
                 if (now - last >= HEARTBEAT_INTERVAL_MS) {
-                    String hb = requestKeyValue(
+                    String hb = requestKeyValue(iAmPrimary ? "[Primary Server] | " : "",
                             "TYPE", "HEARTBEAT",
                             "ID", threadInfo.id()
                     );
@@ -237,15 +237,15 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
     /**
      * Tries to receive and parse a directory response with primary information.
      *
-     * @param s datagram socket
+     * @param socket datagram socket
      * @return {@link Endpoint} data or {@code null} on timeout/error
      */
-    private Endpoint tryReceivePrincipal(DatagramSocket s) {
+    private Endpoint tryReceivePrincipal(DatagramSocket socket) {
         try {
             byte[] buf = new byte[BUFFER_SIZE];
-            DatagramPacket dp = new DatagramPacket(buf, buf.length);
-            s.receive(dp);
-            String resp = new String(dp.getData(), 0, dp.getLength(), StandardCharsets.UTF_8).trim();
+            DatagramPacket packet = new DatagramPacket(buf, buf.length);
+            socket.receive(packet);
+            String resp = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8).trim();
 
             // Another server already using this endpoint
             if (resp.startsWith("409 CONFLICT DUP_ENDPOINT")) {

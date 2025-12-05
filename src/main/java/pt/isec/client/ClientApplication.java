@@ -23,7 +23,8 @@ public class ClientApplication extends Application {
 
     /* ===================== CONSTANTS ===================== */
 
-    private static final String DIRECTORY_IP = "localhost";
+    //private static final String DIRECTORY_IP = "localhost";
+    private static final String DIRECTORY_IP = "10.84.85.89";
     private static final int DIRECTORY_PORT = 9999;
 
     private static final String ICON_RESOURCE = "/imgs/app-icon.png";

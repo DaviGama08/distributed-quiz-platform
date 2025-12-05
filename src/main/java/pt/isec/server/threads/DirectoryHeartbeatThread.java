@@ -59,9 +59,9 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
     @Override
     @SuppressWarnings("BusyWait")
     public void run() {
-        try (DatagramSocket s = new DatagramSocket()) {
-            socket = s;
-            s.setSoTimeout(SOCKET_TIMEOUT_MS);
+        try (DatagramSocket socket = new DatagramSocket()) {
+            this.socket = socket;
+            socket.setSoTimeout(SOCKET_TIMEOUT_MS);
 
             InetAddress dirAddr = InetAddress.getByName(threadInfo.directoryHost());
             int dirPort = threadInfo.directoryPort();
@@ -74,10 +74,10 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                     "DBV", String.valueOf(threadInfo.dbVersion()),                      // DB version
                     "DBP", String.valueOf(threadInfo.dbCopyPort())                      // DB copy port
             );
-            send(s, dirAddr, dirPort, registerMsg);
+            send(socket, dirAddr, dirPort, registerMsg);
 
             // waits "200 PRINCIPAL ip:port[|DBV=X]"
-            Endpoint reply = waitPrincipal(s);
+            Endpoint reply = waitPrincipal(socket);
             if (reply == null) {
                 Log.error(DirectoryHeartbeatThread.class,
                         "[DIR] No response from directory for REGISTER; shutting down server.");
@@ -108,7 +108,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                         node.initDatabaseLayerIfNeeded();
                     } catch (Exception e) {
                         Log.error(DirectoryHeartbeatThread.class,
-                                "[DB] Failed to initialize primary server database: %s", e.getMessage());
+                                "[DB] Failed to initialize primary server database: %socket", e.getMessage());
                     }
                 } else {
                     // backup: define local DB path
@@ -125,7 +125,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             }
 
             Log.info(DirectoryHeartbeatThread.class,
-                    "[DIR] Current primary server: %s:%d | isPrimary=%s | dbVersion=%d",
+                    "[DIR] Current primary server: %socket:%d | isPrimary=%socket | dbVersion=%d",
                     reply.ip, reply.port, iAmPrimary, threadInfo.dbVersion());
 
             long last = 0;
@@ -133,25 +133,25 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             // HEARTBEAT — always send current DB version (managerThreadInfo.dbVersion())
             while (threadInfo.isRunning()) {
                 long now = System.currentTimeMillis();
-
+                //TODO e por UDP unicast ao serviço de diretoria, de Heartbeats + estrutura de Heartbeats
                 if (now - last >= HEARTBEAT_INTERVAL_MS) {
-                    String hb = requestKeyValue(iAmPrimary ? "[Primary Server] | " : "",
+                    String hb = requestKeyValue("[Server", iAmPrimary ? "Primary] " : "Backup] ",
                             "TYPE", "HEARTBEAT",
                             "ID", threadInfo.id()
                     );
-                    send(s, dirAddr, dirPort, hb);
+                    send(socket, dirAddr, dirPort, hb);
                     last = now;
                 }
 
-                Endpoint cur = tryReceivePrincipal(s);
+                Endpoint cur = tryReceivePrincipal(socket);
                 if (cur != null) {
                     threadInfo.setPrimary(cur.ip, cur.port);
-                    boolean prim =
+                    iAmPrimary =
                             Objects.equals(cur.ip, threadInfo.serverTcpIp()) &&
                                     cur.port == threadInfo.serverTcpPort();
                     Log.info(DirectoryHeartbeatThread.class,
-                            "[DIR] Primary reported by directory: %s:%d | isPrimary=%s",
-                            cur.ip, cur.port, prim);
+                            "[DIR] Primary reported by directory: %socket:%d | isPrimary=%socket",
+                            cur.ip, cur.port, iAmPrimary);
                 }
                 Thread.sleep(SLEEP_INTERVAL_MS);
             }
@@ -161,7 +161,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                     "TYPE", "DEREGISTER",
                     "ID", threadInfo.id()
             );
-            send(s, dirAddr, dirPort, deregMsg);
+            send(socket, dirAddr, dirPort, deregMsg);
 
         } catch (Exception e) {
             if (threadInfo.isRunning()) {
@@ -240,6 +240,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
      * @param socket datagram socket
      * @return {@link Endpoint} data or {@code null} on timeout/error
      */
+    //TODO thread dedicada à receção de datagramas UDP
     private Endpoint tryReceivePrincipal(DatagramSocket socket) {
         try {
             byte[] buf = new byte[BUFFER_SIZE];

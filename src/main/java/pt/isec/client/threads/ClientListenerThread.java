@@ -39,7 +39,7 @@ public class ClientListenerThread implements Runnable {
                     continue;
                 }
 
-                @SuppressWarnings("unchecked")
+                //TODO thread nos clientes dedicada à receção de notificações assincronas
                 TcpMessage<? extends Serializable> response =
                         (TcpMessage<? extends Serializable>) in.readObject();
 

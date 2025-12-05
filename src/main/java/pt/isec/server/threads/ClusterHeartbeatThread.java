@@ -7,13 +7,7 @@ import pt.isec.common.util.Log;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.MulticastSocket;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.net.SocketTimeoutException;
+import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -84,26 +78,26 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
             _ms.setNetworkInterface(threadInfo.multicastInterface());
             configureLoopbackMode(_ms);
 
-            InetAddress grp = InetAddress.getByName(threadInfo.multicastGroup());
-            _ms.joinGroup(new InetSocketAddress(grp, threadInfo.multicastPort()), threadInfo.multicastInterface());
+            InetAddress serverGroupAddr = InetAddress.getByName(threadInfo.multicastGroup());
+            _ms.joinGroup(new InetSocketAddress(serverGroupAddr, threadInfo.multicastPort()), threadInfo.multicastInterface());
 
             _ss.setSoTimeout(ACCEPT_TIMEOUT_MS);
 
             long lastSent = 0L;
             byte[] buf = new byte[BUFFER_SIZE];
-            DatagramPacket pkt = new DatagramPacket(buf, buf.length);
+            DatagramPacket packet = new DatagramPacket(buf, buf.length);
 
             while (threadInfo.isRunning()) {
                 long now = System.currentTimeMillis();
 
                 // PRIMARY: send heartbeats (with or without SQL)
                 if (threadInfo.isPrimary()) {
-                    lastSent = handlePrimaryHeartbeatLoop(_ms, grp, lastSent, now);
+                    lastSent = handlePrimaryHeartbeatLoop(_ms, serverGroupAddr, lastSent, now);
                 }
 
                 // BACKUP: receive heartbeat and apply updates
                 if (!threadInfo.isPrimary()) {
-                    handleBackupHeartbeatLoop(_ms, pkt);
+                    handleBackupHeartbeatLoop(_ms, packet);
                 }
 
                 // Accept DB copy requests (primary side)
@@ -149,14 +143,15 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
      * Primary-only part of the loop: sends heartbeats, optionally including SQL statements.
      *
      * @param _ms      multicast socket
-     * @param grp      multicast group
+     * @param serversGroupAddr      multicast group
      * @param lastSent timestamp of last heartbeat
      * @param now      current time in millis
      * @return new {@code lastSent} timestamp
      * @throws IOException if sending the heartbeat fails
      */
+    //TODO thread dedicada ao envio periodico por unicast
     private long handlePrimaryHeartbeatLoop(MulticastSocket _ms,
-                                            InetAddress grp,
+                                            InetAddress serversGroupAddr,
                                             long lastSent,
                                             long now) throws IOException {
 
@@ -169,11 +164,11 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
 
         if (sqlToSend != null) {
             // heartbeat with pending SQL
-            sendHeartbeat(_ms, grp, sqlToSend);
+            sendHeartbeat(_ms, serversGroupAddr, sqlToSend);
             lastSent = now;
         } else if (now - lastSent >= HEARTBEAT_INTERVAL_MS) {
             // periodic heartbeat without SQL
-            sendHeartbeat(_ms, grp, null);
+            sendHeartbeat(_ms, serversGroupAddr, null);
             lastSent = now;
         }
 
@@ -294,6 +289,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
      *
      * @param _ss TCP server socket used for DB copy sessions
      */
+    //TODO thread dedicada à receção de pedidos de ligação pelos servers secundários via tcp
     private void handleDbCopyAcceptLoop(ServerSocket _ss) {
         try {
             Socket s = _ss.accept(); // short timeout
@@ -412,12 +408,32 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
 
         } catch (Exception e) {
             Log.error(ClusterHeartbeatThread.class,
-                    "[DB COPY/RQ] Error during DB copy: %s", e.getMessage());
+                    "[DB COPY/RQ] Error during DB copy: %s.\nERROR = Original database not found!", e.getMessage());
             try {
                 Files.deleteIfExists(tmp);
+                // Comunica para a diretoria que vai encerrar
+                try (DatagramSocket s = new DatagramSocket()) {
+                    s.setSoTimeout(3000);
+
+                    InetAddress dirAddr = InetAddress.getByName(threadInfo.directoryHost());
+                    int dirPort = threadInfo.directoryPort();
+
+                    // DEREGISTER
+                    String registerMsg =
+                            "TYPE = DB_ERROR | ID = "+ threadInfo.id()+" | TCP = "
+                            +threadInfo.serverTcpIp() + ":" + threadInfo.serverTcpPort()
+                            +" | DBV = " + threadInfo.dbVersion()
+                            + " | DBP = " + (threadInfo.dbCopyPort())
+                            + " | ERROR = Original database not found!"; // DB copy port
+                    byte[] data = registerMsg.getBytes(StandardCharsets.UTF_8);
+                    s.send(new DatagramPacket(data, data.length, dirAddr, dirPort));
+
+                }
+                threadInfo.shutdownServer();
             } catch (Exception ignore) {
                 // ignore cleanup failure
             }
+
         }
     }
 

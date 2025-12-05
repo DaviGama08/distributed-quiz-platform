@@ -88,6 +88,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
             // connection.setReadTimeout(NO_TIMEOUT);
 
             while (threadInfo.isRunning()) {
+                //TODO thread para comunicação com cada cliente ligado via TCP (pedido e resposta)
                 TcpMessage<?> msg = connection.receiveMessage();
                 if (msg == null) {
                     break;
@@ -141,6 +142,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
      * @param tcpMessage message received from the client
      * @throws Exception if a service call fails
      */
+    //TODO thread para comunicação com cada cliente ligado via TCP (pedido e resposta)
     private void processMessage(TcpMessage<?> tcpMessage) throws Exception {
         if (tcpMessage == null) {
             return;

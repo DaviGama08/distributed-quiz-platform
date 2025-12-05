@@ -14,7 +14,7 @@ import java.util.List;
 /**
  * Thread responsible for accepting TCP connections from clients and creating
  * a {@link ClientHandlerThread} for each session.
- */
+ */ //TODO thread dedicada à receção de pedidos de ligação dos cliente via TCP
 public class ClientListenerThread implements Runnable, AutoCloseable {
 
     private static final int THREAD_POOL_SIZE = 8;

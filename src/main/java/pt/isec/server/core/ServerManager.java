@@ -1,5 +1,4 @@
 package pt.isec.server.core;
-
 import pt.isec.common.util.Log;
 import pt.isec.server.db.DbCommands;
 import pt.isec.server.db.DbCreate;
@@ -13,7 +12,6 @@ import pt.isec.server.threads.ClusterHeartbeatThread;
 import pt.isec.server.threads.ClientListenerThread;
 import pt.isec.server.threads.DirectoryHeartbeatThread;
 import pt.isec.server.threads.NetworkTcpConnection;
-
 import java.io.IOException;
 import java.net.*;
 import java.nio.file.Files;
@@ -29,7 +27,6 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Main server coordinator.
@@ -98,7 +95,6 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
     private volatile boolean running = true;
     private volatile boolean isPrimary;
 
-    private final AtomicLong dbVersion = new AtomicLong(0);
     private final AtomicBoolean copying = new AtomicBoolean(false);
 
     /* ======================= MAIN THREADS ======================= */
@@ -135,9 +131,7 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
         this.dirHost = dirHost;
         this.dirPort = dirPort;
 
-        this.dataDir = (initialDbPath.getParent() != null) //verifica se existe o diretório
-                ? initialDbPath.getParent().toAbsolutePath() //se existir usa o diretório
-                : Paths.get(".").toAbsolutePath(); //se não obtem o diretório atual
+        this.dataDir = initialDbPath; //se existir usa o diretório
 
         this.isPrimary = false;
 
@@ -150,7 +144,7 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
                 "[MC] interface multicast selecionada: %s", multicastInterface.getName());
         Log.info(ServerManager.class,
                 "[DB] caminho inicial da BD=%s (versão=%d, role=BACKUP)",
-                dbPath, dbVersion.get());
+                dbPath, dbVersion());
     }
 
     /* ======================= STATIC HELPERS ======================= */
@@ -273,7 +267,7 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
         this.dbPath = dataDir.resolve(name).toAbsolutePath();
         Log.info(ServerManager.class,
                 "[DB] agora a usar: %s (role=%s, versão=%d)",
-                this.dbPath, (isPrimary ? "PRIMARY" : "BACKUP"), dbVersion.get());
+                this.dbPath, (isPrimary ? "PRIMARY" : "BACKUP"), dbVersion());
     }
 
     /* ======================= DB INITIALIZATION ======================= */
@@ -293,19 +287,18 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
             }
             try {
                 DbCreate.createIfMissing(this.dbPath, "/db/schema.sql");
-                this.dbCommands = new DbCommands("jdbc:sqlite:" + this.dbPath.toAbsolutePath(), this::setDbVersion);
+                this.dbCommands = new DbCommands("jdbc:sqlite:" + this.dbPath.toAbsolutePath());
                 IQuestionAnswerContext qaContext = this;
 
                 this.authService = new AuthService(qaContext, dbCommands);
                 this.questionService = new QuestionService(qaContext, dbCommands);
                 this.answerService = new AnswerService(qaContext, dbCommands);
 
-                Log.info(ServerManager.class,
-                        "[DB] camada de dados inicializada em %s", dbPath);
                 dbInitialised = true;
 
-                long v = dbCommands.get_db_version();   // SELECT db_version FROM config WHERE id = 1
-                setDbVersion(v);                        // logging of version change occurs in setDbVersion
+                long v = dbVersion();
+                Log.info(ServerManager.class,
+                        "[DB] data layer initialized at %s (db_version=%d)", dbPath, v);
             } catch (Exception e) {
                 Log.error(ServerManager.class,
                         "[DB] erro a inicializar a camada de dados: %s", e.getMessage());
@@ -437,17 +430,31 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
     /** {@inheritDoc} */
     @Override
     public long dbVersion() {
-        return dbVersion.get();
+        try {
+            // If the DB layer is not initialized yet, only auto-initialize when the DB file already exists.
+            if (!dbInitialised || dbCommands == null) {
+                Path p = this.dbPath;
+                if (p == null || !Files.exists(p)) {
+                    // DB not chosen or not created yet – version cannot be read.
+                    return -1L;
+                }
+                // Safe to initialize the data layer using the existing DB file.
+                initDatabaseLayerIfNeeded();
+            }
+
+            return (dbCommands != null) ? dbCommands.get_db_version() : -1L;
+        } catch (Exception e) {
+            Log.error(ServerManager.class,
+                    "[DB] Failed to read db_version from database: %s", e.getMessage());
+            return -1L;
+        }
     }
 
     /** {@inheritDoc} */
     @Override
     public void setDbVersion(long v) {
-        long old = dbVersion.getAndSet(v);
-        if (old != v) {
-            Log.info(ServerManager.class,
-                    "Versão da base de dados alterada: %d -> %d", old, v);
-        }
+        // Deprecated: DB version is no longer cached in memory; it is always read from the database.
+        // Method kept only for backwards compatibility with older code paths.
     }
 
     /** {@inheritDoc} */

@@ -71,7 +71,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                     "TYPE", "REGISTER",
                     "ID", threadInfo.id(),
                     "TCP", threadInfo.serverTcpIp() + ":" + threadInfo.serverTcpPort(), // this server TCP endpoint
-                    "DBV", String.valueOf(threadInfo.dbVersion()),                      // DB version
+                    "DBV", String.valueOf(threadInfo.dbVersion()),                      // DB version (from DB when available)
                     "DBP", String.valueOf(threadInfo.dbCopyPort())                      // DB copy port
             );
             send(socket, dirAddr, dirPort, registerMsg);
@@ -90,13 +90,11 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                     Objects.equals(reply.ip, threadInfo.serverTcpIp()) &&
                             reply.port == threadInfo.serverTcpPort();
 
-            // version from directory: -1 = first time
+            // Directory DB version is now only used for logging; the authoritative
+            // version is stored in the local database itself.
             if (reply.dbv != null) {
-                if (reply.dbv == -1 && iAmPrimary) {
-                    threadInfo.setDbVersion(1);
-                } else if (reply.dbv >= 0) {
-                    threadInfo.setDbVersion(reply.dbv);
-                }
+                Log.info(DirectoryHeartbeatThread.class,
+                        "[DIR] Directory reports cluster DB version: %d", reply.dbv);
             }
 
             if (threadInfo instanceof ServerManager node) {
@@ -130,7 +128,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
 
             long last = 0;
 
-            // HEARTBEAT — always send current DB version (managerThreadInfo.dbVersion())
+            // HEARTBEAT — always send current DB version (threadInfo.dbVersion())
             while (threadInfo.isRunning()) {
                 long now = System.currentTimeMillis();
                 //TODO e por UDP unicast ao serviço de diretoria, de Heartbeats + estrutura de Heartbeats

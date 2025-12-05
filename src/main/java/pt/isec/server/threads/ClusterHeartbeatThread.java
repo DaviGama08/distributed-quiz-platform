@@ -1,4 +1,5 @@
 package pt.isec.server.threads;
+
 import pt.isec.server.core.IServerThreadContext;
 import pt.isec.server.core.ServerManager;
 import pt.isec.common.messages.TcpMessage;
@@ -197,27 +198,29 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                     long rxVersion = extractLong(msg, "version");
                     boolean versionMismatch;
 
-                    // Apply SQL updates encoded in base64
+                    // Apply SQL updates encoded in base64 (incremental replication)
                     String sqlEncoded = extractString(msg, "sql");
                     if (sqlEncoded != null && !sqlEncoded.isBlank()) {
-                        Log.info(ClusterHeartbeatThread.class, "[MC] Heartbeat with SQL received from primary; applying incremental updates.");
+                        Log.info(ClusterHeartbeatThread.class,
+                                "[MC] Heartbeat with SQL received from primary; applying incremental updates.");
 
-                        versionMismatch = rxVersion >= 0 && rxVersion != threadInfo.dbVersion() + 1;
+                        long localBefore = threadInfo.dbVersion();
+                        versionMismatch = rxVersion >= 0 && rxVersion != localBefore + 1;
 
                         if (versionMismatch) {
                             Log.error(ClusterHeartbeatThread.class,
                                     "[MC] Unexpected DB version while applying SQL (expected=%d, received=%d). " +
-                                            "Shutting down server.", threadInfo.dbVersion() + 1, rxVersion);
+                                            "Shutting down server.", localBefore + 1, rxVersion);
                             threadInfo.shutdownServer();
                             return;
                         }
+
                         byte[] bytes = Base64.getDecoder().decode(sqlEncoded);
                         String joined = new String(bytes, StandardCharsets.UTF_8);
 
-                        DbCommands db = threadInfo.getDb(); //obtem a base de dados
-
-                        //Considera tudo apenas uma só transação. Incrementa apenas 1 por transação
-                        db.runInTransaction(tx -> {
+                        // Apply the whole batch of SQL in a single transaction;
+                        // DbCommands will increment config.db_version once.
+                        threadInfo.getDb().runInTransaction(tx -> {
                             String[] stmts = joined.split(";;");
                             for (String s : stmts) {
                                 String trimmed = s.trim();
@@ -230,9 +233,22 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                             }
                         });
 
-                        //threadInfo.setDbVersion(rxVersion);
-                    } else {
+                        long localAfter = threadInfo.dbVersion();
+                        Log.info(ClusterHeartbeatThread.class,
+                                "[MC] DB version after applying SQL: local=%d, remote=%d",
+                                localAfter, rxVersion);
 
+                        // Extra sanity: ensure we ended up aligned with the primary
+                        if (rxVersion >= 0 && rxVersion != localAfter) {
+                            Log.error(ClusterHeartbeatThread.class,
+                                    "[MC] DB version after applying SQL does not match remote " +
+                                            "(local=%d, remote=%d). Shutting down.",
+                                    localAfter, rxVersion);
+                            threadInfo.shutdownServer();
+                        }
+
+                    } else {
+                        // No SQL in heartbeat → version check / DB copy
                         int rxDbPort = (int) extractLong(msg, "dbPort");
 
                         Path dbPath = threadInfo.dbPath();
@@ -348,7 +364,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
      *
      * @param primaryIp   primary server IP
      * @param primaryPort primary DB copy port
-     * @param rxVersion   DB version received from heartbeat
+     * @param rxVersion   DB version received from heartbeat (used for logging)
      */
     private void requestDbCopyFromPrimary(String primaryIp, int primaryPort, long rxVersion) {
         Path target = threadInfo.dbPath();
@@ -408,7 +424,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
             if (moved) {
                 Log.info(ClusterHeartbeatThread.class,
                         "[DB COPY/RQ] DB copy completed at %s (new version=%d)", target, rxVersion);
-                threadInfo.setDbVersion(rxVersion);
+                // No local version cache to update: DB version comes from the copied file itself.
             } else {
                 Log.error(ClusterHeartbeatThread.class,
                         "[DB COPY/RQ] Could not replace %s (temporary file left: %s)", target, tmp);

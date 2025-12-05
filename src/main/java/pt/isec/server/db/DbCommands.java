@@ -3,7 +3,6 @@ package pt.isec.server.db;
 import java.sql.*;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.function.Consumer;
 
 /**
  * Thin SQLite/JDBC helper with simple, explicit API and didactic flow.
@@ -25,37 +24,13 @@ public final class DbCommands {
      */
     private final String url;
 
-    private Consumer<Long> onVersionChange;
-
     /**
-     * Constructs the helper with a JDBC URL and a version-change callback.
-     *
-     * @param url             JDBC URL for SQLite
-     * @param onVersionChange callback to invoke when DB version changes
-     */
-    public DbCommands(String url, Consumer<Long> onVersionChange) {
-        this.url = url;
-        this.onVersionChange = onVersionChange;
-    }
-
-    /**
-     * Constructs the helper with only a JDBC URL, without version-change callback.
+     * Constructs the helper with a JDBC URL.
      *
      * @param url JDBC URL for SQLite
      */
     public DbCommands(String url) {
         this.url = url;
-    }
-
-    /**
-     * Notifies a registered version-change listener, if any.
-     *
-     * @param newVersion new DB version
-     */
-    private void notifyVersionChange(long newVersion) {
-        if (onVersionChange != null) {
-            onVersionChange.accept(newVersion);
-        }
     }
 
     /**
@@ -159,7 +134,7 @@ public final class DbCommands {
     }
 
     /**
-     * Increments {@code db_version} in {@code config} and notifies listener.
+     * Increments {@code db_version} in {@code config}.
      *
      * @param c open connection
      */
@@ -167,8 +142,7 @@ public final class DbCommands {
         final String sql = "UPDATE config SET db_version = db_version + 1 WHERE id = 1";
         try (PreparedStatement ps = c.prepareStatement(sql)) {
             ps.executeUpdate();
-            long v = get_db_version(c);
-            notifyVersionChange(v);
+            // Version is now updated in the database; callers should read it directly when needed.
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }

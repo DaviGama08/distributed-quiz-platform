@@ -1,4 +1,5 @@
 package pt.isec.server.core;
+
 import pt.isec.server.db.DbCommands;
 import pt.isec.server.services.auth.IAuthService;
 import pt.isec.server.services.question.IAnswerService;
@@ -129,16 +130,23 @@ public interface IServerThreadContext {
 
     /**
      * Returns the current database version.
+     * <p>
+     * Implementations are expected to read this value directly from the database
+     * (for example from {@code config.db_version}) rather than from an in-memory cache.
      *
-     * @return DB version
+     * @return DB version, or {@code -1} if it cannot be determined
      */
     long dbVersion();
 
     /**
-     * Updates the current database version.
+     * Deprecated: kept only for backwards compatibility.
+     * <p>
+     * Implementations are free to ignore this call, since the database version is
+     * now managed exclusively in the database itself.
      *
-     * @param v new DB version
+     * @param v new DB version (ignored)
      */
+    @Deprecated
     void setDbVersion(long v);
 
     /**

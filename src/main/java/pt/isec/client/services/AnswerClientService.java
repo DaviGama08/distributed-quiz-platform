@@ -32,6 +32,7 @@ public class AnswerClientService {
      *
      * @param dto answer payload
      */
+    // TODO Estudante: submissão da resposta associada a uma pergunta visualizada, dentro do seu período de validade
     public void submitAnswer(SubmitAnswerDTO dto) {
         try {
             service.getRequestQueue().put(new TcpMessage<>(MessageType.SUBMIT_ANSWER, dto));
@@ -45,6 +46,7 @@ public class AnswerClientService {
      *
      * @param dto view answers payload
      */
+    // TODO Estudante: consulta das perguntas expiradas respondidas, podendo ser aplicados filtros de pesquisa
     public void viewAnswersForTeacher(ViewAnswersDTO dto) {
         try {
             service.getRequestQueue().put(new TcpMessage<>(MessageType.VIEW_ANSWERS, dto));

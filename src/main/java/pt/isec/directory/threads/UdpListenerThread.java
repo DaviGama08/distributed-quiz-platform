@@ -82,6 +82,7 @@ public class UdpListenerThread implements Runnable {
 
         while (threadInfo.isRunning()) {
             try {
+                // TODO Servidores secundários (e secundários): thread dedicada à receção de datagramas UDP
                 socket.receive(packet);
 
                 byte[] data = new byte[packet.getLength()];

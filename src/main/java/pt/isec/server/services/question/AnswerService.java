@@ -119,6 +119,7 @@ public class AnswerService implements IAnswerService {
      * @throws Exception if DB access fails
      */
     @Override
+    // TODO Docente: consulta dos detalhes associados a uma pergunta expirada, incluindo as respostas
     public List<Answer> viewAnswers(ViewAnswersDTO dto) throws Exception {
         Integer questionId = dto.questionId();
         Integer teacherId = dto.teacherId();

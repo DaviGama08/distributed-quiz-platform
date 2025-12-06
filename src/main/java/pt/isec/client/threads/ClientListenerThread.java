@@ -39,7 +39,7 @@ public class ClientListenerThread implements Runnable {
                     continue;
                 }
 
-                //TODO thread nos clientes dedicada à receção de notificações assincronas
+                // TODO Cliente: thread nos clientes dedicada à receção de notificações assíncronas do servidor principal, via TCP
                 TcpMessage<? extends Serializable> response =
                         (TcpMessage<? extends Serializable>) in.readObject();
 

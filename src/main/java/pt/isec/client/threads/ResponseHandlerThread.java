@@ -40,6 +40,7 @@ public class ResponseHandlerThread implements Runnable {
 
         while (tInfo.isRunning()) {
             try {
+                // TODO Aplicação cliente: indicação assíncrona de alterações na BD
                 TcpMessage<? extends Serializable> response = tInfo.getResponseQueue().take();
                 processResponse(response);
             } catch (InterruptedException e) {
@@ -127,7 +128,6 @@ public class ResponseHandlerThread implements Runnable {
                 if(response.getData() instanceof String s)
                     tInfo.setPropCreateQuestionError(s);
             }
-
             case LIST_QUESTIONS_RESPONSE -> {
                 Log.info(ResponseHandlerThread.class, "Questions list received");
                 Serializable data = response.getData();
@@ -136,7 +136,6 @@ public class ResponseHandlerThread implements Runnable {
                     tInfo.setPropListQuestionsResponse(qList);
                 }
             }
-
             case EDIT_QUESTION_FAIL -> {
                 Log.error(ResponseHandlerThread.class, "Server error: " + response.getData());
                 if(response.getData() instanceof String s)

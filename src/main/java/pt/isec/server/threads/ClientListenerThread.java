@@ -54,6 +54,7 @@ public class ClientListenerThread implements Runnable, AutoCloseable {
             // Main loop — accept clients while the server is running
             while (threadInfo.isRunning()) {
                 try {
+                    // TODO Servidor principal e secundários: thread dedicada à receção de pedidos de ligação dos clientes via TCP
                     Socket newSocket = serverSocket.accept();
                     ClientHandlerThread handler =
                             new ClientHandlerThread(threadInfo, new NetworkTcpConnection(newSocket));

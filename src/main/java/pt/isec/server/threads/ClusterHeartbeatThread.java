@@ -104,6 +104,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                 }
 
                 // Accept DB copy requests (primary side)
+                // TODO Servidor principal (e secundários): thread dedicada à receção de pedidos de ligação pelos servidores secundários via TCP + uma thread para cada um para tratar da transferência do ficheiro da BD
                 handleDbCopyAcceptLoop(_ss);
 
                 Thread.sleep(LOOP_SLEEP_MS);
@@ -152,7 +153,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
      * @return new {@code lastSent} timestamp
      * @throws IOException if sending the heartbeat fails
      */
-    //TODO thread dedicada ao envio periodico por unicast
+    // TODO Servidores principal e secundários: thread (ou esquema alternativo como Timer) dedicada ao envio periódico, por multicast
     private long handlePrimaryHeartbeatLoop(MulticastSocket _ms,
                                             InetAddress serversGroupAddr,
                                             long lastSent,
@@ -205,8 +206,9 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
                                 "[MC] Heartbeat with SQL received from primary; applying incremental updates.");
 
                         long localBefore = threadInfo.dbVersion();
-                        versionMismatch = rxVersion >= 0 && rxVersion != localBefore + 1;
 
+                        // TODO Servidor secundário: encerramento quando deteta um número de versão incoerente num heartbeat do servidorprincipal
+                        versionMismatch = rxVersion >= 0 && rxVersion != localBefore + 1;
                         if (versionMismatch) {
                             Log.error(ClusterHeartbeatThread.class,
                                     "[MC] Unexpected DB version while applying SQL (expected=%d, received=%d). " +
@@ -220,6 +222,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
 
                         // Apply the whole batch of SQL in a single transaction;
                         // DbCommands will increment config.db_version once.
+                        // TODO Servidor secundário: BD sincronizada com a BD do servidor principal (mantém o mesmo conteúdo)
                         threadInfo.getDb().runInTransaction(tx -> {
                             String[] stmts = joined.split(";;");
                             for (String s : stmts) {
@@ -366,6 +369,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
      * @param primaryPort primary DB copy port
      * @param rxVersion   DB version received from heartbeat (used for logging)
      */
+    // TODO Servidor secundário: obtenção da base de dados/ficheiro ".db" completo do servidor principal, no arranque (termina se a operação falhar, informando o serviço de diretoria)
     private void requestDbCopyFromPrimary(String primaryIp, int primaryPort, long rxVersion) {
         Path target = threadInfo.dbPath();
         Path tmp = target.resolveSibling(target.getFileName().toString() + ".tmp");

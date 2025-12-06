@@ -58,6 +58,7 @@ public class AuthService implements IAuthService {
      * @return authentication response with session and teacher info
      * @throws Exception if validation or database access fails
      */
+    // TODO Utilizador com perfil de docente: registo com código
     @Override
     public AuthResponseDTO registerTeacher(RegisterTeacherDTO dto) throws Exception {
         if (dto == null) {
@@ -121,6 +122,7 @@ public class AuthService implements IAuthService {
      * @return authentication response with session and student info
      * @throws Exception if validation or database access fails
      */
+    // TODO Utilizador com perfil de estudante: registo
     @Override
     public AuthResponseDTO registerStudent(RegisterStudentDTO dto) throws Exception {
         if (dto == null) {
@@ -191,6 +193,7 @@ public class AuthService implements IAuthService {
      * @return authentication response with session and user info
      * @throws Exception if validation or database access fails
      */
+    // TODO Utilizador: autenticação (username + password)
     @Override
     public AuthResponseDTO login(LoginRequestDTO dto) throws Exception {
         if (dto == null) {
@@ -316,6 +319,7 @@ public class AuthService implements IAuthService {
      * @return updated authentication response (without session id change)
      * @throws Exception if validation or database access fails
      */
+    // TODO Utilizador: edição dos dados de registo
     @Override
     public AuthResponseDTO updateStudent(UpdateStudentDTO dto) throws Exception {
         String sql;
@@ -428,6 +432,7 @@ public class AuthService implements IAuthService {
      * @return updated authentication response (without session id change)
      * @throws Exception if validation or database access fails
      */
+    // TODO Utilizador: edição dos dados de registo
     @Override
     public AuthResponseDTO updateTeacher(UpdateTeacherDTO dto) throws Exception {
         String sql;

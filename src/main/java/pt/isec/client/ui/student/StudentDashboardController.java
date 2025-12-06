@@ -66,6 +66,8 @@ public class StudentDashboardController implements IDisposableProp {
     private volatile boolean awaitingSubmitAnswer = false;
     private volatile boolean awaitingHistory = false;
 
+    private volatile String currentFilter = "Todas";
+
     /**
      * Creates a new controller for the student dashboard.
      *
@@ -153,7 +155,12 @@ public class StudentDashboardController implements IDisposableProp {
             @SuppressWarnings("unchecked")
             List<Answer> history = (List<Answer>) evt.getNewValue();
             UiUtils.runOnUiThread(() -> {
-                StudentDialogs.showHistoryDialog(getOwnerWindow(), history);
+                StudentDialogs.showHistoryDialog(
+                        getOwnerWindow(),
+                        history,
+                        currentFilter,
+                        newFilter -> currentFilter = newFilter
+                );
                 view.addNotification("Histórico de respostas carregado (" +
                         (history == null ? 0 : history.size()) + " registos).");
             });

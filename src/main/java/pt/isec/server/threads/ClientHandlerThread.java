@@ -74,6 +74,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
     @Override
     public void run() {
         try {
+            // TODO Aplicação cliente: ligação encerrada pelo servidor após 30 segundos (pode ser aumentado) sem tentativa de registo ou autenticação
             // Initial 30-second timeout for the first client message
             connection.setReadTimeout(Duration.ofSeconds(FIRST_MESSAGE_TIMEOUT_SEC));
 
@@ -85,10 +86,9 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
 
             // Connection accepted
             connection.sendMessage(new TcpMessage<>(MessageType.ACK, "ok"));
-            // connection.setReadTimeout(NO_TIMEOUT);
 
+            // TODO Servidor principal e secundários: thread para comunicação com cada cliente ligado via TCP (pedido e resposta)
             while (threadInfo.isRunning()) {
-                //TODO thread para comunicação com cada cliente ligado via TCP (pedido e resposta)
                 TcpMessage<?> msg = connection.receiveMessage();
                 if (msg == null) {
                     break;

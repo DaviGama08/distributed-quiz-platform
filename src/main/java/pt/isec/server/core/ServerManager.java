@@ -223,6 +223,7 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
             return; // already chosen
         }
 
+        // TODO Servidor: esquema de nomeação dos ficheiros SQLite (".db") que evita apagar ficheiros existentes
         Path newest = findNewestDbInDir(dataDir);
         //TODO Servidor: evita apagar ficheiros existentes
         if (newest != null) {
@@ -286,6 +287,7 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
                 return;
             }
             try {
+                // TODO Servidor principal: quando arranca, cria a base de dados se não existir (esquema, mas sem dados) ou utiliza a mais recente
                 DbCreate.createIfMissing(this.dbPath, "/db/schema.sql");
                 this.dbCommands = new DbCommands("jdbc:sqlite:" + this.dbPath.toAbsolutePath());
                 IQuestionAnswerContext qaContext = this;
@@ -502,6 +504,7 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
     /* ======================= REPLICATION / DB COPY ======================= */
 
     /** {@inheritDoc} */
+    // TODO: Servidor principal: o acesso à base de dados local deve ser feito de forma atómica para garantir que, enquanto umthread executa uma query e divulga a operação através de um hearbeat , ou transfere o ficheiro para um servidorsecundário que arrancou, não existem outras threads a aceder à base de dados.
     @Override
     public boolean tryLockCopy() {
         return copying.compareAndSet(false, true);

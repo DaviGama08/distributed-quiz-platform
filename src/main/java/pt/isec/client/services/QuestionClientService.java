@@ -31,6 +31,7 @@ public class QuestionClientService {
      *
      * @param dto create question payload
      */
+    // TODO Docente: criação de uma pergunta de escolha múltipla + geração de código
     public void createQuestion(CreateQuestionDTO dto) {
         try {
             service.getRequestQueue().put(new TcpMessage<>(MessageType.CREATE_QUESTION, dto));
@@ -44,6 +45,7 @@ public class QuestionClientService {
      *
      * @param dto edit question payload
      */
+    // TODO Docente: edição de uma pergunta (sem respostas associadas)
     public void editQuestion(EditQuestionDTO dto) {
         try {
             service.getRequestQueue().put(new TcpMessage<>(MessageType.EDIT_QUESTION, dto));
@@ -57,6 +59,7 @@ public class QuestionClientService {
      *
      * @param dto delete question payload
      */
+    // TODO Docente: eliminação de uma pergunta (sem respostas associadas)
     public void deleteQuestion(DeleteQuestionDTO dto) {
         try {
             service.getRequestQueue().put(new TcpMessage<>(MessageType.DELETE_QUESTION, dto));
@@ -70,6 +73,7 @@ public class QuestionClientService {
      *
      * @param dto list questions payload
      */
+    // TODO Docente: consulta das perguntas criadas pelo próprio, podendo ser aplicado filtros de pesquisa
     public void listQuestions(ListQuestionsDTO dto) {
         try {
             service.getRequestQueue().put(new TcpMessage<>(MessageType.LIST_QUESTIONS, dto));
@@ -83,6 +87,7 @@ public class QuestionClientService {
      *
      * @param dto join question payload
      */
+    // TODO Estudante: visualização de uma pergunta associada a um código, dentro do seu período de validade
     public void joinQuestion(JoinQuestionDTO dto) {
         try {
             service.getRequestQueue().put(new TcpMessage<>(MessageType.JOIN_QUESTION, dto));

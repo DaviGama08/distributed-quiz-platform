@@ -67,6 +67,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             int dirPort = threadInfo.directoryPort();
 
             // REGISTER
+            // TODO Servidor: registo no serviço de diretoria e determinação do papel (principal ou secundário)
             String registerMsg = requestKeyValue(
                     "TYPE", "REGISTER",
                     "ID", threadInfo.id(),
@@ -79,6 +80,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             // waits "200 PRINCIPAL ip:port[|DBV=X]"
             Endpoint reply = waitPrincipal(socket);
             if (reply == null) {
+                // TODO Servidor: encerramento se não receber qualquer resposta do serviço de diretoria
                 Log.error(DirectoryHeartbeatThread.class,
                         "[DIR] No response from directory for REGISTER; shutting down server.");
                 threadInfo.shutdownServer();
@@ -101,6 +103,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                 if (iAmPrimary) {
                     try {
                         // primary chooses DB: newest or new
+                        // TODO Servidor principal: quando arranca, cria a base de dados se não existir (esquema, mas sem dados) ou utiliza a mais recente
                         node.initDbPathAsPrincipalOnStartup();
                         // create/open DB and schema
                         node.initDatabaseLayerIfNeeded();

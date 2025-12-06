@@ -224,6 +224,7 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
      * @param prop property name
      * @param l    listener to register
      */
+    //utilizados pelos controllers das UIs
     @Override
     public void addPropertyChangeListener(String prop, PropertyChangeListener l) {
         pcs.addPropertyChangeListener(prop, l);

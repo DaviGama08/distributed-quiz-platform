@@ -82,11 +82,16 @@ public class UdpListenerThread implements Runnable {
 
         while (threadInfo.isRunning()) {
             try {
+                // Block until a UDP datagram is received
                 socket.receive(packet);
-
+                //Byte array to recive payload
                 byte[] data = new byte[packet.getLength()];
+                // Copy received bytes from the packet's buffer into the new array.
+                // Uses packet.getOffset() because the valid data may start at a non‑zero offset.
                 System.arraycopy(packet.getData(), packet.getOffset(), data, 0, packet.getLength());
 
+                // Wrap the sender info and the copied payload into a UdpMessage and put it
+                // into the shared blocking queue.
                 threadInfo.queue().put(
                         new UdpMessage(packet.getAddress(), packet.getPort(), data, data.length)
                 );

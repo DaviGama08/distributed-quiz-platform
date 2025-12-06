@@ -32,7 +32,7 @@ public class ClientListenerThread implements Runnable {
 
         while (service.isRunning()) {
             try {
-                ObjectInputStream in = service.getInputStream();
+                ObjectInputStream in = service.getInputStream(); //ready to read
                 if (in == null) {
                     // No valid stream (e.g. during reconnection); wait a bit
                     Thread.sleep(200);
@@ -41,7 +41,7 @@ public class ClientListenerThread implements Runnable {
 
                 //TODO thread nos clientes dedicada à receção de notificações assincronas
                 TcpMessage<? extends Serializable> response =
-                        (TcpMessage<? extends Serializable>) in.readObject();
+                        (TcpMessage<? extends Serializable>) in.readObject(); //waits to receive msg
 
                 if (response != null) {
                     Log.info(ClientListenerThread.class, "Received: " + response.getType());

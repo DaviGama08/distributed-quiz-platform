@@ -34,6 +34,14 @@ public class ResponseHandlerThread implements Runnable {
         this.tInfo = tInfo;
     }
 
+    /**
+     * Main processing loop for server responses.
+     * <p>
+     * Continuously takes {@link TcpMessage} instances from the response queue,
+     * dispatches each one to {@link #processResponse(TcpMessage)}, and keeps
+     * running while the client is active. If the thread is interrupted, the
+     * loop is terminated and the thread exits gracefully.
+     */
     @Override
     public void run() {
         Log.info(ResponseHandlerThread.class, "Started processing responses...");
@@ -95,7 +103,6 @@ public class ResponseHandlerThread implements Runnable {
                                     (data == null ? "null" : data.getClass().getName()));
                 }
             }
-
 
             /* ===== ACK/NACK/ERROR generic ===== */
             case ACK -> {

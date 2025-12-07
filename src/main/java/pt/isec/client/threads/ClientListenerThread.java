@@ -47,13 +47,13 @@ public class ClientListenerThread implements Runnable {
                 }
             } catch (IOException e) {
                 if (service.isRunning()) {
-                    Log.error(ClientListenerThread.class, "Connection lost: " + e.getMessage(), e);
+                    Log.error(ClientListenerThread.class, "Connection lost: " + e.getMessage());
                     service.handleConnectionLost();
                 }
                 break;
             } catch (ClassNotFoundException e) {
                 Log.error(ClientListenerThread.class,
-                        "Unknown message type received: " + e.getMessage(), e);
+                        "Unknown message type received: " + e.getMessage());
             } catch (InterruptedException e) {
                 Log.warn(ClientListenerThread.class, "Listener interrupted");
                 Thread.currentThread().interrupt();

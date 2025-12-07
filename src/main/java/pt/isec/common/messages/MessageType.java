@@ -15,6 +15,9 @@ public enum MessageType {
     NACK,
     ERROR,
     LOGOUT,
+    RESUME_SESSION,
+    RESUME_SESSION_OK,
+    RESUME_SESSION_FAIL,
     PONG,
 
     // Questions – teacher side

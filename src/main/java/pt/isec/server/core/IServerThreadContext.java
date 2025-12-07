@@ -1,5 +1,4 @@
 package pt.isec.server.core;
-
 import pt.isec.server.db.DbCommands;
 import pt.isec.server.services.auth.IAuthService;
 import pt.isec.server.services.question.IAnswerService;
@@ -203,33 +202,6 @@ public interface IServerThreadContext {
      * @return answer service
      */
     IAnswerService getAnswerService();
-
-
-    /* ===================== SESSIONS / LOGIN ===================== */
-
-    /**
-     * Checks whether a given user id has an active session.
-     *
-     * @param userId user identifier
-     * @return {@code true} if user is logged in
-     */
-    boolean isUserLogged(long userId);
-
-    /**
-     * Registers a new login session for a user.
-     *
-     * @param userId    user identifier
-     * @param sessionId session token
-     */
-    void registerLogin(long userId, String sessionId);
-
-    /**
-     * Unregisters the login session for a user.
-     *
-     * @param userId user identifier
-     */
-    void unregisterLogin(long userId);
-
 
     /* ===================== ACTIVE TCP CONNECTIONS ===================== */
 

@@ -569,27 +569,6 @@ public class QuestionService implements IQuestionService {
         );
     }
 
-    /**
-     * Retrieves the teacher ID associated with a given question.
-     * <p>
-     * Executes a lookup in the database for the question with the specified ID.
-     * If no matching record is found, this method returns {@code null}.
-     *
-     * @param questionId the ID of the question to look up
-     * @return the teacher ID, or {@code null} if the question does not exist
-     */
-    @Override
-    public Integer findTeacherIdByQuestionId(int questionId) {
-        Map<String, Object> row = dbCommands.selectOne(
-                "SELECT teacher_id FROM question WHERE id = ? LIMIT 1",
-                questionId
-        );
-        if (row == null) {
-            return null;
-        }
-        return ((Number) row.get("teacher_id")).intValue();
-    }
-
     /* =========================================================
      *                       PRIVATE HELPERS
      * ========================================================= */

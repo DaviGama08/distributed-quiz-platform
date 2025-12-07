@@ -1,4 +1,6 @@
 package pt.isec.server.core;
+import pt.isec.common.dto.auth.AuthResponseDTO;
+import pt.isec.common.dto.auth.LoginRequestDTO;
 import pt.isec.common.util.Log;
 import pt.isec.server.db.DbCommands;
 import pt.isec.server.db.DbCreate;
@@ -63,9 +65,6 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
     private IAnswerService answerService;
 
     /* ======================= SESSIONS / REPLICATION ======================= */
-
-    /** userId -> sessionId. */
-    private final Map<Long, String> activeSessions = new ConcurrentHashMap<>();
 
     /** Queue of SQL commands to replicate to other nodes. */
     private final BlockingQueue<List<String>> sqlToBroadcast = new LinkedBlockingQueue<>();
@@ -339,26 +338,6 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
         return dbCommands;
     }
 
-    /* ======================= SESSIONS / LOGIN ======================= */
-
-    /** {@inheritDoc} */
-    @Override
-    public boolean isUserLogged(long id) {
-        return activeSessions.containsKey(id);
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public void registerLogin(long id, String sessionId) {
-        activeSessions.put(id, sessionId);
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public void unregisterLogin(long id) {
-        activeSessions.remove(id);
-    }
-
     /* ======================= IDENTITY / NETWORK CONFIG ======================= */
 
     /** {@inheritDoc} */
@@ -521,6 +500,7 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
     public BlockingQueue<List<String>> queue() {
         return sqlToBroadcast;
     }
+
 
     /* ======================= PRIMARY/BACKUP ROLE ======================= */
 

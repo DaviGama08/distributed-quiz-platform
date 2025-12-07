@@ -41,10 +41,9 @@ public class AnswerService implements IAnswerService {
      *
      * @param dto answer data
      * @return {@code true} if successfully recorded
-     * @throws Exception if validation or DB operations fail
      */
     @Override
-    public boolean submitAnswer(SubmitAnswerDTO dto) throws Exception {
+    public boolean submitAnswer(SubmitAnswerDTO dto)  {
         Integer questionId = dto.questionId();
         Integer studentId = dto.studentId();
         OptionLetter selected = dto.selectedOption();
@@ -79,7 +78,7 @@ public class AnswerService implements IAnswerService {
                 studentId, questionId, selected.name(), now.toString()
         );
 
-        // incremental replication
+        // incremental replication for backup servers
         context.queue().add(Collections.singletonList(
                 "INSERT INTO answer (student_id, question_id, chosen_option, created_at) VALUES (" +
                         studentId + ", " + questionId + ", '" + selected.name() + "', '" + now + "');"
@@ -96,22 +95,17 @@ public class AnswerService implements IAnswerService {
                 teacherId = Long.parseLong(s);
             }
 
-            if (teacherId != null && context.isUserLogged(teacherId)) {
-                // send notification to teacher with the question ID
+            if (teacherId != null) {
                 TcpMessage<Integer> notify =
                         new TcpMessage<>(MessageType.ANSWER_SUBMITTED, questionId, Integer.class);
                 context.sendToUser(teacherId, notify);
+
                 Log.info(AnswerService.class,
-                        "Real-time notification sent to teacher %d (question %d).",
+                        "Real-time notification attempt sent to teacher %d (question %d).",
                         teacherId, questionId);
-            } else {
-                // teacher offline — just log; teacher will see updates on refresh
-                Log.info(AnswerService.class,
-                        "Teacher is not online; no real-time notification was sent for question %d.",
-                        questionId);
             }
         } catch (Exception e) {
-            // notification failures must not prevent successful submission
+            // Notification failures must not prevent successful submission
             Log.error(AnswerService.class,
                     "Failed to notify teacher in real time: %s", e.getMessage());
         }

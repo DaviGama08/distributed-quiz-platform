@@ -9,6 +9,7 @@ import pt.isec.client.threads.RequestSenderThread;
 import pt.isec.client.threads.ResponseHandlerThread;
 import pt.isec.common.dto.auth.AuthResponseDTO;
 import pt.isec.common.dto.question.CreateQuestionResponseDTO;
+import pt.isec.common.messages.MessageType;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.Question;
@@ -253,6 +254,8 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
         setUserId(null);
         setStudentNumber(null);
         setUserName(null);
+
+        sessionIdForReauth = null;
     }
 
     /**
@@ -365,7 +368,17 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
     /* ======================= IClientThreadContext ============================ */
 
     /**
-     * Handles a lost-connection event and starts the reconnection flow.
+     * Handles an unexpected loss of the TCP connection to the server.
+     * <p>
+     * Ensures that only one reconnection workflow is active at a time and
+     * starts a background task that:
+     * <ul>
+     *   <li>Stops current network threads and closes the socket</li>
+     *   <li>Contacts the directory again to rediscover the principal server</li>
+     *   <li>Attempts to establish a new TCP connection</li>
+     *   <li>Optionally tries to resume the previous session using its id</li>
+     *   <li>Notifies listeners about connection status changes</li>
+     * </ul>
      */
     @Override
     public void handleConnectionLost() {
@@ -427,6 +440,16 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
 
     /* ============ IClientThreadContext: auth-related events ================= */
 
+
+    /**
+     * Handles a successful login event coming from the server.
+     * <p>
+     * Updates the internal authentication state (user id, type, name, e-mail,
+     * and student number when applicable), stores the session id for potential
+     * reconnection, and fires a {@link #PROP_LOGIN_OK} property change event.
+     *
+     * @param dto authentication response received from the server
+     */
     @Override
     public void setPropLoginOk(AuthResponseDTO dto) {
         setAuthenticated(true);
@@ -441,16 +464,32 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
         if ("STUDENT".equals(dto.userType())) {
             setStudentNumber(dto.studentNumber());
         }
-        // store sessionId for potential re-authentication
         sessionIdForReauth = dto.sessionId();
         pcs.firePropertyChange(PROP_LOGIN_OK, null, dto);
     }
 
+    /**
+     * Handles a generic error reported by the server.
+     * <p>
+     * Fires a {@link #PROP_FAIL} property change event so that the UI can
+     * display the error message to the user.
+     *
+     * @param s human-readable error message
+     */
     @Override
     public void setPropError(String s) {
         pcs.firePropertyChange(PROP_FAIL, null, s);
     }
 
+    /**
+     * Handles a successful registration event.
+     * <p>
+     * This does not automatically mark the client as authenticated; it simply
+     * notifies listeners via a {@link #PROP_REGISTER_OK} property change so
+     * that the UI can react (for example, by showing a confirmation dialog).
+     *
+     * @param dto registration response received from the server
+     */
     @Override
     public void setPropRegisterOk(AuthResponseDTO dto) {
         // Do not automatically authenticate; just notify the registration
@@ -459,24 +498,65 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
 
     /* ============ IClientThreadContext: question/answer events ============= */
 
+    /**
+     * Notifies listeners that a question was created successfully.
+     * <p>
+     * Fires a {@link #PROP_CREATE_QUESTION_RESPONSE} property change event
+     * with the server-generated question id and access code.
+     *
+     * @param dto creation response received from the server
+     */
     @Override
     public void setPropCreateQuestionResponse(CreateQuestionResponseDTO dto) {
         pcs.firePropertyChange(PROP_CREATE_QUESTION_RESPONSE, null, dto);
     }
+    /**
+     * Notifies listeners that creating a question has failed.
+     * <p>
+     * Fires a {@link #PROP_CREATE_QUESTION_FAIL} property change event with
+     * the error message returned by the server.
+     *
+     * @param message error description
+     */
     @Override
     public void setPropCreateQuestionError(String message) {
         pcs.firePropertyChange(PROP_CREATE_QUESTION_FAIL, null, message);
     }
+    /**
+     * Notifies listeners about the outcome of a question edit operation.
+     * <p>
+     * The message typically indicates {@code "edit-ok"} or {@code "edit-fail"}.
+     * A {@link #PROP_UPDATE_QUESTION_RESPONSE} property change event is fired
+     * with the provided message.
+     *
+     * @param message outcome string of the edit operation
+     */
     @Override
     public void setPropEditQuestionResponse(String message) {
         pcs.firePropertyChange(PROP_UPDATE_QUESTION_RESPONSE, null, message);
     }
 
+    /**
+     * Notifies listeners that editing a question has failed due to a server error.
+     * <p>
+     * Fires a {@link #PROP_UPDATE_QUESTION_FAIL} property change event with
+     * the error message so that the UI can inform the user.
+     *
+     * @param message error description
+     */
     @Override
     public void setPropEditQuestionError(String message){
         pcs.firePropertyChange(PROP_UPDATE_QUESTION_FAIL, null, message);
     }
 
+    /**
+     * Delivers a list of questions retrieved from the server.
+     * <p>
+     * Fires a {@link #PROP_LIST_QUESTIONS_RESPONSE} property change event
+     * so that the UI can refresh the list of questions.
+     *
+     * @param questions list of questions returned by the server
+     */
     @Override
     public void setPropListQuestionsResponse(List<Question> questions) {
         pcs.firePropertyChange(PROP_LIST_QUESTIONS_RESPONSE, null, questions);
@@ -487,36 +567,96 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
         pcs.firePropertyChange(PROP_JOIN_QUESTION_RESPONSE, null, question);
     }
 
+    /**
+     * Notifies listeners that an answer was submitted successfully.
+     * <p>
+     * Fires a {@link #PROP_SUBMIT_ANSWER_OK} property change event with a
+     * human-readable confirmation message.
+     *
+     * @param message confirmation text returned by the server
+     */
     @Override
     public void setPropSubmitAnswerOk(String message) {
         pcs.firePropertyChange(PROP_SUBMIT_ANSWER_OK, null, message);
     }
 
+    /**
+     * Notifies listeners that submitting an answer has failed.
+     * <p>
+     * Fires a {@link #PROP_SUBMIT_ANSWER_FAIL} property change event with
+     * the error message returned by the server.
+     *
+     * @param message error description
+     */
     @Override
     public void setPropSubmitAnswerFail(String message) {
         pcs.firePropertyChange(PROP_SUBMIT_ANSWER_FAIL, null, message);
     }
 
+    /**
+     * Delivers the list of answers for a specific question.
+     * <p>
+     * Typically used on the teacher side to inspect student answers for an
+     * expired question. Fires a {@link #PROP_VIEW_ANSWERS_RESPONSE} property
+     * change event.
+     *
+     * @param answers list of answers returned by the server
+     */
     @Override
     public void setPropViewAnswersResponse(List<Answer> answers) {
         pcs.firePropertyChange(PROP_VIEW_ANSWERS_RESPONSE, null, answers);
     }
 
+    /**
+     * Delivers the answer history of the current student.
+     * <p>
+     * Fires a {@link #PROP_LIST_ANSWERED_RESPONSE} property change event so
+     * that the UI can display the student's past answers and results.
+     *
+     * @param answers list of answers representing the student's history
+     */
     @Override
     public void setPropListAnsweredResponse(List<Answer> answers) {
         pcs.firePropertyChange(PROP_LIST_ANSWERED_RESPONSE, null, answers);
     }
 
+    /**
+     * Notifies listeners that a new answer was submitted for a question,
+     * typically by another client.
+     * <p>
+     * Used for real-time teacher updates. Fires a {@link #PROP_ANSWER_SUBMITTED}
+     * property change event with the affected question id.
+     *
+     * @param questionId identifier of the question that received a new answer
+     */
     @Override
     public void setPropAnswerSubmitted(Integer questionId) {
         pcs.firePropertyChange(PROP_ANSWER_SUBMITTED, null, questionId);
     }
 
+    /**
+     * Notifies listeners about the result of a delete-question operation.
+     * <p>
+     * The {@code message} typically indicates success or failure (e.g.
+     * {@code "delete-ok"} or {@code "delete-fail"}). Fires a
+     * {@link #PROP_DELETE_QUESTION_RESPONSE} property change event.
+     *
+     * @param message outcome description of the delete operation
+     */
     @Override
     public void setPropDeleteQuestionResponse(String message) {
         pcs.firePropertyChange(PROP_DELETE_QUESTION_RESPONSE, null, message);
     }
 
+    /**
+     * Handles a successful profile update.
+     * <p>
+     * Updates the cached user information (id, type, name, e-mail and, for
+     * students, the student number) to reflect the changes confirmed by the
+     * server, and fires a {@link #PROP_UPDATE_PROFILE_OK} property change event.
+     *
+     * @param dto updated authentication/profile data returned by the server
+     */
     @Override
     public void setPropUpdateProfileOk(AuthResponseDTO dto) {
         // Update internal state
@@ -535,6 +675,14 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
         pcs.firePropertyChange(PROP_UPDATE_PROFILE_OK, null, dto);
     }
 
+    /**
+     * Notifies listeners that updating the user profile has failed.
+     * <p>
+     * Fires a {@link #PROP_UPDATE_PROFILE_FAIL} property change event with
+     * the error message returned by the server.
+     *
+     * @param message error description
+     */
     @Override
     public void setPropUpdateProfileFail(String message) {
         pcs.firePropertyChange(PROP_UPDATE_PROFILE_FAIL, null, message);
@@ -663,7 +811,7 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
             Log.warn(ClientManager.class, "Directory discovery timed out waiting for response.");
             return false;
         } catch (Exception e) {
-            Log.error(ClientManager.class, "Discovery failed: " + e.getMessage(), e);
+            Log.error(ClientManager.class, "Discovery failed: " + e.getMessage());
             return false;
         }
     }
@@ -821,6 +969,84 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
 
     /* ====================== Advanced reconnection flow (private) ============ */
 
+    private boolean tryResumeSessionOnNewConnection() {
+        if (sessionIdForReauth == null || sessionIdForReauth.isBlank()) {
+            return true;
+        }
+
+        try {
+            if (tcpSocket != null && !tcpSocket.isClosed()) {
+                tcpSocket.setSoTimeout(CONNECTION_TIMEOUT_MS);
+            }
+
+            TcpMessage<String> msg = new TcpMessage<>(
+                    MessageType.RESUME_SESSION,
+                    sessionIdForReauth,
+                    String.class
+            );
+
+            out.writeObject(msg);
+            out.flush();
+
+            Object raw = in.readObject();
+            if (!(raw instanceof TcpMessage<?> tcpResponse)) {
+                Log.error(ClientManager.class,
+                        "Unexpected object while resuming session: " +
+                                (raw == null ? "null" : raw.getClass().getName()));
+                return false;
+            }
+
+            switch (tcpResponse.getType()) {
+                case RESUME_SESSION_OK -> {
+                    AuthResponseDTO dto = tcpResponse.getDataAs(AuthResponseDTO.class);
+
+                    try {
+                        setUserId(Integer.parseInt(dto.userId()));
+                    } catch (NumberFormatException ignored) {
+                        setUserId(null);
+                    }
+                    setUserType(dto.userType());
+                    setUserName(dto.name());
+                    setUserEmail(dto.email());
+                    if ("STUDENT".equals(dto.userType())) {
+                        setStudentNumber(dto.studentNumber());
+                    }
+
+                    sessionIdForReauth = dto.sessionId();
+                    Log.info(ClientManager.class, "Session resumed successfully after reconnection.");
+                    return true;
+                }
+
+                case RESUME_SESSION_FAIL -> {
+                    String reason = tcpResponse.getData() instanceof String s ? s : null;
+                    Log.warn(ClientManager.class,
+                            "Server rejected session resume: " + (reason == null ? "" : reason));
+
+                    logout();
+                    sessionIdForReauth = null;
+                    return true;
+                }
+
+                default -> {
+                    Log.error(ClientManager.class,
+                            "Unexpected message type while resuming session: " + tcpResponse.getType());
+                    return false;
+                }
+            }
+        } catch (IOException | ClassNotFoundException e) {
+            Log.error(ClientManager.class,
+                    "Error while trying to resume session: " + e.getMessage(), e);
+            return false;
+        } finally {
+            try {
+                if (tcpSocket != null && !tcpSocket.isClosed()) {
+                    tcpSocket.setSoTimeout(0);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
     /**
      * Implements the reconnection logic:
      * <ul>
@@ -921,14 +1147,20 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
     private boolean attemptReconnectWindow() {
         long RECONNECT_TTL_MS = 17000;
         final long deadline = System.currentTimeMillis() + RECONNECT_TTL_MS;
+
         while (System.currentTimeMillis() < deadline && !Thread.currentThread().isInterrupted()) {
             if (connectToServer()) {
-                // Here we could attempt transparent re-authentication if supported by the server
+                if (!tryResumeSessionOnNewConnection()) {
+                    closeConnection();
+                    continue;
+                }
+
                 pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, STATUS_CONNECTED);
                 running = true;
                 startThreads();
                 return true;
             }
+
             try {
                 Thread.sleep(500);
             } catch (InterruptedException ie) {

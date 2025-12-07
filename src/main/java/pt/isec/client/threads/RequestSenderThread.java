@@ -48,7 +48,7 @@ public class RequestSenderThread implements Runnable {
                 out.flush();
             } catch (IOException e) {
                 if (service.isRunning()) {
-                    Log.error(RequestSenderThread.class, "Failed to send: " + e.getMessage(), e);
+                    Log.error(RequestSenderThread.class, "Failed to send: " + e.getMessage());
                     try {
                         if (request != null) {
                             service.getRequestQueue().put(request);

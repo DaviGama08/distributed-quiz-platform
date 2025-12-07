@@ -135,7 +135,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                 long now = System.currentTimeMillis();
                 //TODO e por UDP unicast ao serviço de diretoria, de Heartbeats + estrutura de Heartbeats
                 if (now - last >= HEARTBEAT_INTERVAL_MS) {
-                    String hb = requestKeyValue("[ROLE", iAmPrimary ? "Primary] " : "Backup] ",
+                    String hb = requestKeyValue("[ROLE", iAmPrimary ? "MASTER] " : "BACKUP] ",
                             "TYPE", "HEARTBEAT",
                             "ID", threadInfo.id()
                     );

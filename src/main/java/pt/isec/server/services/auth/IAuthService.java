@@ -10,6 +10,14 @@ public interface IAuthService {
     /* ===================== REGISTRATION ===================== */
 
     /**
+     * Marks a user session as inactive in the database.
+     *
+     * @param userId    id of the user
+     * @param sessionId session identifier to invalidate
+     */
+    void invalidateSession(long userId, String sessionId, String typeUser, String name, String email);
+
+    /**
      * Registers a new teacher account.
      *
      * @param registerTeacherDTO teacher registration data
@@ -59,6 +67,19 @@ public interface IAuthService {
      * @throws Exception if validation or database access fails
      */
     AuthResponseDTO updateTeacher(UpdateTeacherDTO dto) throws Exception;
+
+    /**
+     * Resumes a previously created user session.
+     * <p>
+     * The implementation should validate that the session exists, has not been
+     * explicitly terminated and has not expired, and then return the current
+     * authentication details for the associated user.
+     *
+     * @param sessionId unique identifier of the session to resume
+     * @return an authentication response containing user and session information
+     * @throws Exception if the session is invalid, expired, or if a database error occurs
+     */
+    AuthResponseDTO resumeSession(String sessionId) throws Exception;
 
     /**
      * Changes the password for an existing user.

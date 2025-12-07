@@ -85,15 +85,23 @@ public class WorkerThread implements Runnable {
 
                 String payload = new String(msg.data(), 0, msg.length(), StandardCharsets.UTF_8);
 
+
+
                 Map<String, String> kv = parseKv(payload);
                 String type = kv.get("TYPE");
 
                 boolean isPrimaryHeartbeat = "HEARTBEAT".equals(type) && isHeartbeatFromPrincipal(kv);
 
-                if (isPrimaryHeartbeat) {
-                    Log.infoMaster(WorkerThread.class, "Received: %s", payload);
+                if (payload.startsWith("TYPE=") || payload.startsWith("ROLE=")) {
+                    if (isPrimaryHeartbeat) {
+                        Log.infoMaster(WorkerThread.class, "Received: %s", payload);
+                    } else {
+                        Log.info(WorkerThread.class, "Received: %s", payload);
+                    }
                 } else {
-                    Log.info(WorkerThread.class, "Received: %s", payload);
+                    Log.info(WorkerThread.class,
+                            "Received non-protocol datagram (%d bytes) from %s:%d",
+                            msg.length(), msg.addr(), msg.port());
                 }
 
                 if (type == null) {
@@ -139,9 +147,9 @@ public class WorkerThread implements Runnable {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } catch (IOException e) {
-            Log.error(WorkerThread.class, "Error sending UDP: " + e.getMessage(), e);
+            Log.error(WorkerThread.class, "Error sending UDP: " + e.getMessage());
         } catch (Exception e) {
-            Log.error(WorkerThread.class, "Unexpected error in Worker: " + e.getMessage(), e);
+            Log.error(WorkerThread.class, "Unexpected error in Worker: " + e.getMessage());
         }
 
         Log.info(WorkerThread.class, "Worker terminated.");

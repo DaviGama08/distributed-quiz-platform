@@ -20,6 +20,7 @@ import java.util.Map;
 /**
  * Service that handles answer submission and queries.
  */
+@SuppressWarnings("ClassCanBeRecord")
 public class AnswerService implements IAnswerService {
     private final IQuestionAnswerContext context;
     private final DbCommands dbCommands;

@@ -444,19 +444,19 @@ public class TeacherDashboardController implements IDisposableProp {
                         q,
                         teacherId,
                         dto -> {
+                            // Only executed when local validation passed.
                             awaitingUpdateQuestion = true;
                             clientControllerContext.getQuestionService().editQuestion(dto);
                         },
                         msg -> {
                             if (msg != null && !msg.isBlank()) {
-                                Window w = getCurrentOwnerWindow();
-                                AlertUtils.showError(w, "Erro ao editar pergunta", msg);
                                 view.addNotification("Falha ao editar pergunta (validação local): " + msg);
                             }
                         }
                 );
             });
         };
+
 
         this.updateQuestionListener = evt -> {
             if (!awaitingUpdateQuestion) {
@@ -730,8 +730,14 @@ public class TeacherDashboardController implements IDisposableProp {
      * Handler for the "Create Question" action.
      * <p>
      * Opens the creation dialog and, when the user confirms valid data,
-     * sends the request to the server. Local validation errors are also
-     * routed to the dashboard notification area.
+     * sends the request to the server. All field validation is performed
+     * inside the dialog; this method only:
+     * <ul>
+     *   <li>Checks that the teacher session is valid</li>
+     *   <li>Sends the DTO to the question service when {@code onSubmit} is called</li>
+     *   <li>Logs local-validation errors into the notification area, without
+     *       opening extra modals</li>
+     * </ul>
      */
     public void onCreateQuestion() {
         Integer teacherId = clientControllerContext.getUserId();
@@ -746,18 +752,16 @@ public class TeacherDashboardController implements IDisposableProp {
                 owner,
                 teacherId,
                 dto -> {
-                    // Chamado apenas quando a validação local passou
+                    // Only executed when all local validations passed.
                     awaitingCreateQuestion = true;
                     clientControllerContext.getQuestionService().createQuestion(dto);
                     view.addNotification("Pedido para criar nova pergunta enviado.");
                 },
                 msg -> {
-                    // Erro de validação local (enunciado vazio, opções em falta, datas, etc.)
+                    // Do NOT open a second modal here; the dialog already did that.
                     if (msg == null || msg.isBlank()) {
-                        return;
+                        msg = "Preencha todos os campos obrigatórios da pergunta.";
                     }
-                    Window w = getCurrentOwnerWindow();
-                    AlertUtils.showError(w, "Erro ao criar pergunta", msg);
                     view.addNotification("Falha ao criar pergunta (validação local): " + msg);
                 }
         );

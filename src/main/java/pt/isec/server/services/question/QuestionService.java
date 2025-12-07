@@ -32,6 +32,7 @@ import java.util.UUID;
  * also takes care of generating the SQL statements that must be replicated
  * to backup nodes through the {@link IQuestionAnswerContext#queue()}.
  */
+@SuppressWarnings("ClassCanBeRecord")
 public class QuestionService implements IQuestionService {
 
     /** Context used for DB replication and access to shared structures. */
@@ -56,10 +57,23 @@ public class QuestionService implements IQuestionService {
      * ========================================================= */
 
     /**
-     * Creates a question for a teacher, validates input, inserts it into the database
-     * and enqueues SQL for replication.
+     * Creates a new question for a teacher.
+     * <p>
+     * The client is responsible for validating all UI fields (statement, options,
+     * correct option, start/end date and time). This method only:
+     * <ul>
+     *   <li>Performs defensive checks on the DTO and teacher id</li>
+     *   <li>Applies business rules that are not duplicated on the client:
+     *       <ul>
+     *         <li>No duplicated option texts</li>
+     *         <li>Correct option must exist in the options list</li>
+     *         <li>Valid temporal window relative to the current time</li>
+     *         <li>No other question with the same statement for the same teacher</li>
+     *       </ul>
+     *   </li>
+     * </ul>
      *
-     * @param dto question creation data
+     * @param dto question creation data sent by the client
      * @return response containing the question ID and access code
      * @throws Exception if validation or DB operations fail
      */
@@ -76,25 +90,33 @@ public class QuestionService implements IQuestionService {
         LocalDateTime startAt = dto.startAt();
         LocalDateTime endAt   = dto.endAt();
 
-        // ---------- basic validations ----------
+        // Teacher id is not a UI field, so we still validate it explicitly.
         if (teacherId == null || teacherId <= 0) {
             throw new IllegalArgumentException("Identificador de docente inválido.");
         }
-        if (statement == null || statement.isBlank()) {
-            throw new IllegalArgumentException("Preencha o enunciado.");
-        }
-        if (options == null || options.size() < 2) {
-            throw new IllegalArgumentException("A pergunta deve ter, pelo menos, duas opções de resposta.");
-        }
-        if (correct == null) {
-            throw new IllegalArgumentException("Tem de indicar qual é a opção correta.");
+
+        /*
+         * Defensive payload check: the client is responsible for validating
+         * mandatory fields one by one. Here we only verify that the payload
+         * is not clearly incomplete, without repeating per-field messages.
+         */
+        if (statement == null || statement.isBlank()
+                || options == null || options.size() < 2
+                || correct == null
+                || startAt == null
+                || endAt == null) {
+            throw new IllegalArgumentException("Dados da pergunta inválidos (campos em falta).");
         }
 
-        // ---------- options: text required + no duplicates ----------
+        // ---------- business validations that are NOT duplicated on the client ----------
+
+        String normalizedStatement = statement.trim();
+
+        // Options: no duplicated texts (case-insensitive, trimmed).
         Set<String> normalizedTexts = new LinkedHashSet<>();
         for (Option o : options) {
-            if (o == null || o.getText() == null || o.getText().isBlank()) {
-                throw new IllegalArgumentException("Faltou preencher todas as opções da pergunta.");
+            if (o == null || o.getText() == null) {
+                throw new IllegalArgumentException("Opção inválida recebida do cliente.");
             }
             String normalized = o.getText().trim().toLowerCase(Locale.ROOT);
             if (!normalizedTexts.add(normalized)) {
@@ -102,50 +124,51 @@ public class QuestionService implements IQuestionService {
             }
         }
 
-        // ensure the correct letter exists in the options
+        // Ensure the correct letter exists in the options list.
         boolean correctExists = options.stream()
                 .anyMatch(o -> o != null && correct.equals(o.getLetter()));
         if (!correctExists) {
             throw new IllegalArgumentException(
-                    "A opção correta tem de corresponder a uma das opções disponíveis.");
+                    "A opção correta tem de corresponder a uma das opções disponíveis."
+            );
         }
 
-        // ---------- dates/times ----------
-        if (startAt == null || endAt == null) {
-            throw new IllegalArgumentException("Data/hora de início e fim são obrigatórias.");
-        }
-
+        // Temporal rules: valid window and not in the past.
         LocalDateTime now   = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES);
         LocalDateTime start = startAt.truncatedTo(ChronoUnit.MINUTES);
         LocalDateTime end   = endAt.truncatedTo(ChronoUnit.MINUTES);
+
+        if (!end.isAfter(start)) {
+            throw new IllegalArgumentException(
+                    "A data/hora de fim deve ser posterior à data/hora de início."
+            );
+        }
 
         if (start.isBefore(now)) {
             throw new IllegalArgumentException("A pergunta não pode começar no passado.");
         }
 
-        if (!end.isAfter(start)) {
-            throw new IllegalArgumentException(
-                    "A data/hora de fim deve ser posterior à data/hora de início.");
-        }
-
         if (!end.isAfter(now)) {
             throw new IllegalArgumentException(
-                    "A data/hora de fim deve ser posterior à data/hora atual.");
+                    "A data/hora de fim deve ser posterior à data/hora atual."
+            );
         }
 
-        // ---------- duplicate question ----------
+        // Check for duplicated statement for this teacher.
         Map<String, Object> existing = dbCommands.selectOne(
                 "SELECT id FROM question " +
                         "WHERE teacher_id = ? AND LOWER(TRIM(statement)) = LOWER(TRIM(?)) " +
                         "LIMIT 1",
-                teacherId, statement
+                teacherId, normalizedStatement
         );
         if (existing != null) {
             throw new IllegalArgumentException(
-                    "Já existe uma pergunta com o mesmo enunciado para este docente.");
+                    "Já existe uma pergunta com o mesmo enunciado para este docente."
+            );
         }
 
         // ---------- insertion + replication ----------
+
         String accessCode = UUID.randomUUID().toString().substring(0, 6).toUpperCase();
 
         final long[] qIdArr = new long[1];
@@ -153,7 +176,7 @@ public class QuestionService implements IQuestionService {
             tx.executeUpdate(
                     "INSERT INTO question (statement, teacher_id, correct_option, start_at, end_at, access_code) " +
                             "VALUES (?, ?, ?, ?, ?, ?)",
-                    statement, teacherId, correct.name(), startAt.toString(), endAt.toString(), accessCode
+                    normalizedStatement, teacherId, correct.name(), startAt.toString(), endAt.toString(), accessCode
             );
             qIdArr[0] = tx.getLastInsertId();
             for (Option o : options) {
@@ -168,7 +191,7 @@ public class QuestionService implements IQuestionService {
 
         List<String> aux = new ArrayList<>();
         aux.add("INSERT INTO question (id, statement, teacher_id, correct_option, start_at, end_at, access_code) " +
-                "VALUES (" + qId + ", '" + escape(statement) + "', " + teacherId + ", '" +
+                "VALUES (" + qId + ", '" + escape(normalizedStatement) + "', " + teacherId + ", '" +
                 correct.name() + "', '" + startAt + "', '" + endAt + "', '" + accessCode + "');");
         for (Option o : options) {
             aux.add("INSERT INTO option (question_id, letter, text) VALUES (" +
@@ -181,23 +204,20 @@ public class QuestionService implements IQuestionService {
 
     /**
      * Edits an existing question (when there are no answers registered),
-     * validates the new data, checks for duplicates and enqueues SQL for replication.
+     * applies business rules and enqueues SQL for replication.
      * <p>
-     * The same business rules as in {@link #createQuestion(CreateQuestionDTO)} are enforced:
+     * The client is responsible for UI validation of fields. This method:
      * <ul>
-     *     <li>Owner teacher must be valid</li>
-     *     <li>Statement mandatory</li>
-     *     <li>At least two options</li>
-     *     <li>No duplicated option letters or texts</li>
-     *     <li>Correct option must exist in the list</li>
-     *     <li>Valid time window (end after start, not in the past)</li>
-     *     <li>No other question for the same teacher with the same statement
-     *         and start/end window (excluding the current one)</li>
+     *   <li>Checks ownership and prevents editing when answers exist</li>
+     *   <li>Ensures no duplicated option letters or texts</li>
+     *   <li>Ensures the correct option exists in the list</li>
+     *   <li>Enforces a valid time window and prevents changing it into the past</li>
+     *   <li>Ensures there is no other identical question for the same teacher</li>
      * </ul>
      *
-     * @param dto edit parameters
+     * @param dto edit parameters sent by the client
      * @return {@code true} if the question was updated
-     * @throws Exception if DB access fails or answers already exist
+     * @throws Exception if DB access fails or business rules are violated
      */
     @Override
     public boolean editQuestion(EditQuestionDTO dto) throws Exception {
@@ -220,7 +240,19 @@ public class QuestionService implements IQuestionService {
             throw new IllegalArgumentException("ID do docente inválido.");
         }
 
-        // Load original question to confirm ownership and get original dates
+        /*
+         * Defensive payload check: the client should send all fields already
+         * validated. We just reject clearly incomplete payloads.
+         */
+        if (statement == null || statement.isBlank()
+                || options == null || options.size() < 2
+                || correct == null
+                || startAt == null
+                || endAt == null) {
+            throw new IllegalArgumentException("Dados da pergunta inválidos (campos em falta).");
+        }
+
+        // Load original question to confirm ownership and get original dates.
         Map<String, Object> qRow = dbCommands.selectOne(
                 "SELECT id, start_at, end_at FROM question WHERE id = ? AND teacher_id = ?",
                 quizId,
@@ -230,34 +262,19 @@ public class QuestionService implements IQuestionService {
             throw new IllegalArgumentException("Pergunta não encontrada ou não pertence ao docente.");
         }
 
-        LocalDateTime originalStart =
-                LocalDateTime.parse((String) qRow.get("start_at"));
-        LocalDateTime originalEnd =
-                LocalDateTime.parse((String) qRow.get("end_at"));
+        LocalDateTime originalStart = LocalDateTime.parse((String) qRow.get("start_at"));
+        LocalDateTime originalEnd   = LocalDateTime.parse((String) qRow.get("end_at"));
 
-        if (statement == null || statement.isBlank()) {
-            throw new IllegalArgumentException("Preencha o enunciado.");
-        }
         String normalizedStatement = statement.trim();
 
-        if (options == null || options.isEmpty()) {
-            throw new IllegalArgumentException("A pergunta deve ter, pelo menos, duas opções.");
-        }
-        if (correct == null) {
-            throw new IllegalArgumentException("Opção correta obrigatória.");
-        }
-
-        if (startAt == null || endAt == null) {
-            throw new IllegalArgumentException("Data/hora de início e fim são obrigatórias.");
-        }
-
-        // Always: end after start
+        // Always: end must be after start.
         if (!endAt.isAfter(startAt)) {
             throw new IllegalArgumentException(
-                    "A data/hora de fim tem de ser posterior à data/hora de início.");
+                    "A data/hora de fim tem de ser posterior à data/hora de início."
+            );
         }
 
-        // Apply rules relative to "now" only if the window has changed
+        // Apply rules relative to "now" only if the time window has changed.
         boolean timeWindowChanged =
                 !startAt.equals(originalStart) || !endAt.equals(originalEnd);
 
@@ -270,11 +287,12 @@ public class QuestionService implements IQuestionService {
 
             if (!endAt.isAfter(now)) {
                 throw new IllegalArgumentException(
-                        "A data/hora de fim tem de ser posterior à data/hora atual.");
+                        "A data/hora de fim tem de ser posterior à data/hora atual."
+                );
             }
         }
 
-        // Cannot edit if answers already exist
+        // Cannot edit if answers already exist.
         Map<String, Object> ans = dbCommands.selectOne(
                 "SELECT 1 as one FROM answer WHERE question_id = ? LIMIT 1",
                 quizId
@@ -283,7 +301,7 @@ public class QuestionService implements IQuestionService {
             throw new IllegalStateException("Não é possível editar pergunta com respostas registadas.");
         }
 
-        /* --------- Validate options --------- */
+        /* --------- validate options (business rules only) --------- */
 
         List<Option> cleanedOptions = new ArrayList<>();
         Set<OptionLetter> usedLetters = new HashSet<>();
@@ -292,17 +310,14 @@ public class QuestionService implements IQuestionService {
 
         for (Option opt : options) {
             if (opt == null) {
-                throw new IllegalArgumentException("Opção inválida.");
+                throw new IllegalArgumentException("Opção inválida recebida do cliente.");
             }
 
             OptionLetter letter = opt.getLetter();
-            if (letter == null) {
-                throw new IllegalArgumentException("Letra da opção não pode ser nula.");
-            }
-
             String text = opt.getText();
-            if (text == null || text.isBlank()) {
-                throw new IllegalArgumentException("Todas as opções devem ter texto.");
+
+            if (letter == null || text == null || text.isBlank()) {
+                throw new IllegalArgumentException("Opção inválida recebida do cliente.");
             }
 
             String trimmedText = text.trim();
@@ -328,10 +343,12 @@ public class QuestionService implements IQuestionService {
         }
 
         if (!correctOptionExists) {
-            throw new IllegalArgumentException("A opção correta escolhida não existe na lista de opções.");
+            throw new IllegalArgumentException(
+                    "A opção correta escolhida não existe na lista de opções."
+            );
         }
 
-        /* --------- Check for duplicate (other record) --------- */
+        /* --------- check for duplicate (other record) --------- */
 
         Map<String, Object> duplicate = dbCommands.selectOne(
                 "SELECT id FROM question " +
@@ -353,7 +370,7 @@ public class QuestionService implements IQuestionService {
             );
         }
 
-        /* --------- Update in transaction + replication --------- */
+        /* --------- update in transaction + replication --------- */
 
         dbCommands.runInTransaction(tx -> {
             tx.executeUpdate(
@@ -560,10 +577,9 @@ public class QuestionService implements IQuestionService {
      *
      * @param questionId the ID of the question to look up
      * @return the teacher ID, or {@code null} if the question does not exist
-     * @throws Exception if a database access error occurs
      */
     @Override
-    public Integer findTeacherIdByQuestionId(int questionId) throws Exception {
+    public Integer findTeacherIdByQuestionId(int questionId) {
         Map<String, Object> row = dbCommands.selectOne(
                 "SELECT teacher_id FROM question WHERE id = ? LIMIT 1",
                 questionId

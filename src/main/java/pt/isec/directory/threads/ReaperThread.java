@@ -54,7 +54,6 @@ public class ReaperThread implements Runnable {
      * </ol>
      */
     @Override
-    @SuppressWarnings("BusyWait") // intentional periodic sleep, not a tight busy-wait loop
     public void run() {
         try {
             while (threadInfo.isRunning()) {

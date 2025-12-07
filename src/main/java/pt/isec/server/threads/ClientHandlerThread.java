@@ -321,8 +321,18 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                             String.class
                     ));
 
+                } catch (IllegalStateException e) {
+                    connection.sendMessage(new TcpMessage<>(
+                            MessageType.SUBMIT_FAIL,
+                            e.getMessage(),
+                            String.class
+                    ));
                 } catch (Exception e) {
-                    connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
+                    connection.sendMessage(new TcpMessage<>(
+                            MessageType.ERROR,
+                            e.getMessage(),
+                            String.class
+                    ));
                 }
             }
 

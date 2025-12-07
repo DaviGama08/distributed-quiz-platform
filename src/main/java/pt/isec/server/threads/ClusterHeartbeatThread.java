@@ -1,12 +1,9 @@
 package pt.isec.server.threads;
-
 import pt.isec.server.core.IServerThreadContext;
 import pt.isec.server.core.ServerManager;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;
 import pt.isec.common.util.Log;
-import pt.isec.server.db.DbCommands;
-
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -67,7 +64,6 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
      * </ul>
      */
     @Override
-    @SuppressWarnings("BusyWait")
     public void run() {
         try (MulticastSocket _ms = new MulticastSocket(threadInfo.multicastPort());
              ServerSocket _ss = new ServerSocket(threadInfo.dbCopyPort())) {
@@ -169,12 +165,32 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
         if (sqlToSend != null) {
             // heartbeat with pending SQL
             sendHeartbeat(_ms, serversGroupAddr, sqlToSend);
+
+            Log.infoMaster(
+                    ClusterHeartbeatThread.class,
+                    "[MC] Heartbeat sent from PRIMARY %s:%d | dbVersion=%d | sqlBatch=%d statements",
+                    threadInfo.serverTcpIp(),
+                    threadInfo.serverTcpPort(),
+                    threadInfo.dbVersion(),
+                    sqlToSend.size()
+            );
+
             lastSent = now;
         } else if (now - lastSent >= HEARTBEAT_INTERVAL_MS) {
             // periodic heartbeat without SQL
             sendHeartbeat(_ms, serversGroupAddr, null);
+
+            Log.infoMaster(
+                    ClusterHeartbeatThread.class,
+                    "[MC] Heartbeat sent from PRIMARY %s:%d | dbVersion=%d | sqlBatch=none",
+                    threadInfo.serverTcpIp(),
+                    threadInfo.serverTcpPort(),
+                    threadInfo.dbVersion()
+            );
+
             lastSent = now;
         }
+
 
         return lastSent;
     }
@@ -201,9 +217,17 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
 
                     // Apply SQL updates encoded in base64 (incremental replication)
                     String sqlEncoded = extractString(msg, "sql");
+                    boolean hasSql = sqlEncoded != null && !sqlEncoded.isBlank();
+
                     if (sqlEncoded != null && !sqlEncoded.isBlank()) {
-                        Log.info(ClusterHeartbeatThread.class,
-                                "[MC] Heartbeat with SQL received from primary; applying incremental updates.");
+                        Log.infoMaster(
+                                ClusterHeartbeatThread.class,
+                                "[MC] Heartbeat received from PRIMARY %s:%d | version=%d | sql=%s",
+                                senderIp,
+                                rxClientPort,
+                                rxVersion,
+                                hasSql ? "present" : "none"
+                        );
 
                         long localBefore = threadInfo.dbVersion();
 

@@ -57,7 +57,6 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
      * send heartbeats, and deregister on shutdown.
      */
     @Override
-    @SuppressWarnings("BusyWait")
     public void run() {
         try (DatagramSocket socket = new DatagramSocket()) {
             this.socket = socket;
@@ -125,8 +124,8 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                         "[DB] IServerThreadContext instance is not a ServerManager; unexpected configuration.");
             }
 
-            Log.info(DirectoryHeartbeatThread.class,
-                    "[DIR] Current primary server: %s:%d | isPrimary=%s | dbVersion=%d",
+            Log.infoMaster(DirectoryHeartbeatThread.class,
+                    "[DIR] Current PRIMARY server: %s:%d | isPrimary=%s | localDbVersion=%d",
                     reply.ip, reply.port, iAmPrimary, threadInfo.dbVersion());
 
             long last = 0;
@@ -136,7 +135,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                 long now = System.currentTimeMillis();
                 //TODO e por UDP unicast ao serviço de diretoria, de Heartbeats + estrutura de Heartbeats
                 if (now - last >= HEARTBEAT_INTERVAL_MS) {
-                    String hb = requestKeyValue("[Server", iAmPrimary ? "Primary] " : "Backup] ",
+                    String hb = requestKeyValue("[ROLE", iAmPrimary ? "Primary] " : "Backup] ",
                             "TYPE", "HEARTBEAT",
                             "ID", threadInfo.id()
                     );
@@ -150,9 +149,13 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                     iAmPrimary =
                             Objects.equals(cur.ip, threadInfo.serverTcpIp()) &&
                                     cur.port == threadInfo.serverTcpPort();
-                    Log.info(DirectoryHeartbeatThread.class,
-                            "[DIR] Primary reported by directory: %s:%d | isPrimary=%s",
-                            cur.ip, cur.port, iAmPrimary);
+                    Log.infoMaster(
+                            DirectoryHeartbeatThread.class,
+                            "[DIR] Directory reports PRIMARY=%s:%d | ME=%s:%d | amPrimary=%s",
+                            cur.ip, cur.port,
+                            threadInfo.serverTcpIp(), threadInfo.serverTcpPort(),
+                            iAmPrimary
+                    );
                 }
                 Thread.sleep(SLEEP_INTERVAL_MS);
             }

@@ -72,16 +72,13 @@ public class AuthenticationView {
         VBox leftInner = new VBox(20);
         leftInner.getStyleClass().add("left-inner");
 
-        ImageView logoView;
-        try {
-            Image logo = new Image(Objects.requireNonNull(
-                    getClass().getResourceAsStream("/imgs/logo.png")
-            ));
-            logoView = new ImageView(logo);
+        ImageView logoView = new ImageView();
+        var is = AuthenticationView.class.getResourceAsStream("/imgs/logo_isec.png");
+        if (is != null) {
+            Image logo = new Image(is);
+            logoView.setImage(logo);
             logoView.setPreserveRatio(true);
             logoView.setFitHeight(120);
-        } catch (Exception e) {
-            logoView = new ImageView();
         }
 
         Label welcomeTitle = new Label("Bem-vindo!");
@@ -537,7 +534,5 @@ public class AuthenticationView {
     /**
      * Hook for future UI updates.
      */
-    public void update() {
-        // not required for now
-    }
+    public void update() {}
 }

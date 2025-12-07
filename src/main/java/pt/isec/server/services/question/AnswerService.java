@@ -65,6 +65,14 @@ public class AnswerService implements IAnswerService {
             throw new IllegalStateException("Pergunta fora do período de disponibilidade");
         }
 
+        Map<String, Object> existing = dbCommands.selectOne(
+                "SELECT 1 AS one FROM answer WHERE student_id = ? AND question_id = ? LIMIT 1",
+                studentId, questionId
+        );
+        if (existing != null) {
+            throw new IllegalStateException("Já respondeu a esta pergunta.");
+        }
+
         // insert answer
         dbCommands.executeUpdate(
                 "INSERT INTO answer (student_id, question_id, chosen_option, created_at) VALUES (?, ?, ?, ?)",

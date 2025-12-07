@@ -1,11 +1,17 @@
 javac ^
  -d ..\bin\client.pt.isec ^
- -cp "..\bin\client.pt.isec;..\lib\*;..\lib\javafx\lib\*" ^
+ -cp "..\bin\client.pt.isec;..\lib\*;..\lib\javafx\lib\*;..\lib\jansi-2.4.0.jar" ^
  ..\pt\isec\client\*.java ^
  ..\pt\isec\client\threads\*.java ^
+ ..\pt\isec\client\core\*.java ^
  ..\pt\isec\client\services\*.java ^
- ..\pt\isec\client\ui\controller\*.java ^
- ..\pt\isec\client\ui\view\*.java ^
+ ..\pt\isec\client\ui\*.java ^
+ ..\pt\isec\client\ui\auth\*.java ^
+ ..\pt\isec\client\ui\student\*.java ^
+ ..\pt\isec\client\ui\teacher\*.java ^
+ ..\pt\isec\client\ui\util\*.java ^
+ ..\pt\isec\client\ui\util\dialogs\*.java ^
+ ..\pt\isec\common\util\*.java ^
  ..\pt\isec\common\messages\*.java ^
  ..\pt\isec\common\dto\auth\*.java ^
  ..\pt\isec\common\dto\answer\*.java ^
@@ -18,7 +24,7 @@ pause
 java ^
  --module-path ..\lib\javafx\lib ^
  --add-modules javafx.controls,javafx.fxml ^
- -cp "..\bin\client.pt.isec;..\..\resources;..\lib\*;..\lib\javafx\lib\*" ^
+ -cp "..\bin\client.pt.isec;..\..\resources;..\lib\*;..\lib\javafx\lib\*;..\lib\jansi-2.4.0.jar" ^
  pt.isec.client.ClientApplication
 
 pause

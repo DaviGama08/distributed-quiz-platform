@@ -7,13 +7,22 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.sql.*;
 
-/** Cria o ficheiro .db se não existir (ou se estiver sem tabelas) e aplica o schema.sql do classpath. */
+/**
+ * Utility class that creates the SQLite {@code .db} file if it does not exist
+ * (or if it has no tables) and applies the {@code schema.sql} script from the classpath.
+ */
 public final class DbCreate {
     private DbCreate() {}
 
     /**
-     * @param dbPath caminho absoluto do ficheiro .db
-     * @param schemaResourceOnClasspath caminho no classpath (ex.: "/db/schema.sql")
+     * Ensures that the database file exists and that the schema is applied.
+     * <p>
+     * If the file is missing or does not contain the {@code config} table,
+     * the given SQL script is executed.
+     *
+     * @param dbPath                   absolute path to the {@code .db} file
+     * @param schemaResourceOnClasspath classpath resource path (e.g. {@code "/db/schema.sql"})
+     * @throws Exception if database or I/O errors occur
      */
     public static void createIfMissing(Path dbPath, String schemaResourceOnClasspath) throws Exception {
         Files.createDirectories(dbPath.getParent());
@@ -22,7 +31,7 @@ public final class DbCreate {
 
         try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + dbPath.toAbsolutePath())) {
             if (!needSchema) {
-                // Se já existe ficheiro, verifica se a tabela 'config' existe:
+                // If the file exists, check if table 'config' exists
                 try (ResultSet rs = c.getMetaData().getTables(null, null, "config", null)) {
                     needSchema = !rs.next();
                 }
@@ -30,15 +39,22 @@ public final class DbCreate {
 
             if (needSchema) {
                 try (InputStream is = DbCreate.class.getResourceAsStream(schemaResourceOnClasspath)) {
-                    if (is == null)
-                        throw new IllegalStateException("Recurso não encontrado: " + schemaResourceOnClasspath);
+                    if (is == null) {
+                        throw new IllegalStateException("Resource not found: " + schemaResourceOnClasspath);
+                    }
                     runSqlScript(c, is);
                 }
             }
         }
     }
 
-    /** Executa o script SQL respeitando blocos CREATE TRIGGER ... BEGIN ... END; */
+    /**
+     * Executes the SQL script, handling {@code CREATE TRIGGER ... BEGIN ... END;} blocks correctly.
+     *
+     * @param c          open database connection
+     * @param sqlStream  input stream with SQL text
+     * @throws Exception if reading or executing SQL fails
+     */
     private static void runSqlScript(Connection c, InputStream sqlStream) throws Exception {
         try (BufferedReader br = new BufferedReader(new InputStreamReader(sqlStream, StandardCharsets.UTF_8))) {
             StringBuilder sb = new StringBuilder();
@@ -48,11 +64,12 @@ public final class DbCreate {
                 String line;
                 while ((line = br.readLine()) != null) {
                     String trimmed = line.trim();
-                    // ignora comentários '-- ...' e linhas vazias
-                    if (trimmed.startsWith("--") || trimmed.isEmpty())
+                    // ignore '-- ...' comments and empty lines
+                    if (trimmed.startsWith("--") || trimmed.isEmpty()) {
                         continue;
+                    }
 
-                    // detecta início de trigger (case-insensitive)
+                    // detect trigger start (case-insensitive)
                     String upper = trimmed.toUpperCase();
                     if (!inTrigger && upper.startsWith("CREATE TRIGGER")) {
                         inTrigger = true;
@@ -61,24 +78,28 @@ public final class DbCreate {
                     sb.append(line).append('\n');
 
                     if (inTrigger) {
-                        // dentro de trigger, só executa quando encontrar END;
+                        // inside trigger: only execute when END; is found
                         if (upper.equals("END;") || upper.endsWith("\nEND;")) {
                             String stmt = sb.toString().trim();
-                            if (!stmt.isBlank()) st.execute(stmt);
+                            if (!stmt.isBlank()) {
+                                st.execute(stmt);
+                            }
                             sb.setLength(0);
                             inTrigger = false;
                         }
                     } else {
-                        // instruções normais: executa quando terminar com ';'
+                        // normal statements: execute when ending with ';'
                         if (trimmed.endsWith(";")) {
                             String stmt = sb.toString().trim();
-                            if (!stmt.isBlank()) st.execute(stmt);
+                            if (!stmt.isBlank()) {
+                                st.execute(stmt);
+                            }
                             sb.setLength(0);
                         }
                     }
                 }
 
-                // resto pendente (sem ; final)
+                // leftover without final ';'
                 String leftover = sb.toString().trim();
                 if (!leftover.isBlank()) {
                     st.execute(leftover);

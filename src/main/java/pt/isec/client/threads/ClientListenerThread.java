@@ -1,52 +1,68 @@
 package pt.isec.client.threads;
 
-import pt.isec.client.services.IClientService;
+import pt.isec.client.core.IClientControllerContext;
+import pt.isec.client.core.IClientThreadContext;
 import pt.isec.common.messages.TcpMessage;
+import pt.isec.common.util.Log;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
 
 /**
- * Thread que escuta continuamente mensagens vindas do servidor via TCP
- * e coloca-as na fila de respostas para serem processadas.
+ * Thread that continuously listens for messages from the server over TCP
+ * and enqueues them into the response queue to be processed.
  */
-public class ClientListenerThread implements Runnable{
-    private final IClientService service;
+public class ClientListenerThread implements Runnable {
 
-    public ClientListenerThread(IClientService service) {
+    private final IClientThreadContext service;
+
+    /**
+     * Creates a new client listener thread.
+     *
+     * @param service client service interface
+     */
+    public ClientListenerThread(IClientThreadContext service) {
         this.service = service;
     }
 
     @Override
     public void run() {
-        ObjectInputStream in = service.getInputStream();
+        Log.info(ClientListenerThread.class, "Listening for messages from the server...");
 
-        System.out.println("[ClientListener] Started listening for server messages...");
-
-        while(service.isRunning()) {
+        while (service.isRunning()) {
             try {
-                TcpMessage<? extends Serializable> response = (TcpMessage<? extends Serializable>) in.readObject();
+                ObjectInputStream in = service.getInputStream(); //ready to read
+                if (in == null) {
+                    // No valid stream (e.g. during reconnection); wait a bit
+                    Thread.sleep(200);
+                    continue;
+                }
 
-                if(response != null) {
-                    System.out.println("[ClientListener] Received: " + response.getType());
+                // TODO Cliente: thread nos clientes dedicada à receção de notificações assíncronas do servidor principal, via TCP
+                TcpMessage<? extends Serializable> response =
+                        (TcpMessage<? extends Serializable>) in.readObject(); //waits to receive msg
+
+                if (response != null) {
+                    Log.info(ClientListenerThread.class, "Received: " + response.getType());
                     service.getResponseQueue().put(response);
                 }
             } catch (IOException e) {
-                if(service.isRunning()) {
-                    System.err.println("[ClientListener] Connection lost: " + e.getMessage());
+                if (service.isRunning()) {
+                    Log.error(ClientListenerThread.class, "Connection lost: " + e.getMessage(), e);
                     service.handleConnectionLost();
                 }
                 break;
             } catch (ClassNotFoundException e) {
-                System.err.println("[ClientListener] Unknown message type: " + e.getMessage());
+                Log.error(ClientListenerThread.class,
+                        "Unknown message type received: " + e.getMessage(), e);
             } catch (InterruptedException e) {
-                System.out.println("[ClientListener] Interrupted");
+                Log.warn(ClientListenerThread.class, "Listener interrupted");
                 Thread.currentThread().interrupt();
                 break;
             }
         }
 
-        System.out.println("[ClientListener] Stopped");
+        Log.info(ClientListenerThread.class, "Listener stopped");
     }
 }

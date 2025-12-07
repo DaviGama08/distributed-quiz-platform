@@ -1,26 +1,38 @@
 package pt.isec.client.services;
 
+import pt.isec.client.core.ClientManager;
+import pt.isec.client.core.IClientServiceContext;
 import pt.isec.common.dto.answer.SubmitAnswerDTO;
 import pt.isec.common.dto.answer.ViewAnswersDTO;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;
 
 /**
- * Serviço especializado em operações relacionadas com respostas.
- *
- * Todos os métodos enfileiram uma mensagem de pedido. As respostas
- * serão tratadas pela ResponseHandlerThread e notificadas via
- * eventos do ClientService.
+ * Client-side service for answer-related operations.
+ * <p>
+ * All methods enqueue a request message; responses are handled by
+ * {@code ResponseHandlerThread} and propagated as events by
+ * {@link ClientManager}.
  */
 public class AnswerClientService {
 
-    private final IClientService service;
+    private final IClientServiceContext service;
 
-    public AnswerClientService(IClientService service) {
+    /**
+     * Creates a new answer client service.
+     *
+     * @param service underlying client service
+     */
+    public AnswerClientService(IClientServiceContext service) {
         this.service = service;
     }
 
-    /** Submete a resposta de um estudante a uma pergunta. */
+    /**
+     * Submits a student's answer for a question.
+     *
+     * @param dto answer payload
+     */
+    // TODO Estudante: submissão da resposta associada a uma pergunta visualizada, dentro do seu período de validade
     public void submitAnswer(SubmitAnswerDTO dto) {
         try {
             service.getRequestQueue().put(new TcpMessage<>(MessageType.SUBMIT_ANSWER, dto));
@@ -29,7 +41,12 @@ public class AnswerClientService {
         }
     }
 
-    /** Lista respostas submetidas a uma pergunta (vista do docente). */
+    /**
+     * Lists answers submitted to a question (teacher view).
+     *
+     * @param dto view answers payload
+     */
+    // TODO Estudante: consulta das perguntas expiradas respondidas, podendo ser aplicados filtros de pesquisa
     public void viewAnswersForTeacher(ViewAnswersDTO dto) {
         try {
             service.getRequestQueue().put(new TcpMessage<>(MessageType.VIEW_ANSWERS, dto));
@@ -38,7 +55,11 @@ public class AnswerClientService {
         }
     }
 
-    /** Lista o histórico de respostas de um estudante (perguntas expiradas). */
+    /**
+     * Lists the answer history of a student (for expired questions).
+     *
+     * @param studentId student identifier
+     */
     public void viewAnswersForStudent(Integer studentId) {
         try {
             service.getRequestQueue().put(new TcpMessage<>(MessageType.LIST_ANSWERED_QUESTIONS, studentId));

@@ -1,3 +1,8 @@
 package pt.isec.common.model.question;
 
-public enum OptionLetter { A,B,C,D,E }
+/**
+ * Letters used to identify options in multiple-choice questions.
+ */
+public enum OptionLetter {
+    A, B, C, D, E
+}

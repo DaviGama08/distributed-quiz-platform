@@ -44,6 +44,7 @@ Desktop.ini
 target/
 bin/
 out/
+data/
 
 # Exceções: se tiveres algum out/bin dentro de src (normalmente não é necessário)
 !**/src/main/**/out/
@@ -59,6 +60,7 @@ out/
 *.tar
 *.tar.gz
 *.log
+*.db
 
 # Dumps de erros da JVM
 hs_err_pid*

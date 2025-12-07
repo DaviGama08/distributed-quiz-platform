@@ -132,7 +132,7 @@ public class AuthService implements IAuthService {
         String name = dto.name();
         String email = dto.email();
         String pw = dto.password();
-        Integer number = dto.studentNumber();
+        Long number = dto.studentNumber();
 
         requireValidName(name);
         requireValidEmail(email);
@@ -144,7 +144,7 @@ public class AuthService implements IAuthService {
         if (number <= 0) {
             throw new IllegalArgumentException("Número de estudante inválido (tem de ser positivo)");
         }
-        if (number > 999_999_999) {
+        if (number > 9999999999L) {
             throw new IllegalArgumentException("Número de estudante demasiado grande");
         }
 
@@ -234,7 +234,7 @@ public class AuthService implements IAuthService {
             String stored = (String) student.get("password_hash");
             requirePasswordMatch(pw, stored, "Credenciais inválidas");
             String session = newSessionId();
-            Integer studentNumber = ((Number) student.get("student_number")).intValue();
+            Long studentNumber = ((Number) student.get("student_number")).longValue();
             return new AuthResponseDTO(
                     session,
                     String.valueOf(((Number) student.get("id")).longValue()),
@@ -327,7 +327,7 @@ public class AuthService implements IAuthService {
             throw new IllegalArgumentException("Dados em falta");
         }
         Integer userId = dto.userId();
-        Integer studentNumber = dto.studentNumber();
+        Long studentNumber = dto.studentNumber();
         String name = dto.name();
         String email = dto.email();
         String oldPw = dto.oldPassword();
@@ -417,7 +417,7 @@ public class AuthService implements IAuthService {
         return new AuthResponseDTO(
                 null, // Session ID is not updated here
                 String.valueOf(((Number) updatedStudent.get("id")).longValue()),
-                ((Number) updatedStudent.get("student_number")).intValue(),
+                ((Number) updatedStudent.get("student_number")).longValue(),
                 "STUDENT",
                 (String) updatedStudent.get("name"),
                 (String) updatedStudent.get("email")

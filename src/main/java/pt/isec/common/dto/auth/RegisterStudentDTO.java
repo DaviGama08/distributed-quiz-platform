@@ -13,5 +13,5 @@ public record RegisterStudentDTO(
         String name,
         String email,
         String password,
-        Integer studentNumber
+        Long studentNumber
 ) implements Serializable {}

@@ -383,7 +383,7 @@ public class StudentDashboardController implements IDisposableProp {
         Label numberLabel = new Label("Número de estudante:");
         TextField numberField = new TextField();
         numberField.setPromptText("Número de estudante");
-        Integer currentNumber = clientControllerContext.getStudentNumber();
+        Long currentNumber = clientControllerContext.getStudentNumber();
         if (currentNumber != null) {
             numberField.setText(String.valueOf(currentNumber));
         }
@@ -427,13 +427,13 @@ public class StudentDashboardController implements IDisposableProp {
             String oldPw = oldPwField.getText();
             String newPw = newPwField.getText();
 
-            // Student number is passed as Integer, but semantic validation is done on the server
-            Integer number = null;
+            // Student number is passed as Long, but semantic validation is done on the server
+            Long number = null;
             if (numberText != null) {
                 String trimmed = numberText.trim();
                 if (!trimmed.isEmpty()) {
                     try {
-                        number = Integer.parseInt(trimmed);
+                        number = Long.parseLong(trimmed);
                     } catch (NumberFormatException ignored) {
                         // Let the server treat null/invalid as "Número de estudante inválido"
                     }

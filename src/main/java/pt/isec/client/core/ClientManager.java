@@ -93,7 +93,7 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
     private String  userEmail;
     private String  userName;
     private Integer userId;
-    private Integer studentNumber;
+    private Long studentNumber;
 
     // Directory config
     private final int    directoryUdpPort;
@@ -291,7 +291,7 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
     }
 
     @Override
-    public Integer getStudentNumber() {
+    public Long getStudentNumber() {
         return studentNumber;
     }
 
@@ -323,8 +323,8 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
     }
 
     @Override
-    public void setStudentNumber(Integer number) {
-        Integer old = this.studentNumber;
+    public void setStudentNumber(Long number) {
+        Long old = this.studentNumber;
         this.studentNumber = number;
         pcs.firePropertyChange(PROP_STUDENT_NUMBER, old, number);
     }

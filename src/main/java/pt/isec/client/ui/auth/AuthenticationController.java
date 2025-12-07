@@ -330,7 +330,7 @@ public class AuthenticationController implements IDisposableProp {
                     return;
                 }
 
-                Integer number = Integer.parseInt(trimmedExtra);
+                Long number = Long.parseLong(trimmedExtra);
                 clientControllerContext
                         .getAuthService()
                         .registerStudent(name, email, password, number);

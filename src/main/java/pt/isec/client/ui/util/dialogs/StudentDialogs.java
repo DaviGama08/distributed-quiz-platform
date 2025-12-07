@@ -331,7 +331,7 @@ public final class StudentDialogs {
             applyFilterToTable.accept(initialFilter);
 
             // ----------------- ComboBox listener -----------------
-            filterCombo.valueProperty().addListener((obs, oldVal, newVal) -> {
+            filterCombo.valueProperty().addListener((_, _, newVal) -> {
                 String sel = (newVal != null ? newVal : "Todas");
 
                 // Update table (UI)

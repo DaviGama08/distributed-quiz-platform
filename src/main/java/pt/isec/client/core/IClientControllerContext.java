@@ -49,8 +49,6 @@ public interface IClientControllerContext {
 
     Integer getStudentNumber();
 
-    boolean isAuthenticated();
-
     /* ======================= User / auth state (setters) ===================== */
 
     void setUserId(Integer id);

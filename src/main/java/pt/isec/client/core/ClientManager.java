@@ -286,11 +286,6 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
     }
 
     @Override
-    public boolean isAuthenticated() {
-        return authenticated;
-    }
-
-    @Override
     public Integer getUserId() {
         return userId;
     }
@@ -871,7 +866,7 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
 
             if (hostChanged) {
                 // Server changed: try to connect to the new one for up to 17 seconds
-                if (attemptReconnectWindow(17_000)) {
+                if (attemptReconnectWindow()) {
                     return;
                 }
                 pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, STATUS_DISCONNECTED_PERMANENT);
@@ -898,7 +893,7 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
                             oldPort != serverTcpPort;
 
             if (nowChanged) {
-                if (attemptReconnectWindow(17_000)) {
+                if (attemptReconnectWindow()) {
                     return;
                 }
                 pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, STATUS_DISCONNECTED_PERMANENT);
@@ -907,7 +902,7 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
             }
 
             // Still the same: try to connect to the same server for up to 17 seconds
-            if (attemptReconnectWindow(17_000)) {
+            if (attemptReconnectWindow()) {
                 return;
             }
 
@@ -921,11 +916,11 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
     /**
      * Attempts to reconnect within a maximum time window.
      *
-     * @param maxMillis maximum time allowed for reconnection attempts
      * @return {@code true} if reconnection succeeds within the time window
      */
-    private boolean attemptReconnectWindow(long maxMillis) {
-        final long deadline = System.currentTimeMillis() + maxMillis;
+    private boolean attemptReconnectWindow() {
+        long RECONNECT_TTL_MS = 17000;
+        final long deadline = System.currentTimeMillis() + RECONNECT_TTL_MS;
         while (System.currentTimeMillis() < deadline && !Thread.currentThread().isInterrupted()) {
             if (connectToServer()) {
                 // Here we could attempt transparent re-authentication if supported by the server

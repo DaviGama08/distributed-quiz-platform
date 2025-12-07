@@ -16,6 +16,7 @@ import pt.isec.common.messages.MessageType;
  * It does not wait for responses; results are delivered by
  * {@code ResponseHandlerThread} via property change events.
  */
+@SuppressWarnings("ClassCanBeRecord")
 public class AuthClientService {
 
     private final IClientServiceContext service;

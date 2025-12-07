@@ -1,10 +1,7 @@
 package pt.isec.client.threads;
-
-import pt.isec.client.core.IClientControllerContext;
 import pt.isec.client.core.IClientThreadContext;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.util.Log;
-
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
@@ -13,6 +10,7 @@ import java.io.Serializable;
  * Thread that continuously listens for messages from the server over TCP
  * and enqueues them into the response queue to be processed.
  */
+@SuppressWarnings("ClassCanBeRecord")
 public class ClientListenerThread implements Runnable {
 
     private final IClientThreadContext service;

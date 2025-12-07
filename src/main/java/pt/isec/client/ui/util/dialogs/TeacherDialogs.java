@@ -172,7 +172,7 @@ public final class TeacherDialogs {
             int numOptions = normaliseOptionCount(numOptionsVal);
 
             TextField[] allOptions = {optA, optB, optC, optD};
-            if (!validateOptionTexts(owner, allOptions, numOptions, onValidationError)) {
+            if (!validateOptionTexts(allOptions, numOptions, onValidationError)) {
                 ev.consume();
                 return;
             }
@@ -390,7 +390,7 @@ public final class TeacherDialogs {
             int numOptions = normaliseOptionCount(numOptionsVal);
 
             TextField[] allOptions = {optA, optB, optC, optD};
-            if (!validateOptionTexts(owner, allOptions, numOptions, onValidationError)) {
+            if (!validateOptionTexts(allOptions, numOptions, onValidationError)) {
                 ev.consume();
                 return;
             }
@@ -469,7 +469,6 @@ public final class TeacherDialogs {
      * @param answers  list of answers for the question
      * @param onDelete callback invoked when the user confirms the deletion of the question
      */
-    @SuppressWarnings("deprecation") // CONSTRAINED_RESIZE_POLICY is deprecated but still acceptable here
     public static void showAnswersDialog(Window owner,
                                          Question question,
                                          List<Answer> answers,
@@ -730,41 +729,12 @@ public final class TeacherDialogs {
     /**
      * Validates that all visible option fields contain non-blank text.
      *
-     * @param owner            owner window (for error dialogs)
      * @param optionFields     array with all option fields
      * @param numOptions       number of options selected in the spinner
      * @param onValidationError callback invoked with the error message, if any
      * @return {@code true} if all required fields are filled
      */
-    /**
-     * Validates that all visible option fields contain non-blank text.
-     *
-     * @param owner            owner window (for error dialogs)
-     * @param optionFields     array with all option fields
-     * @param numOptions       number of options selected in the spinner
-     * @param onValidationError callback invoked with the error message, if any
-     * @return {@code true} if all required fields are filled
-     */
-    /**
-     * Valida que todos os campos de opções visíveis têm texto não vazio.
-     *
-     * @param owner             janela “dona” (para a modal de erro)
-     * @param optionFields      array com todos os TextField das opções
-     * @param numOptions        número de opções escolhido no spinner
-     * @param onValidationError callback para notificar o controlador (notificações no painel)
-     * @return {@code true} se todas as opções obrigatórias estiverem preenchidas; {@code false} caso contrário
-     */
-    /**
-     * Valida que todos os campos de opções visíveis têm texto não vazio.
-     *
-     * @param owner             janela “dona” (não é usada aqui, mas mantida para compatibilidade)
-     * @param optionFields      array com todos os TextField das opções
-     * @param numOptions        número de opções escolhido no spinner
-     * @param onValidationError callback para notificar o controlador
-     * @return {@code true} se todas as opções obrigatórias estiverem preenchidas
-     */
-    private static boolean validateOptionTexts(Window owner,
-                                               TextField[] optionFields,
+    private static boolean validateOptionTexts(TextField[] optionFields,
                                                int numOptions,
                                                Consumer<String> onValidationError) {
 

@@ -13,6 +13,7 @@ import pt.isec.common.messages.MessageType;
  * and return immediately. Responses are processed by {@code ResponseHandlerThread}
  * and forwarded via property change events in {@code ClientService}.
  */
+@SuppressWarnings("ClassCanBeRecord")
 public class QuestionClientService {
 
     private final IClientServiceContext service;

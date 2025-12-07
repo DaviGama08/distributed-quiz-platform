@@ -14,6 +14,7 @@ import pt.isec.common.messages.MessageType;
  * {@code ResponseHandlerThread} and propagated as events by
  * {@link ClientManager}.
  */
+@SuppressWarnings("ClassCanBeRecord")
 public class AnswerClientService {
 
     private final IClientServiceContext service;

@@ -185,11 +185,21 @@ public class TeacherDashboardController implements IDisposableProp {
             }
             awaitingListQuestions = false;
 
-            List<Question> list = (List<Question>) evt.getNewValue();
+            List<Question> list = new ArrayList<>();
+            Object newValue = evt.getNewValue();
+            //Verify if the value is a list of questions
+            if(newValue instanceof List<?> tmp){
+                for(Object o : tmp){
+                    if(o instanceof Question q){
+                        //Add the question to the list
+                        list.add(q);
+                    }
+                }
+            }
 
             Platform.runLater(() -> {
                 boolean changed = true;
-                if (list != null && list.size() == lastQuestions.size()) {
+                if (list.size() == lastQuestions.size()) {
                     changed = false;
                     for (int i = 0; i < list.size(); i++) {
                         if (!Objects.equals(lastQuestions.get(i).getId(), list.get(i).getId())) {
@@ -200,9 +210,7 @@ public class TeacherDashboardController implements IDisposableProp {
                 }
 
                 lastQuestions.clear();
-                if (list != null) {
-                    lastQuestions.addAll(list);
-                }
+                lastQuestions.addAll(list);
                 refreshQuestionsTableView();
                 updateDashboardStats();
 
@@ -221,7 +229,17 @@ public class TeacherDashboardController implements IDisposableProp {
             }
             awaitingViewAnswers = false;
 
-            List<Answer> answers = (List<Answer>) evt.getNewValue();
+            List<Answer> list = new ArrayList<>();
+            Object newValue = evt.getNewValue();
+            //Verify if the value is a list of answers
+            if(newValue instanceof List<?> tmp){
+                for(Object o : tmp){
+                    if(o instanceof Answer a){
+                        list.add(a);
+                    }
+                }
+            }
+
             Question q = pendingViewQuestion;
             pendingViewQuestion = null;
 
@@ -232,7 +250,7 @@ public class TeacherDashboardController implements IDisposableProp {
                     return;
                 }
 
-                int count = (answers == null ? 0 : answers.size());
+                int count = list.size();
                 answersCountByQuestion.put(q.getId(), count);
                 updateDashboardStats();
 
@@ -327,7 +345,7 @@ public class TeacherDashboardController implements IDisposableProp {
                         q.getAccessCode() + " (total: " + count + ").");
 
                 Window owner = getCurrentOwnerWindow();
-                TeacherDialogs.showAnswersDialog(owner, q, answers, () -> {
+                TeacherDialogs.showAnswersDialog(owner, q, list, () -> {
                     Integer teacherId = clientControllerContext.getUserId();
                     if (teacherId == null) {
                         AlertUtils.showError(owner, "Erro",
@@ -1283,7 +1301,6 @@ public class TeacherDashboardController implements IDisposableProp {
      * one by one, in order to keep dashboard metrics updated without blocking
      * the UI thread.
      */
-    @SuppressWarnings("BusyWait") // intentional lightweight polling while waiting for async responses
     private void fetchAnswerCountsSequentially() {
         Integer teacherId = clientControllerContext.getUserId();
         if (teacherId == null) {
@@ -1365,7 +1382,6 @@ public class TeacherDashboardController implements IDisposableProp {
      * Starts a background thread that periodically refreshes the list of
      * questions for the teacher.
      */
-    @SuppressWarnings("BusyWait")
     private void startAutoRefreshQuestions() {
         if (autoRefreshRunning) {
             return;

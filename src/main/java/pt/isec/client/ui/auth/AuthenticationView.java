@@ -512,16 +512,16 @@ public class AuthenticationView {
      * @param controller authentication controller
      */
     public void registerHandlers(AuthenticationController controller) {
-        toggleModeButton.setOnAction(e -> controller.onToggleMode());
+        toggleModeButton.setOnAction(_ -> controller.onToggleMode());
 
-        loginPasswordField.setOnAction(e -> {
+        loginPasswordField.setOnAction(_ -> {
             try {
                 controller.onLogin();
             } catch (InterruptedException ex) {
                 throw new RuntimeException(ex);
             }
         });
-        loginButton.setOnAction(e -> {
+        loginButton.setOnAction(_ -> {
             try {
                 controller.onLogin();
             } catch (InterruptedException ex) {
@@ -529,9 +529,9 @@ public class AuthenticationView {
             }
         });
 
-        registerButton.setOnAction(e -> controller.onRegister());
-        rbStudent.setOnAction(e -> controller.onRegisterTypeChanged("STUDENT"));
-        rbTeacher.setOnAction(e -> controller.onRegisterTypeChanged("TEACHER"));
+        registerButton.setOnAction(_ -> controller.onRegister());
+        rbStudent.setOnAction(_ -> controller.onRegisterTypeChanged("STUDENT"));
+        rbTeacher.setOnAction(_ -> controller.onRegisterTypeChanged("TEACHER"));
     }
 
     /**

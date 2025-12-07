@@ -266,12 +266,6 @@ public class AuthenticationController implements IDisposableProp {
     /**
      * Login button handler.
      * <p>
-     * Performs local field validation, shows user feedback (inline + modal)
-     * and, when valid, sends the login request to the server.
-     */
-    /**
-     * Login button handler.
-     * <p>
      * Forwards the raw credentials to the server without performing local
      * email/password validation. All validation is done on the server and
      * any error message is propagated back to the UI via the login fail

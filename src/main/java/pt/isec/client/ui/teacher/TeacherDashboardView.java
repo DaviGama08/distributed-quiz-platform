@@ -6,6 +6,7 @@ import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.scene.text.TextAlignment;
 
 /**
  * Teacher dashboard view (dark theme).
@@ -153,6 +154,9 @@ public class TeacherDashboardView {
         Label menuLabel = new Label("MENU");
         menuLabel.getStyleClass().add("sidebar-title-dark");
 
+        HBox menuWrapper = new HBox(menuLabel);
+        menuWrapper.setAlignment(Pos.CENTER);
+
         profileBtn = createMenuButton("Perfil");
         createQuestionBtn = createMenuButton("Criar Pergunta");
         manageQuestionsBtn = createMenuButton("Gerir Perguntas");
@@ -161,7 +165,7 @@ public class TeacherDashboardView {
         sidebar.getChildren().addAll(
                 profileCard,
                 new Separator(),
-                menuLabel,
+                menuWrapper,     // MENU agora está centrado
                 new Separator(),
                 profileBtn,
                 createQuestionBtn,

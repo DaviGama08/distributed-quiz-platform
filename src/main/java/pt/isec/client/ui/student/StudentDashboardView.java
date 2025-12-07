@@ -7,6 +7,7 @@ import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.scene.text.TextAlignment;
 
 /**
  * Student dashboard view (dark theme).
@@ -36,6 +37,7 @@ public class StudentDashboardView {
     private Button answerQuestionBtn;
     private Button historyBtn;
     private Button logoutBtn;
+    private Button profileBtn;
 
     // Lightweight loading overlay in header
     private HBox loadingBox;
@@ -139,20 +141,22 @@ public class StudentDashboardView {
         Label menuLabel = new Label("MENU");
         menuLabel.getStyleClass().add("sidebar-title-dark");
 
+        HBox menuWrapper = new HBox(menuLabel);
+        menuWrapper.setAlignment(Pos.CENTER);
+
         answerQuestionBtn = createMenuButton("Responder Pergunta");
+        profileBtn = createMenuButton("Perfil");
         historyBtn = createMenuButton("Histórico");
         logoutBtn = createMenuButton("Logout");
 
-        Region spacer = new Region();
-        VBox.setVgrow(spacer, Priority.ALWAYS);
-
         sidebar.getChildren().addAll(
-                menuLabel,
-                new Separator(),
                 profileCard,
+                new Separator(),
+                menuWrapper,
+                new Separator(),
+                profileBtn,
                 answerQuestionBtn,
                 historyBtn,
-                spacer,
                 logoutBtn
         );
 
@@ -327,6 +331,7 @@ public class StudentDashboardView {
         answerQuestionBtn.setOnAction(_ -> controller.onAnswerQuestion());
         historyBtn.setOnAction(_ -> controller.onShowHistory());
         logoutBtn.setOnAction(_ -> controller.onLogout());
+        profileBtn.setOnAction(_ -> controller.onProfile());
 
         if (profileCard != null) {
             profileCard.setOnMouseClicked(_ -> controller.onProfile());

@@ -1,10 +1,7 @@
 package pt.isec.client.threads;
-
-import pt.isec.client.core.IClientControllerContext;
 import pt.isec.client.core.IClientThreadContext;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.util.Log;
-
 import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
@@ -12,6 +9,7 @@ import java.io.Serializable;
 /**
  * Thread that sends messages from the request queue to the server over TCP.
  */
+@SuppressWarnings("ClassCanBeRecord")
 public class RequestSenderThread implements Runnable {
 
     private final IClientThreadContext service;
@@ -50,7 +48,7 @@ public class RequestSenderThread implements Runnable {
                 out.flush();
             } catch (IOException e) {
                 if (service.isRunning()) {
-                    Log.error(RequestSenderThread.class, "Failed to send: " + e.getMessage(), e);
+                    Log.error(RequestSenderThread.class, "Failed to send: " + e.getMessage());
                     try {
                         if (request != null) {
                             service.getRequestQueue().put(request);

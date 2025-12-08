@@ -14,7 +14,7 @@ import java.io.Serializable;
 public record AuthResponseDTO(
         String sessionId,
         String userId,
-        Integer studentNumber,
+        Long studentNumber,
         String userType,
         String name,
         String email

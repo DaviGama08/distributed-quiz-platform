@@ -4,6 +4,8 @@ import org.fusesource.jansi.Ansi;
 import org.fusesource.jansi.AnsiConsole;
 
 import java.io.PrintStream;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 /**
  * Simple logger with colored output according to module origin.
@@ -22,7 +24,7 @@ import java.io.PrintStream;
  *
  * Format:
  * <pre>
- *   [LEVEL][ClassName] message
+ *   [TIMESTAMP][LEVEL][ClassName] message
  * </pre>
  */
 public final class Log {
@@ -36,6 +38,13 @@ public final class Log {
         } catch (Exception ignored) {
         }
     }
+
+    /**
+     * Time formatter used for log timestamps.
+     * Example output: 14:32:11
+     */
+    private static final DateTimeFormatter DATE_TIME_FMT =
+            DateTimeFormatter.ofPattern("HH:mm:ss");
 
     /**
      * Utility class – no instances allowed.
@@ -68,6 +77,18 @@ public final class Log {
         log("INFO", source, msg, null);
     }
 
+    /**
+     * Logs a formatted informational message highlighting master/primary-related
+     * events using a cyan color for the entire line.
+     *
+     * @param source source class
+     * @param format message format compatible with {@link String#format(String, Object...)}
+     * @param args   format arguments
+     */
+    public static void infoMaster(Class<?> source, String format, Object... args) {
+        String msg = cleanFormat(format, args);
+        logMaster("INFO", source, msg, null);
+    }
 
     /* ===================== WARN methods ===================== */
 
@@ -154,6 +175,9 @@ public final class Log {
      * <p>
      * Decides the color based on the log level and source package and prints
      * the message to {@link System#out} or {@link System#err}.
+     * <p>
+     * The log line is prefixed with a timestamp in the format
+     * {@code [yyyy-MM-dd HH:mm:ss]}.
      *
      * @param level   log level: {@code "INFO"}, {@code "WARN"} or {@code "ERROR"}
      * @param source  source class (may be {@code null})
@@ -165,17 +189,16 @@ public final class Log {
                             String message,
                             Throwable t) {
 
+        String timestamp = LocalDateTime.now().format(DATE_TIME_FMT);
         String className = (source != null ? source.getSimpleName() : "UNKNOWN");
-        String plainPrefix = "[" + level + "][" + className + "] ";
+        String plainPrefix = "[" + timestamp + "][" + level + "][" + className + "] ";
         String plainLine = plainPrefix + message;
 
-        // Decide output stream
         PrintStream ps = "ERROR".equals(level) ? System.err : System.out;
 
         String toPrint;
 
         try {
-            // For WARN & ERROR, color the entire line
             if ("ERROR".equals(level)) {
                 toPrint = Ansi.ansi()
                         .fgBrightRed()
@@ -189,7 +212,6 @@ public final class Log {
                         .reset()
                         .toString();
             } else {
-                // INFO (or other): only prefix colored by module, message plain
                 String coloredPrefix = plainPrefix;
                 int[] rgb = resolveColor(source);
                 if (rgb != null) {
@@ -202,7 +224,45 @@ public final class Log {
                 toPrint = coloredPrefix + message;
             }
         } catch (Throwable ignored) {
-            // If Jansi fails for some reason, fall back to plain text
+            toPrint = plainLine;
+        }
+
+        ps.println(toPrint);
+
+        if (t != null) {
+            t.printStackTrace(ps);
+        }
+    }
+
+    /**
+     * Specialized logging implementation used to highlight master/primary-related
+     * events. The entire line is printed in cyan.
+     *
+     * @param level   log level (normally {@code "INFO"})
+     * @param source  source class (may be {@code null})
+     * @param message plain message text
+     * @param t       optional throwable
+     */
+    private static void logMaster(String level,
+                                  Class<?> source,
+                                  String message,
+                                  Throwable t) {
+
+        String timestamp = LocalDateTime.now().format(DATE_TIME_FMT);
+        String className = (source != null ? source.getSimpleName() : "UNKNOWN");
+        String plainPrefix = "[" + timestamp + "][" + level + "][" + className + "] ";
+        String plainLine = plainPrefix + message;
+
+        PrintStream ps = "ERROR".equals(level) ? System.err : System.out;
+
+        String toPrint;
+        try {
+            toPrint = Ansi.ansi()
+                    .fgBrightCyan()
+                    .a(plainLine)
+                    .reset()
+                    .toString();
+        } catch (Throwable ignored) {
             toPrint = plainLine;
         }
 

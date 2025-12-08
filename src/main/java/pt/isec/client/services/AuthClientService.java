@@ -16,6 +16,7 @@ import pt.isec.common.messages.MessageType;
  * It does not wait for responses; results are delivered by
  * {@code ResponseHandlerThread} via property change events.
  */
+@SuppressWarnings("ClassCanBeRecord")
 public class AuthClientService {
 
     private final IClientServiceContext service;
@@ -68,7 +69,7 @@ public class AuthClientService {
      * @throws InterruptedException if the thread is interrupted while enqueuing
      */
     public void registerStudent(String name, String email,
-                                String password, Integer studentNumber) throws InterruptedException {
+                                String password, Long studentNumber) throws InterruptedException {
         RegisterStudentDTO dto = new RegisterStudentDTO(name, email, password, studentNumber);
         service.getRequestQueue().put(new TcpMessage<>(MessageType.REGISTER_STUDENT, dto));
     }

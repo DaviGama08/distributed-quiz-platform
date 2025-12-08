@@ -47,15 +47,13 @@ public interface IClientControllerContext {
 
     Integer getUserId();
 
-    Integer getStudentNumber();
-
-    boolean isAuthenticated();
+    Long getStudentNumber();
 
     /* ======================= User / auth state (setters) ===================== */
 
     void setUserId(Integer id);
 
-    void setStudentNumber(Integer number);
+    void setStudentNumber(Long number);
 
     void setUserType(String t);
 

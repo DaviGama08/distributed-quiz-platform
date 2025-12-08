@@ -1,5 +1,4 @@
 package pt.isec.client.threads;
-
 import pt.isec.client.core.IClientControllerContext;
 import pt.isec.client.core.IClientThreadContext;
 import pt.isec.common.dto.auth.AuthResponseDTO;
@@ -9,7 +8,6 @@ import pt.isec.common.messages.MessageType;
 import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.Question;
 import pt.isec.common.util.Log;
-
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +19,8 @@ import java.util.List;
  * This class delegates to {@link IClientControllerContext} to fire property change events
  * so that UI controllers can update the interface accordingly.
  */
+
+@SuppressWarnings("ClassCanBeRecord")
 public class ResponseHandlerThread implements Runnable {
 
     private final IClientThreadContext tInfo;
@@ -34,6 +34,14 @@ public class ResponseHandlerThread implements Runnable {
         this.tInfo = tInfo;
     }
 
+    /**
+     * Main processing loop for server responses.
+     * <p>
+     * Continuously takes {@link TcpMessage} instances from the response queue,
+     * dispatches each one to {@link #processResponse(TcpMessage)}, and keeps
+     * running while the client is active. If the thread is interrupted, the
+     * loop is terminated and the thread exits gracefully.
+     */
     @Override
     public void run() {
         Log.info(ResponseHandlerThread.class, "Started processing responses...");
@@ -68,8 +76,13 @@ public class ResponseHandlerThread implements Runnable {
             /* ===== AUTHENTICATION ===== */
             case LOGIN_OK -> {
                 Log.info(ResponseHandlerThread.class, "Login successful");
-                if (response.getData() instanceof AuthResponseDTO dto) {
+                Serializable data = response.getData();
+                if (data instanceof AuthResponseDTO dto) {
                     tInfo.setPropLoginOk(dto);
+                } else {
+                    Log.error(ResponseHandlerThread.class,
+                            "LOGIN_OK received unexpected payload: " +
+                                    (data == null ? "null" : data.getClass().getName()));
                 }
             }
             case LOGIN_FAIL -> {
@@ -80,8 +93,14 @@ public class ResponseHandlerThread implements Runnable {
             }
             case REGISTER_OK -> {
                 Log.info(ResponseHandlerThread.class, "Register successful");
-                if (response.getData() instanceof AuthResponseDTO dto) {
+                Serializable data = response.getData();
+
+                if (data instanceof AuthResponseDTO dto) {
                     tInfo.setPropRegisterOk(dto);
+                } else {
+                    Log.error(ResponseHandlerThread.class,
+                            "REGISTER_OK received unexpected payload type: " +
+                                    (data == null ? "null" : data.getClass().getName()));
                 }
             }
 
@@ -131,11 +150,28 @@ public class ResponseHandlerThread implements Runnable {
             case LIST_QUESTIONS_RESPONSE -> {
                 Log.info(ResponseHandlerThread.class, "Questions list received");
                 Serializable data = response.getData();
-                if (data instanceof ArrayList<?> list) {
-                    List<Question> qList = (List<Question>) list;
-                    tInfo.setPropListQuestionsResponse(qList);
+
+                List<Question> qList = new ArrayList<>();
+
+                if (data instanceof List<?> rawList) {
+                    for (Object o : rawList) {
+                        if (o instanceof Question q) {
+                            qList.add(q);
+                        } else {
+                            Log.error(ResponseHandlerThread.class,
+                                    "LIST_QUESTIONS_RESPONSE contains unexpected element: "
+                                            + (o == null ? "null" : o.getClass().getName()));
+                        }
+                    }
+                } else {
+                    Log.error(ResponseHandlerThread.class,
+                            "LIST_QUESTIONS_RESPONSE received unexpected type: "
+                                    + (data == null ? "null" : data.getClass().getName()));
                 }
+
+                tInfo.setPropListQuestionsResponse(qList);
             }
+
             case EDIT_QUESTION_FAIL -> {
                 Log.error(ResponseHandlerThread.class, "Server error: " + response.getData());
                 if(response.getData() instanceof String s)
@@ -144,20 +180,54 @@ public class ResponseHandlerThread implements Runnable {
 
             case QUESTION_DETAILS -> {
                 Log.info(ResponseHandlerThread.class, "Question details received");
-                Question q = response.getDataAs(Question.class);
-                tInfo.setPropJoinQuestionResponse(q);
+                Serializable data = response.getData();
+
+                if (data instanceof Question q) {
+                    tInfo.setPropJoinQuestionResponse(q);
+                } else {
+                    Log.error(ResponseHandlerThread.class,
+                            "QUESTION_DETAILS received unexpected payload type: " +
+                                    (data == null ? "null" : data.getClass().getName()));
+                    // Safe fallback
+                    tInfo.setPropJoinQuestionResponse(null);
+                }
             }
+
 
             /* ===== ANSWER OPERATIONS ===== */
             case SUBMIT_OK -> {
                 Log.info(ResponseHandlerThread.class, "Answer submitted successfully");
-                String msg = response.getData() instanceof String s ? s : "Resposta submetida com sucesso!";
+                Serializable data = response.getData();
+
+                String msg;
+                if (data instanceof String s) {
+                    msg = s;
+                } else {
+                    Log.error(ResponseHandlerThread.class,
+                            "SUBMIT_OK received unexpected payload type: " +
+                                    (data == null ? "null" : data.getClass().getName()) +
+                                    " — using default message.");
+                    msg = "Answer submitted successfully!";
+                }
+
                 tInfo.setPropSubmitAnswerOk(msg);
             }
 
             case SUBMIT_FAIL -> {
                 Log.error(ResponseHandlerThread.class, "Failed to submit answer");
-                String msg = response.getData() instanceof String s ? s : "Submissão da resposta sem sucesso!";
+                Serializable data = response.getData();
+
+                String msg;
+                if (data instanceof String s) {
+                    msg = s;
+                } else {
+                    Log.error(ResponseHandlerThread.class,
+                            "SUBMIT_FAIL received unexpected payload type: " +
+                                    (data == null ? "null" : data.getClass().getName()) +
+                                    " — using default failure message.");
+                    msg = "Failed to submit answer!";
+                }
+
                 tInfo.setPropSubmitAnswerFail(msg);
             }
 
@@ -176,28 +246,65 @@ public class ResponseHandlerThread implements Runnable {
             case VIEW_ANSWERS_RESPONSE -> {
                 Log.info(ResponseHandlerThread.class, "Answers received");
                 Serializable data = response.getData();
-                if (data instanceof ArrayList<?> list) {
-                    List<Answer> answers = (List<Answer>) list;
-                    tInfo.setPropViewAnswersResponse(answers);
+
+                List<Answer> answers = new ArrayList<>();
+                if (data instanceof List<?> tmp) {
+                    for (Object o : tmp) {
+                        if (o instanceof Answer a) {
+                            answers.add(a);
+                        } else {
+                            Log.error(ResponseHandlerThread.class,
+                                    "VIEW_ANSWERS_RESPONSE contains unexpected element: "
+                                            + (o == null ? "null" : o.getClass().getName()));
+                        }
+                    }
+                } else {
+                    Log.error(ResponseHandlerThread.class,
+                            "VIEW_ANSWERS_RESPONSE received unexpected type: "
+                                    + (data == null ? "null" : data.getClass().getName()));
                 }
+
+                tInfo.setPropViewAnswersResponse(answers);
             }
 
             case LIST_ANSWERED_RESPONSE -> {
                 Log.info(ResponseHandlerThread.class, "Answered questions history received");
                 Serializable data = response.getData();
-                if (data instanceof ArrayList<?> list) {
-                    List<Answer> answers = (List<Answer>) list;
-                    tInfo.setPropListAnsweredResponse(answers);
+
+                List<Answer> answers = new ArrayList<>();
+                if (data instanceof List<?> tmp) {
+                    for (Object o : tmp) {
+                        if (o instanceof Answer a) {
+                            answers.add(a);
+                        } else {
+                            Log.error(ResponseHandlerThread.class,
+                                    "LIST_ANSWERED_RESPONSE contains unexpected element: "
+                                            + (o == null ? "null" : o.getClass().getName()));
+                        }
+                    }
+                } else {
+                    Log.error(ResponseHandlerThread.class,
+                            "LIST_ANSWERED_RESPONSE received unexpected type: "
+                                    + (data == null ? "null" : data.getClass().getName()));
                 }
+                tInfo.setPropListAnsweredResponse(answers);
             }
 
             /* ===== PROFILE ===== */
             case UPDATE_PROFILE_OK -> {
                 Log.info(ResponseHandlerThread.class, "Profile updated successfully");
-                if (response.getData() instanceof AuthResponseDTO dto) {
+                Serializable data = response.getData();
+
+                if (data instanceof AuthResponseDTO dto) {
                     tInfo.setPropUpdateProfileOk(dto);
                 } else {
-                    tInfo.setPropUpdateProfileOk(new AuthResponseDTO(null, null, null, null, "ok", null));
+                    Log.warn(ResponseHandlerThread.class,
+                            "UPDATE_PROFILE_OK received unexpected payload type: " +
+                                    (data == null ? "null" : data.getClass().getName()) +
+                                    " — using default OK DTO.");
+                    tInfo.setPropUpdateProfileOk(
+                            new AuthResponseDTO(null, null, null, null, "ok", null)
+                    );
                 }
             }
 

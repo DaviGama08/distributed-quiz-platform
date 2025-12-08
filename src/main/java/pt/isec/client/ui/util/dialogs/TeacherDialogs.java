@@ -23,6 +23,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -37,23 +38,43 @@ import java.util.function.UnaryOperator;
  * </ul>
  */
 public final class TeacherDialogs {
+    // Small anti-spam delay (in ms) between validation alerts
+    private static final long VALIDATION_ALERT_COOLDOWN_MS = 400;
+    private static long lastValidationAlertTs = 0L;
+
     private TeacherDialogs() {}
 
     // ==============================================================
     //  CREATE QUESTION DIALOG
     // ==============================================================
-
     /**
-     * Shows a dialog for creating a new question.
+     * Shows a modal dialog that allows a teacher to create a new question.
      * <p>
-     * This dialog is responsible for collecting user input and building the
-     * {@link CreateQuestionDTO}. It performs only minimal UI validation
-     * (required fields) so that {@link Option} objects can be created without
-     * throwing exceptions. All business rules are enforced on the server.
+     * The dialog lets the user:
+     * <ul>
+     *   <li>Enter the question statement</li>
+     *   <li>Select the number of options (2 to 4) and fill in their texts</li>
+     *   <li>Choose the correct option (A–D)</li>
+     *   <li>Define the availability period (start/end date and time)</li>
+     * </ul>
+     * Local validation is performed on all fields, including:
+     * <ul>
+     *   <li>Non-empty statement and option texts</li>
+     *   <li>No duplicate option texts (case-insensitive)</li>
+     *   <li>Correct option within the visible options</li>
+     *   <li>Coherent time window (end after start, not in the past)</li>
+     * </ul>
+     * If validation succeeds, {@code onSubmit} is invoked with a
+     * {@link CreateQuestionDTO} containing all the data. If validation fails,
+     * an error alert is shown and, optionally, {@code onValidationError} is
+     * called with a user-friendly message.
      *
-     * @param owner     owner window (may be {@code null})
-     * @param teacherId current teacher id (used in the DTO)
-     * @param onSubmit  callback invoked with the created {@link CreateQuestionDTO} if the user confirms
+     * @param owner             owner window for the dialog (may be {@code null})
+     * @param teacherId         identifier of the teacher that owns the question
+     * @param onSubmit          callback invoked when the user confirms with valid data;
+     *                          receives the {@link CreateQuestionDTO} ready to be sent to the server
+     * @param onValidationError optional callback invoked when local validation fails;
+     *                          receives a user-facing error message
      */
     public static void showCreateQuestionDialog(Window owner,
                                                 Integer teacherId,
@@ -71,11 +92,9 @@ public final class TeacherDialogs {
 
         GridPane grid = buildBaseGrid();
 
-        // --- Statement -------------------------------------------------------
         Label statementLabel = createSectionLabel("Enunciado:");
         TextArea statementField = createStatementArea();
 
-        // --- Options count + fields -----------------------------------------
         Label numOptionsLabel = createSectionLabel("Número de Opções:");
         Spinner<Integer> numOptionsSpinner = new Spinner<>(2, 4, 4);
         numOptionsSpinner.setPrefWidth(100);
@@ -93,13 +112,11 @@ public final class TeacherDialogs {
 
         configureOptionsSpinner(numOptionsSpinner, optionsBox, optA, optB, optC, optD);
 
-        // --- Correct option --------------------------------------------------
         Label correctLabel = createSectionLabel("Resposta Correta:");
         ComboBox<String> correctCombo = new ComboBox<>();
         correctCombo.getItems().addAll("A", "B", "C", "D");
         correctCombo.setValue("A");
 
-        // --- Availability period --------------------------------------------
         Label periodLabel = createSectionLabel("Período de Disponibilidade:");
         HBox periodBox = new HBox(8);
         periodBox.setAlignment(Pos.CENTER_LEFT);
@@ -136,7 +153,6 @@ public final class TeacherDialogs {
                 endDate, endTimeField
         );
 
-        // --- Layout into grid -----------------------------------------------
         grid.add(statementLabel, 0, 0);
         grid.add(statementField, 0, 1, 2, 1);
         grid.add(numOptionsLabel, 0, 2);
@@ -156,80 +172,181 @@ public final class TeacherDialogs {
         Button okButton = (Button) dialog.getDialogPane().lookupButton(ButtonType.OK);
         okButton.setText("Criar Pergunta");
 
-        okButton.setOnAction(ev -> {
-            // ---------- minimal UI validation (required fields) ----------
-
-            String statement = statementField.getText();
-            if (statement == null || statement.trim().isEmpty()) {
-                String msg = "Preencha o enunciado.";
-                notifyValidationError(onValidationError, msg);
-                ev.consume();
-                return;
-            }
-            statement = statement.trim();
-
-            Integer numOptionsVal = numOptionsSpinner.getValue();
-            int numOptions = normaliseOptionCount(numOptionsVal);
-
-            TextField[] allOptions = {optA, optB, optC, optD};
-            if (!validateOptionTexts(owner, allOptions, numOptions, onValidationError)) {
-                ev.consume();
-                return;
-            }
-
-            // ---------- build DTO (no business rules here) -----------------
-            List<Option> options;
+        okButton.addEventFilter(javafx.event.ActionEvent.ACTION, ev -> {
             try {
-                options = buildOptions(allOptions, numOptions);
-            } catch (IllegalArgumentException ex) {
+                String statement = statementField.getText();
+                if (statement == null || statement.trim().isEmpty()) {
+                    showValidationError(
+                            owner,
+                            "Erro ao criar pergunta",
+                            "Preencha o enunciado da pergunta.",
+                            onValidationError,
+                            ev
+                    );
+                    return;
+                }
+                statement = statement.trim();
+
+                Integer numOptionsVal = numOptionsSpinner.getValue();
+                int numOptions = normaliseOptionCount(numOptionsVal);
+
+                TextField[] allOptions = {optA, optB, optC, optD};
+                String optError = validateOptionTexts(allOptions, numOptions);
+                if (optError != null) {
+                    showValidationError(
+                            owner,
+                            "Erro ao criar pergunta",
+                            optError,
+                            onValidationError,
+                            ev
+                    );
+                    return;
+                }
+
+                List<Option> options;
+                try {
+                    options = buildOptions(allOptions, numOptions);
+                } catch (IllegalArgumentException ex) {
+                    String msg = ex.getMessage();
+                    if (msg == null || msg.isBlank()) {
+                        msg = "Não foi possível criar as opções de resposta.";
+                    }
+                    showValidationError(
+                            owner,
+                            "Erro ao criar pergunta",
+                            msg,
+                            onValidationError,
+                            ev
+                    );
+                    return;
+                }
+
+                OptionLetter correct = parseCorrectLetter(correctCombo.getValue());
+                if (correct == null) {
+                    showValidationError(
+                            owner,
+                            "Erro ao criar pergunta",
+                            "Selecione a opção correta.",
+                            onValidationError,
+                            ev
+                    );
+                    return;
+                }
+
+                // Ensure correct letter is within visible options (A..numOptions)
+                int correctIndex = correct.ordinal(); // A=0,B=1,C=2,D=3
+                if (correctIndex >= numOptions) {
+                    showValidationError(
+                            owner,
+                            "Erro ao criar pergunta",
+                            "A opção correta tem de corresponder a uma das opções disponíveis.",
+                            onValidationError,
+                            ev
+                    );
+                    return;
+                }
+
+                if (startDate.getValue() == null
+                        || startTimeField.getText() == null || startTimeField.getText().isBlank()
+                        || endDate.getValue() == null
+                        || endTimeField.getText() == null || endTimeField.getText().isBlank()) {
+
+                    showValidationError(
+                            owner,
+                            "Erro ao criar pergunta",
+                            "Preencha a data e hora de início e fim.",
+                            onValidationError,
+                            ev
+                    );
+                    return;
+                }
+
+                LocalDateTime startAt;
+                LocalDateTime endAt;
+                try {
+                    startAt = parseDateTime(
+                            owner, startDate.getValue(), startTimeField.getText(), timeFormatter,
+                            "Erro ao criar pergunta",
+                            "Hora de início inválida. Use o formato HH:mm, por exemplo 09:30.",
+                            ev, onValidationError
+                    );
+                    if (ev.isConsumed()) return;
+
+                    endAt = parseDateTime(
+                            owner, endDate.getValue(), endTimeField.getText(), timeFormatter,
+                            "Erro ao criar pergunta",
+                            "Hora de fim inválida. Use o formato HH:mm, por exemplo 10:15.",
+                            ev, onValidationError
+                    );
+                    if (ev.isConsumed()) return;
+                } catch (IllegalStateException ignored) {
+                    return;
+                }
+
+                // Business time rules mirrored from the server (minute precision)
+                /*
+                 * We truncate all times to minutes so that "now" at 13:56:32
+                 * and a user input of 13:56 is considered the same minute.
+                 */
+                LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES);
+                LocalDateTime startTrunc = startAt.truncatedTo(ChronoUnit.MINUTES);
+                LocalDateTime endTrunc   = endAt.truncatedTo(ChronoUnit.MINUTES);
+
+                if (!endTrunc.isAfter(startTrunc)) {
+                    showValidationError(
+                            owner,
+                            "Erro ao criar pergunta",
+                            "A data/hora de fim deve ser posterior à data/hora de início.",
+                            onValidationError,
+                            ev
+                    );
+                    return;
+                }
+                if (startTrunc.isBefore(now)) {
+                    showValidationError(
+                            owner,
+                            "Erro ao criar pergunta",
+                            "A pergunta não pode começar no passado.",
+                            onValidationError,
+                            ev
+                    );
+                    return;
+                }
+                if (!endTrunc.isAfter(now)) {
+                    showValidationError(
+                            owner,
+                            "Erro ao criar pergunta",
+                            "A data/hora de fim deve ser posterior à data/hora atual.",
+                            onValidationError,
+                            ev
+                    );
+                    return;
+                }
+
+                if (onSubmit != null) {
+                    CreateQuestionDTO dto = new CreateQuestionDTO(
+                            statement,
+                            teacherId,
+                            options,
+                            correct,
+                            startAt,
+                            endAt
+                    );
+                    onSubmit.accept(dto);
+                }
+
+            } catch (Exception ex) {
                 String msg = ex.getMessage();
                 if (msg == null || msg.isBlank()) {
-                    msg = "Não foi possível criar as opções de resposta.";
+                    msg = "Ocorreu um erro ao preparar os dados da pergunta.";
                 }
-                notifyValidationError(onValidationError, msg);
-                ev.consume();
-                return;
-            }
-
-            OptionLetter correct = parseCorrectLetter(correctCombo.getValue());
-
-            // Require both dates and times to be filled before sending to server
-            if (startDate.getValue() == null
-                    || startTimeField.getText() == null || startTimeField.getText().isBlank()
-                    || endDate.getValue() == null
-                    || endTimeField.getText() == null || endTimeField.getText().isBlank()) {
-
-                String msg = "Preencha a data e hora de início e fim.";
-                notifyValidationError(onValidationError, msg);
-                ev.consume();
-                return;
-            }
-
-            LocalDateTime startAt;
-            LocalDateTime endAt;
-            try {
-                startAt = parseDateTime(owner, startDate.getValue(), startTimeField.getText(), timeFormatter,
-                        "Hora de início inválida", "Use o formato HH:mm, por exemplo 09:30.", ev, onValidationError);
-                if (ev.isConsumed()) return;
-
-                endAt = parseDateTime(owner, endDate.getValue(), endTimeField.getText(), timeFormatter,
-                        "Hora de fim inválida", "Use o formato HH:mm, por exemplo 10:15.", ev, onValidationError);
-                if (ev.isConsumed()) return;
-            } catch (IllegalStateException ignored) {
-                // parseDateTime already mostrou a mensagem e consumiu o evento
-                return;
-            }
-
-            if (onSubmit != null) {
-                CreateQuestionDTO dto = new CreateQuestionDTO(
-                        statement,
-                        teacherId,
-                        options,
-                        correct,
-                        startAt,
-                        endAt
+                showValidationError(
+                        owner,
+                        "Erro ao criar pergunta",
+                        msg,
+                        onValidationError,
+                        ev
                 );
-                onSubmit.accept(dto);
             }
         });
 
@@ -239,18 +356,36 @@ public final class TeacherDialogs {
     // ==============================================================
     //  EDIT QUESTION DIALOG
     // ==============================================================
-
     /**
-     * Shows a dialog for editing an existing question.
+     * Shows a modal dialog that allows a teacher to edit an existing question.
      * <p>
-     * This dialog gathers the updated data and creates an {@link EditQuestionDTO}.
-     * It only enforces required-field checks so that {@link Option} instances
-     * are created with valid text; all business logic is delegated to the server.
+     * The dialog is pre-filled with the current question data:
+     * <ul>
+     *   <li>Statement</li>
+     *   <li>Options and their texts (up to 4)</li>
+     *   <li>Correct option</li>
+     *   <li>Availability period (start/end date and time)</li>
+     * </ul>
+     * Local validation mirrors the creation dialog and basic server rules:
+     * <ul>
+     *   <li>Non-empty statement and option texts</li>
+     *   <li>No duplicate option texts (case-insensitive)</li>
+     *   <li>Correct option within the visible options</li>
+     *   <li>End date/time must be after start date/time</li>
+     *   <li>If the time window is changed, it cannot be moved into the past</li>
+     * </ul>
+     * If validation succeeds, {@code onSubmit} is invoked with an
+     * {@link EditQuestionDTO}. If validation fails, an error alert is shown
+     * and, optionally, {@code onValidationError} is called with a user-friendly
+     * message. The dialog remains open on validation errors.
      *
-     * @param owner     owner window (may be {@code null})
-     * @param question  question to edit
-     * @param teacherId current teacher id (used in the DTO)
-     * @param onSubmit  callback invoked with the created {@link EditQuestionDTO} if the user confirms
+     * @param owner             owner window for the dialog (may be {@code null})
+     * @param question          question to be edited; its data is used to pre-fill the form
+     * @param teacherId         identifier of the teacher that owns the question
+     * @param onSubmit          callback invoked when the user confirms with valid data;
+     *                          receives the {@link EditQuestionDTO} ready to be sent to the server
+     * @param onValidationError optional callback invoked when local validation fails;
+     *                          receives a user-facing error message
      */
     public static void showEditQuestionDialog(Window owner,
                                               Question question,
@@ -268,12 +403,10 @@ public final class TeacherDialogs {
 
         GridPane grid = buildBaseGrid();
 
-        // --- Statement -------------------------------------------------------
         Label statementLabel = createSectionLabel("Enunciado:");
         TextArea statementField = createStatementArea();
         statementField.setText(question.getStatement());
 
-        // --- Options count + fields -----------------------------------------
         Label numOptionsLabel = createSectionLabel("Número de Opções:");
         int initialOptionsCount = (question.getOptions() == null
                 ? 4
@@ -294,7 +427,7 @@ public final class TeacherDialogs {
 
         configureOptionsSpinner(numOptionsSpinner, optionsBox, optA, optB, optC, optD);
 
-        // Preenche opções existentes
+        // Fill current options
         List<Option> existingOptions = question.getOptions();
         if (existingOptions != null) {
             int i = 0;
@@ -311,7 +444,6 @@ public final class TeacherDialogs {
             }
         }
 
-        // --- Correct option --------------------------------------------------
         Label correctLabel = createSectionLabel("Resposta Correta:");
         ComboBox<String> correctCombo = new ComboBox<>();
         correctCombo.getItems().addAll("A", "B", "C", "D");
@@ -319,7 +451,6 @@ public final class TeacherDialogs {
                 ? question.getCorrectOption().name()
                 : "A");
 
-        // --- Availability period --------------------------------------------
         Label periodLabel = createSectionLabel("Período de Disponibilidade:");
         HBox periodBox = new HBox(8);
         periodBox.setAlignment(Pos.CENTER_LEFT);
@@ -356,7 +487,6 @@ public final class TeacherDialogs {
                 endDate, endTimeField
         );
 
-        // --- Layout into grid -----------------------------------------------
         grid.add(statementLabel, 0, 0);
         grid.add(statementField, 0, 1, 2, 1);
         grid.add(numOptionsLabel, 0, 2);
@@ -376,78 +506,188 @@ public final class TeacherDialogs {
         Button okButton = (Button) dialog.getDialogPane().lookupButton(ButtonType.OK);
         okButton.setText("Atualizar Pergunta");
 
-        okButton.setOnAction(ev -> {
-            String statement = statementField.getText();
-            if (statement == null || statement.trim().isEmpty()) {
-                String msg = "Preencha o enunciado.";
-                notifyValidationError(onValidationError, msg);
-                ev.consume();
-                return;
-            }
-            statement = statement.trim();
-
-            Integer numOptionsVal = numOptionsSpinner.getValue();
-            int numOptions = normaliseOptionCount(numOptionsVal);
-
-            TextField[] allOptions = {optA, optB, optC, optD};
-            if (!validateOptionTexts(owner, allOptions, numOptions, onValidationError)) {
-                ev.consume();
-                return;
-            }
-
-            List<Option> options;
+        okButton.addEventFilter(javafx.event.ActionEvent.ACTION, ev -> {
             try {
-                options = buildOptions(allOptions, numOptions);
-            } catch (IllegalArgumentException ex) {
+                String statement = statementField.getText();
+                if (statement == null || statement.trim().isEmpty()) {
+                    showValidationError(
+                            owner,
+                            "Erro ao editar pergunta",
+                            "Preencha o enunciado da pergunta.",
+                            onValidationError,
+                            ev
+                    );
+                    return;
+                }
+                statement = statement.trim();
+
+                Integer numOptionsVal = numOptionsSpinner.getValue();
+                int numOptions = normaliseOptionCount(numOptionsVal);
+
+                TextField[] allOptions = {optA, optB, optC, optD};
+                String optError = validateOptionTexts(allOptions, numOptions);
+                if (optError != null) {
+                    showValidationError(
+                            owner,
+                            "Erro ao editar pergunta",
+                            optError,
+                            onValidationError,
+                            ev
+                    );
+                    return;
+                }
+
+                List<Option> options;
+                try {
+                    options = buildOptions(allOptions, numOptions);
+                } catch (IllegalArgumentException ex) {
+                    String msg = ex.getMessage();
+                    if (msg == null || msg.isBlank()) {
+                        msg = "Não foi possível criar as opções de resposta.";
+                    }
+                    showValidationError(
+                            owner,
+                            "Erro ao editar pergunta",
+                            msg,
+                            onValidationError,
+                            ev
+                    );
+                    return;
+                }
+
+                OptionLetter correct = parseCorrectLetter(correctCombo.getValue());
+                if (correct == null) {
+                    showValidationError(
+                            owner,
+                            "Erro ao editar pergunta",
+                            "Selecione a opção correta.",
+                            onValidationError,
+                            ev
+                    );
+                    return;
+                }
+
+                int correctIndex = correct.ordinal();
+                if (correctIndex >= numOptions) {
+                    showValidationError(
+                            owner,
+                            "Erro ao editar pergunta",
+                            "A opção correta tem de corresponder a uma das opções disponíveis.",
+                            onValidationError,
+                            ev
+                    );
+                    return;
+                }
+
+                if (startDate.getValue() == null
+                        || startTimeField.getText() == null || startTimeField.getText().isBlank()
+                        || endDate.getValue() == null
+                        || endTimeField.getText() == null || endTimeField.getText().isBlank()) {
+
+                    showValidationError(
+                            owner,
+                            "Erro ao editar pergunta",
+                            "Preencha a data e hora de início e fim.",
+                            onValidationError,
+                            ev
+                    );
+                    return;
+                }
+
+                LocalDateTime startAt;
+                LocalDateTime endAt;
+                try {
+                    startAt = parseDateTime(
+                            owner, startDate.getValue(), startTimeField.getText(), timeFormatter,
+                            "Erro ao editar pergunta",
+                            "Hora de início inválida. Use o formato HH:mm, por exemplo 09:30.",
+                            ev, onValidationError
+                    );
+                    if (ev.isConsumed()) return;
+
+                    endAt = parseDateTime(
+                            owner, endDate.getValue(), endTimeField.getText(), timeFormatter,
+                            "Erro ao editar pergunta",
+                            "Hora de fim inválida. Use o formato HH:mm, por exemplo 10:15.",
+                            ev, onValidationError
+                    );
+                    if (ev.isConsumed()) return;
+                } catch (IllegalStateException ignored) {
+                    return;
+                }
+
+                // Business time rules mirrored from the server (minute precision)
+                LocalDateTime startTrunc = startAt.truncatedTo(ChronoUnit.MINUTES);
+                LocalDateTime endTrunc   = endAt.truncatedTo(ChronoUnit.MINUTES);
+                LocalDateTime originalStartTrunc = question.getStartAt().truncatedTo(ChronoUnit.MINUTES);
+                LocalDateTime originalEndTrunc   = question.getEndAt().truncatedTo(ChronoUnit.MINUTES);
+
+                // Business time rules mirrored from the server
+                if (!endTrunc.isAfter(startTrunc)) {
+                    showValidationError(
+                            owner,
+                            "Erro ao editar pergunta",
+                            "A data/hora de fim deve ser posterior à data/hora de início.",
+                            onValidationError,
+                            ev
+                    );
+                    return;
+                }
+
+                boolean timeWindowChanged =
+                        !startTrunc.equals(originalStartTrunc) || !endTrunc.equals(originalEndTrunc);
+
+                if (timeWindowChanged) {
+                    LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES);
+
+                    if (startTrunc.isBefore(now)) {
+                        showValidationError(
+                                owner,
+                                "Erro ao editar pergunta",
+                                "A pergunta não pode começar no passado.",
+                                onValidationError,
+                                ev
+                        );
+                        return;
+                    }
+                    if (!endTrunc.isAfter(now)) {
+                        showValidationError(
+                                owner,
+                                "Erro ao editar pergunta",
+                                "A data/hora de fim deve ser posterior à data/hora atual.",
+                                onValidationError,
+                                ev
+                        );
+                        return;
+                    }
+                }
+
+                if (onSubmit != null) {
+                    EditQuestionDTO dto = new EditQuestionDTO(
+                            question.getId(),
+                            teacherId,
+                            statement,
+                            options,
+                            correct,
+                            startAt,
+                            endAt
+                    );
+                    onSubmit.accept(dto);
+                }
+                // Success => do not consume event -> dialog closes normally.
+
+            } catch (Exception ex) {
                 String msg = ex.getMessage();
                 if (msg == null || msg.isBlank()) {
-                    msg = "Não foi possível criar as opções de resposta.";
+                    msg = "Ocorreu um erro ao preparar os dados da pergunta.";
                 }
-                notifyValidationError(onValidationError, msg);
-                ev.consume();
-                return;
-            }
-
-            OptionLetter correct = parseCorrectLetter(correctCombo.getValue());
-
-            // Obrigatório ter data + hora
-            if (startDate.getValue() == null
-                    || startTimeField.getText() == null || startTimeField.getText().isBlank()
-                    || endDate.getValue() == null
-                    || endTimeField.getText() == null || endTimeField.getText().isBlank()) {
-
-                String msg = "Preencha a data e hora de início e fim.";
-                notifyValidationError(onValidationError, msg);
-                ev.consume();
-                return;
-            }
-
-            LocalDateTime startAt;
-            LocalDateTime endAt;
-            try {
-                startAt = parseDateTime(owner, startDate.getValue(), startTimeField.getText(), timeFormatter,
-                        "Hora de início inválida", "Use o formato HH:mm, por exemplo 09:30.", ev, onValidationError);
-                if (ev.isConsumed()) return;
-
-                endAt = parseDateTime(owner, endDate.getValue(), endTimeField.getText(), timeFormatter,
-                        "Hora de fim inválida", "Use o formato HH:mm, por exemplo 10:15.", ev, onValidationError);
-                if (ev.isConsumed()) return;
-            } catch (IllegalStateException ignored) {
-                // parseDateTime já tratou da mensagem e consumiu o evento
-                return;
-            }
-
-            if (onSubmit != null) {
-                EditQuestionDTO dto = new EditQuestionDTO(
-                        question.getId(),
-                        teacherId,
-                        statement,
-                        options,
-                        correct,
-                        startAt,
-                        endAt
+                showValidationError(
+                        owner,
+                        "Erro ao editar pergunta",
+                        msg,
+                        onValidationError,
+                        ev
                 );
-                onSubmit.accept(dto);
             }
         });
 
@@ -469,7 +709,6 @@ public final class TeacherDialogs {
      * @param answers  list of answers for the question
      * @param onDelete callback invoked when the user confirms the deletion of the question
      */
-    @SuppressWarnings("deprecation") // CONSTRAINED_RESIZE_POLICY is deprecated but still acceptable here
     public static void showAnswersDialog(Window owner,
                                          Question question,
                                          List<Answer> answers,
@@ -728,60 +967,6 @@ public final class TeacherDialogs {
     }
 
     /**
-     * Validates that all visible option fields contain non-blank text.
-     *
-     * @param owner            owner window (for error dialogs)
-     * @param optionFields     array with all option fields
-     * @param numOptions       number of options selected in the spinner
-     * @param onValidationError callback invoked with the error message, if any
-     * @return {@code true} if all required fields are filled
-     */
-    /**
-     * Validates that all visible option fields contain non-blank text.
-     *
-     * @param owner            owner window (for error dialogs)
-     * @param optionFields     array with all option fields
-     * @param numOptions       number of options selected in the spinner
-     * @param onValidationError callback invoked with the error message, if any
-     * @return {@code true} if all required fields are filled
-     */
-    /**
-     * Valida que todos os campos de opções visíveis têm texto não vazio.
-     *
-     * @param owner             janela “dona” (para a modal de erro)
-     * @param optionFields      array com todos os TextField das opções
-     * @param numOptions        número de opções escolhido no spinner
-     * @param onValidationError callback para notificar o controlador (notificações no painel)
-     * @return {@code true} se todas as opções obrigatórias estiverem preenchidas; {@code false} caso contrário
-     */
-    /**
-     * Valida que todos os campos de opções visíveis têm texto não vazio.
-     *
-     * @param owner             janela “dona” (não é usada aqui, mas mantida para compatibilidade)
-     * @param optionFields      array com todos os TextField das opções
-     * @param numOptions        número de opções escolhido no spinner
-     * @param onValidationError callback para notificar o controlador
-     * @return {@code true} se todas as opções obrigatórias estiverem preenchidas
-     */
-    private static boolean validateOptionTexts(Window owner,
-                                               TextField[] optionFields,
-                                               int numOptions,
-                                               Consumer<String> onValidationError) {
-
-        int limit = Math.min(numOptions, optionFields.length);
-
-        for (int i = 0; i < limit; i++) {
-            String txt = optionFields[i].getText();
-            if (txt == null || txt.trim().isEmpty()) {
-                String msg = "Preencha todas as opções até ao número escolhido.";
-                notifyValidationError(onValidationError, msg);
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
      * Builds the list of {@link Option} objects from the option fields.
      *
      * @param optionFields array with all option fields
@@ -814,25 +999,35 @@ public final class TeacherDialogs {
         try {
             return OptionLetter.valueOf(value);
         } catch (IllegalArgumentException ex) {
-            // let the server validate an unexpected value
+            // Let the caller decide what to do with an invalid value.
             return null;
         }
     }
 
     /**
-     * Parses a {@link LocalDateTime} from a date and a textual time, showing
-     * an error dialog on failure and optionally notifying the caller.
+     * Parses a {@link LocalDate} and a "HH:mm" time string into a {@link LocalDateTime}.
+     * <p>
+     * If parsing fails, a validation error is shown using the same mechanism as the
+     * other dialog validations:
+     * <ul>
+     *   <li>Shows an error alert with {@code errorTitle} and {@code errorMessage}</li>
+     *   <li>Invokes {@code onValidationError}, if provided</li>
+     *   <li>Consumes the {@link javafx.event.ActionEvent} so the dialog is not closed</li>
+     *   <li>Throws an {@link IllegalStateException} to signal the caller to abort
+     *       the current submission flow</li>
+     * </ul>
      *
-     * @param owner           owner window
-     * @param date            date value (may be {@code null})
-     * @param timeText        time text (may be {@code null})
-     * @param formatter       formatter used to parse time
-     * @param errorTitle      dialog title for invalid time
-     * @param errorMessage    dialog message for invalid time
-     * @param ev              action event (will be consumed on error)
-     * @param onValidationError callback invoked with the error message when parsing fails
-     * @return parsed {@link LocalDateTime}, or {@code null} if date/time not provided
-     * @throws IllegalStateException if parsing fails (the event is already consumed)
+     * @param owner             owner window for error dialogs (may be {@code null})
+     * @param date              selected date (must not be {@code null} when called)
+     * @param timeText          time text in "HH:mm" format
+     * @param formatter         formatter used to parse the time text
+     * @param errorTitle        title for the error alert shown on invalid time
+     * @param errorMessage      message for the error alert shown on invalid time
+     * @param ev                action event of the OK/submit button; will be consumed on error
+     * @param onValidationError optional callback invoked when validation fails;
+     *                          receives the error message
+     * @return                  a {@link LocalDateTime} combining {@code date} and parsed time
+     * @throws IllegalStateException if the time text cannot be parsed
      */
     private static LocalDateTime parseDateTime(Window owner,
                                                LocalDate date,
@@ -849,9 +1044,8 @@ public final class TeacherDialogs {
             LocalTime time = LocalTime.parse(timeText, formatter);
             return LocalDateTime.of(date, time);
         } catch (DateTimeParseException ex) {
-            AlertUtils.showError(owner, errorTitle, errorMessage);
-            notifyValidationError(onValidationError, errorMessage);
-            ev.consume();
+            // Reuse central validation helper so the behaviour is consistent
+            showValidationError(owner, errorTitle, errorMessage, onValidationError, ev);
             throw new IllegalStateException("Invalid time");
         }
     }
@@ -867,4 +1061,67 @@ public final class TeacherDialogs {
         }
     }
 
+    /**
+     * Shows a validation error alert in a consistent way and prevents the dialog
+     * from closing by consuming the event.
+     * <p>
+     * - Guarantees a non-empty message is shown to the user (Portuguese)
+     * - Optionally notifies the controller via {@code onValidationError}
+     * - Applies a small cooldown to avoid alert "spam" on double-click
+     */
+    private static void showValidationError(Window owner,
+                                            String title,
+                                            String message,
+                                            Consumer<String> onValidationError,
+                                            javafx.event.ActionEvent ev) {
+
+        // Fallback to a generic message so the alert is never empty
+        String msg = (message == null || message.isBlank())
+                ? "Ocorreu um erro. Verifique os campos e tente novamente."
+                : message;
+
+        // Anti-spam: avoid stacking several alerts on very fast clicks
+        long now = System.currentTimeMillis();
+        if (now - lastValidationAlertTs < VALIDATION_ALERT_COOLDOWN_MS) {
+            ev.consume();
+            notifyValidationError(onValidationError, msg);
+            return;
+        }
+        lastValidationAlertTs = now;
+
+        AlertUtils.showError(owner, title, msg);
+        notifyValidationError(onValidationError, msg);
+
+        // Critical to keep the create/edit dialog open on validation errors
+        ev.consume();
+    }
+
+    /**
+     * Validates that all visible option fields are non-blank and that
+     * there are no duplicated texts (case-insensitive, trimmed).
+     *
+     * @param optionFields array with all option fields
+     * @param numOptions   number of options selected in the spinner
+     * @return {@code null} when validation passes, or a user-facing error message in Portuguese
+     */
+    private static String validateOptionTexts(TextField[] optionFields,
+                                              int numOptions) {
+
+        int limit = Math.min(numOptions, optionFields.length);
+        List<String> normalized = new ArrayList<>(limit);
+
+        for (int i = 0; i < limit; i++) {
+            String txt = optionFields[i].getText();
+            if (txt == null || txt.trim().isEmpty()) {
+                return "Preencha todas as opções até ao número escolhido.";
+            }
+
+            String norm = txt.trim().toLowerCase(); // default locale is fine here
+            if (normalized.contains(norm)) {
+                return "As opções de resposta não podem ser iguais.";
+            }
+            normalized.add(norm);
+        }
+        return null;
+    }
 }

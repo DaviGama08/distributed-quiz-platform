@@ -36,6 +36,7 @@ public class StudentDashboardView {
     private Button answerQuestionBtn;
     private Button historyBtn;
     private Button logoutBtn;
+    private Button profileBtn;
 
     // Lightweight loading overlay in header
     private HBox loadingBox;
@@ -139,20 +140,22 @@ public class StudentDashboardView {
         Label menuLabel = new Label("MENU");
         menuLabel.getStyleClass().add("sidebar-title-dark");
 
+        HBox menuWrapper = new HBox(menuLabel);
+        menuWrapper.setAlignment(Pos.CENTER);
+
         answerQuestionBtn = createMenuButton("Responder Pergunta");
+        profileBtn = createMenuButton("Perfil");
         historyBtn = createMenuButton("Histórico");
         logoutBtn = createMenuButton("Logout");
 
-        Region spacer = new Region();
-        VBox.setVgrow(spacer, Priority.ALWAYS);
-
         sidebar.getChildren().addAll(
-                menuLabel,
-                new Separator(),
                 profileCard,
+                new Separator(),
+                menuWrapper,
+                new Separator(),
+                profileBtn,
                 answerQuestionBtn,
                 historyBtn,
-                spacer,
                 logoutBtn
         );
 
@@ -211,15 +214,6 @@ public class StudentDashboardView {
         if (avatarInitialsLabel != null) {
             avatarInitialsLabel.setText(getInitials(name));
         }
-    }
-
-    /**
-     * Returns the name currently displayed on the profile card.
-     *
-     * @return profile name
-     */
-    public String getProfileName() {
-        return profileNameLabel != null ? profileNameLabel.getText() : userName;
     }
 
     /* =================== MAIN AREA =================== */
@@ -287,23 +281,6 @@ public class StudentDashboardView {
         return scene;
     }
 
-    /**
-     * Updates the header welcome message.
-     *
-     * @param name student name
-     */
-    public void setWelcomeName(String name) {
-        if (welcomeLabel == null) {
-            return;
-        }
-
-        if (name == null || name.trim().isEmpty()) {
-            welcomeLabel.setText("Bem-vindo, Estudante!");
-        } else {
-            welcomeLabel.setText("Bem-vindo, " + name + "!");
-        }
-    }
-
     private String deriveNameFromEmail(String email) {
         if (email == null || !email.contains("@")) {
             return "Estudante";
@@ -350,12 +327,13 @@ public class StudentDashboardView {
      * @param controller student dashboard controller
      */
     public void registerHandlers(StudentDashboardController controller) {
-        answerQuestionBtn.setOnAction(e -> controller.onAnswerQuestion());
-        historyBtn.setOnAction(e -> controller.onShowHistory());
-        logoutBtn.setOnAction(e -> controller.onLogout());
+        answerQuestionBtn.setOnAction(_ -> controller.onAnswerQuestion());
+        historyBtn.setOnAction(_ -> controller.onShowHistory());
+        logoutBtn.setOnAction(_ -> controller.onLogout());
+        profileBtn.setOnAction(_ -> controller.onProfile());
 
         if (profileCard != null) {
-            profileCard.setOnMouseClicked(e -> controller.onProfile());
+            profileCard.setOnMouseClicked(_ -> controller.onProfile());
         }
     }
 

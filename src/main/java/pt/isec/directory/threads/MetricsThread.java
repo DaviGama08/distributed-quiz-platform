@@ -55,31 +55,38 @@ public class MetricsThread implements Runnable {
      * </ul>
      */
     @Override
-    @SuppressWarnings("BusyWait") // intentional periodic sleep, not a tight busy-wait loop
     public void run() {
         while (threadInfo.isRunning()) {
             try {
                 String masterUuid = threadInfo.masterServerUuid();
                 int totalServers = threadInfo.serversCount();
-                int masterPort = (masterUuid != null) ? threadInfo.serverTcpPort(masterUuid) : -1;
 
-                String masterName = (masterUuid == null || masterPort <= 0)
-                        ? "NONE"
-                        : ("servidor" + masterPort);
+                ServerInfo masterInfo = null;
+                int masterPort;
+                String masterEndpoint = "NONE";
+
+                if (masterUuid != null) {
+                    masterInfo = threadInfo.servers().get(masterUuid);
+                }
+
+                if (masterInfo != null) {
+                    masterPort = masterInfo.getTcpPort();
+                    masterEndpoint = masterInfo.getIp() + ":" + masterPort;
+                }
 
                 Log.info(
                         MetricsThread.class,
-                        "servers=%d, master=%s, tcpPort=%d",
-                        totalServers, masterName, masterPort
+                        "Directory metrics: servers=%d, primary=%s (id=%s)",
+                        totalServers,
+                        masterEndpoint,
+                        masterUuid != null ? masterUuid : "NONE"
                 );
 
                 Thread.sleep(periodMs);
             } catch (InterruptedException ie) {
-                // Allow the thread to terminate gracefully on interruption
                 Thread.currentThread().interrupt();
                 break;
             } catch (Throwable t) {
-                // Log unexpected errors but keep the thread alive, unless it gets interrupted
                 Log.error(MetricsThread.class, "Unexpected error in MetricsThread: " + t.getMessage(), t);
                 try {
                     Thread.sleep(periodMs);

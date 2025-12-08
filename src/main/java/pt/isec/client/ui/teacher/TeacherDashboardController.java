@@ -185,11 +185,21 @@ public class TeacherDashboardController implements IDisposableProp {
             }
             awaitingListQuestions = false;
 
-            List<Question> list = (List<Question>) evt.getNewValue();
+            List<Question> list = new ArrayList<>();
+            Object newValue = evt.getNewValue();
+            //Verify if the value is a list of questions
+            if(newValue instanceof List<?> tmp){
+                for(Object o : tmp){
+                    if(o instanceof Question q){
+                        //Add the question to the list
+                        list.add(q);
+                    }
+                }
+            }
 
             Platform.runLater(() -> {
                 boolean changed = true;
-                if (list != null && list.size() == lastQuestions.size()) {
+                if (list.size() == lastQuestions.size()) {
                     changed = false;
                     for (int i = 0; i < list.size(); i++) {
                         if (!Objects.equals(lastQuestions.get(i).getId(), list.get(i).getId())) {
@@ -200,9 +210,7 @@ public class TeacherDashboardController implements IDisposableProp {
                 }
 
                 lastQuestions.clear();
-                if (list != null) {
-                    lastQuestions.addAll(list);
-                }
+                lastQuestions.addAll(list);
                 refreshQuestionsTableView();
                 updateDashboardStats();
 
@@ -221,7 +229,17 @@ public class TeacherDashboardController implements IDisposableProp {
             }
             awaitingViewAnswers = false;
 
-            List<Answer> answers = (List<Answer>) evt.getNewValue();
+            List<Answer> list = new ArrayList<>();
+            Object newValue = evt.getNewValue();
+            //Verify if the value is a list of answers
+            if(newValue instanceof List<?> tmp){
+                for(Object o : tmp){
+                    if(o instanceof Answer a){
+                        list.add(a);
+                    }
+                }
+            }
+
             Question q = pendingViewQuestion;
             pendingViewQuestion = null;
 
@@ -232,7 +250,7 @@ public class TeacherDashboardController implements IDisposableProp {
                     return;
                 }
 
-                int count = (answers == null ? 0 : answers.size());
+                int count = list.size();
                 answersCountByQuestion.put(q.getId(), count);
                 updateDashboardStats();
 
@@ -327,7 +345,7 @@ public class TeacherDashboardController implements IDisposableProp {
                         q.getAccessCode() + " (total: " + count + ").");
 
                 Window owner = getCurrentOwnerWindow();
-                TeacherDialogs.showAnswersDialog(owner, q, answers, () -> {
+                TeacherDialogs.showAnswersDialog(owner, q, list, () -> {
                     Integer teacherId = clientControllerContext.getUserId();
                     if (teacherId == null) {
                         AlertUtils.showError(owner, "Erro",
@@ -426,19 +444,19 @@ public class TeacherDashboardController implements IDisposableProp {
                         q,
                         teacherId,
                         dto -> {
+                            // Only executed when local validation passed.
                             awaitingUpdateQuestion = true;
                             clientControllerContext.getQuestionService().editQuestion(dto);
                         },
                         msg -> {
                             if (msg != null && !msg.isBlank()) {
-                                Window w = getCurrentOwnerWindow();
-                                AlertUtils.showError(w, "Erro ao editar pergunta", msg);
                                 view.addNotification("Falha ao editar pergunta (validação local): " + msg);
                             }
                         }
                 );
             });
         };
+
 
         this.updateQuestionListener = evt -> {
             if (!awaitingUpdateQuestion) {
@@ -712,8 +730,14 @@ public class TeacherDashboardController implements IDisposableProp {
      * Handler for the "Create Question" action.
      * <p>
      * Opens the creation dialog and, when the user confirms valid data,
-     * sends the request to the server. Local validation errors are also
-     * routed to the dashboard notification area.
+     * sends the request to the server. All field validation is performed
+     * inside the dialog; this method only:
+     * <ul>
+     *   <li>Checks that the teacher session is valid</li>
+     *   <li>Sends the DTO to the question service when {@code onSubmit} is called</li>
+     *   <li>Logs local-validation errors into the notification area, without
+     *       opening extra modals</li>
+     * </ul>
      */
     public void onCreateQuestion() {
         Integer teacherId = clientControllerContext.getUserId();
@@ -728,18 +752,16 @@ public class TeacherDashboardController implements IDisposableProp {
                 owner,
                 teacherId,
                 dto -> {
-                    // Chamado apenas quando a validação local passou
+                    // Only executed when all local validations passed.
                     awaitingCreateQuestion = true;
                     clientControllerContext.getQuestionService().createQuestion(dto);
                     view.addNotification("Pedido para criar nova pergunta enviado.");
                 },
                 msg -> {
-                    // Erro de validação local (enunciado vazio, opções em falta, datas, etc.)
+                    // Do NOT open a second modal here; the dialog already did that.
                     if (msg == null || msg.isBlank()) {
-                        return;
+                        msg = "Preencha todos os campos obrigatórios da pergunta.";
                     }
-                    Window w = getCurrentOwnerWindow();
-                    AlertUtils.showError(w, "Erro ao criar pergunta", msg);
                     view.addNotification("Falha ao criar pergunta (validação local): " + msg);
                 }
         );
@@ -1283,7 +1305,6 @@ public class TeacherDashboardController implements IDisposableProp {
      * one by one, in order to keep dashboard metrics updated without blocking
      * the UI thread.
      */
-    @SuppressWarnings("BusyWait") // intentional lightweight polling while waiting for async responses
     private void fetchAnswerCountsSequentially() {
         Integer teacherId = clientControllerContext.getUserId();
         if (teacherId == null) {
@@ -1365,7 +1386,6 @@ public class TeacherDashboardController implements IDisposableProp {
      * Starts a background thread that periodically refreshes the list of
      * questions for the teacher.
      */
-    @SuppressWarnings("BusyWait")
     private void startAutoRefreshQuestions() {
         if (autoRefreshRunning) {
             return;

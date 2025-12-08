@@ -84,10 +84,26 @@ public class WorkerThread implements Runnable {
                 }
 
                 String payload = new String(msg.data(), 0, msg.length(), StandardCharsets.UTF_8);
-                Log.info(WorkerThread.class, "Received: %s", payload);
+
+
 
                 Map<String, String> kv = parseKv(payload);
                 String type = kv.get("TYPE");
+
+                boolean isPrimaryHeartbeat = "HEARTBEAT".equals(type) && isHeartbeatFromPrincipal(kv);
+
+                if (payload.startsWith("TYPE=") || payload.startsWith("ROLE=")) {
+                    if (isPrimaryHeartbeat) {
+                        Log.infoMaster(WorkerThread.class, "Received: %s", payload);
+                    } else {
+                        Log.info(WorkerThread.class, "Received: %s", payload);
+                    }
+                } else {
+                    Log.info(WorkerThread.class,
+                            "Received non-protocol datagram (%d bytes) from %s:%d",
+                            msg.length(), msg.addr(), msg.port());
+                }
+
                 if (type == null) {
                     send(msg, "400 BAD_REQUEST TYPE");
                     continue;
@@ -107,7 +123,11 @@ public class WorkerThread implements Runnable {
                     }
 
                     case "HEARTBEAT" -> {
-                        Log.info(WorkerThread.class, "Server sends heartbeat.");
+                        if (isPrimaryHeartbeat) {
+                            Log.infoMaster(WorkerThread.class, "Server sends heartbeat.");
+                        } else {
+                            Log.info(WorkerThread.class, "Server sends heartbeat.");
+                        }
                         reply = handleHeartbeat(kv);
                     }
 
@@ -127,9 +147,9 @@ public class WorkerThread implements Runnable {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } catch (IOException e) {
-            Log.error(WorkerThread.class, "Error sending UDP: " + e.getMessage(), e);
+            Log.error(WorkerThread.class, "Error sending UDP: " + e.getMessage());
         } catch (Exception e) {
-            Log.error(WorkerThread.class, "Unexpected error in Worker: " + e.getMessage(), e);
+            Log.error(WorkerThread.class, "Unexpected error in Worker: " + e.getMessage());
         }
 
         Log.info(WorkerThread.class, "Worker terminated.");
@@ -153,8 +173,17 @@ public class WorkerThread implements Runnable {
     private String handleLogin() {
         ServerInfo principal = findPrincipal();
         if (principal == null) {
+            Log.info(WorkerThread.class, "Client login request: no primary server available.");
             return "404 NO_PRINCIPAL";
         }
+
+        Log.infoMaster(
+                WorkerThread.class,
+                "Client login request: returning primary %s (id=%s)",
+                principal.tcpEndpoint(),
+                principal.getId()
+        );
+
         return "200 PRINCIPAL " + principal.tcpEndpoint();
     }
 
@@ -223,7 +252,24 @@ public class WorkerThread implements Runnable {
 
         ServerInfo principal = findPrincipal();
         if (principal == null) {
+            Log.info(WorkerThread.class,
+                    "Heartbeat from %s received, but no primary is currently elected.", id);
             return "404 NO_PRINCIPAL";
+        }
+
+        boolean isPrincipal = principal.getId().equals(id);
+        if (isPrincipal) {
+            Log.infoMaster(
+                    WorkerThread.class,
+                    "Heartbeat from PRIMARY %s: current primary=%s (id=%s)",
+                    id, principal.tcpEndpoint(), principal.getId()
+            );
+        } else {
+            Log.info(
+                    WorkerThread.class,
+                    "Heartbeat from %s: current primary=%s (id=%s)",
+                    id, principal.tcpEndpoint(), principal.getId()
+            );
         }
 
         return "200 OK " + principal.tcpEndpoint();
@@ -310,10 +356,23 @@ public class WorkerThread implements Runnable {
 
         ServerInfo principal = findPrincipal();
         if (principal == null) {
+            Log.info(WorkerThread.class,
+                    "Server registered/updated: id=%s, endpoint=%s:%d, dbVersion=%d, but no primary is available.",
+                    id, ip, port, dbVersion);
             return "404 NO_PRINCIPAL";
         }
 
-        // Optionally we could return a global DB version; for now only the endpoint is sent.
+        Log.info(WorkerThread.class,
+                "Server registered/updated: id=%s, endpoint=%s:%d, dbVersion=%d",
+                id, ip, port, dbVersion);
+
+        Log.infoMaster(
+                WorkerThread.class,
+                "Current primary after register: %s (id=%s)",
+                principal.tcpEndpoint(),
+                principal.getId()
+        );
+
         return "200 OK " + principal.tcpEndpoint();
     }
 
@@ -373,5 +432,20 @@ public class WorkerThread implements Runnable {
             }
         }
         return m;
+    }
+    /**
+     * Returns {@code true} if the given HEARTBEAT message was sent by
+     * the current principal server (same ID as {@link #findPrincipal()}).
+     */
+    private boolean isHeartbeatFromPrincipal(Map<String, String> kv) {
+        if (!"HEARTBEAT".equals(kv.get("TYPE"))) {
+            return false;
+        }
+        String id = kv.get("ID");
+        if (id == null || id.isBlank()) {
+            return false;
+        }
+        ServerInfo principal = findPrincipal();
+        return principal != null && id.equals(principal.getId());
     }
 }

@@ -72,16 +72,13 @@ public class AuthenticationView {
         VBox leftInner = new VBox(20);
         leftInner.getStyleClass().add("left-inner");
 
-        ImageView logoView;
-        try {
-            Image logo = new Image(Objects.requireNonNull(
-                    getClass().getResourceAsStream("/imgs/logo.png")
-            ));
-            logoView = new ImageView(logo);
+        ImageView logoView = new ImageView();
+        var is = AuthenticationView.class.getResourceAsStream("/imgs/logo_isec.png");
+        if (is != null) {
+            Image logo = new Image(is);
+            logoView.setImage(logo);
             logoView.setPreserveRatio(true);
             logoView.setFitHeight(120);
-        } catch (Exception e) {
-            logoView = new ImageView();
         }
 
         Label welcomeTitle = new Label("Bem-vindo!");
@@ -512,16 +509,16 @@ public class AuthenticationView {
      * @param controller authentication controller
      */
     public void registerHandlers(AuthenticationController controller) {
-        toggleModeButton.setOnAction(e -> controller.onToggleMode());
+        toggleModeButton.setOnAction(_ -> controller.onToggleMode());
 
-        loginPasswordField.setOnAction(e -> {
+        loginPasswordField.setOnAction(_ -> {
             try {
                 controller.onLogin();
             } catch (InterruptedException ex) {
                 throw new RuntimeException(ex);
             }
         });
-        loginButton.setOnAction(e -> {
+        loginButton.setOnAction(_ -> {
             try {
                 controller.onLogin();
             } catch (InterruptedException ex) {
@@ -529,15 +526,13 @@ public class AuthenticationView {
             }
         });
 
-        registerButton.setOnAction(e -> controller.onRegister());
-        rbStudent.setOnAction(e -> controller.onRegisterTypeChanged("STUDENT"));
-        rbTeacher.setOnAction(e -> controller.onRegisterTypeChanged("TEACHER"));
+        registerButton.setOnAction(_ -> controller.onRegister());
+        rbStudent.setOnAction(_ -> controller.onRegisterTypeChanged("STUDENT"));
+        rbTeacher.setOnAction(_ -> controller.onRegisterTypeChanged("TEACHER"));
     }
 
     /**
      * Hook for future UI updates.
      */
-    public void update() {
-        // not required for now
-    }
+    public void update() {}
 }

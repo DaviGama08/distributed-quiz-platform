@@ -1,10 +1,7 @@
 package pt.isec.client.threads;
-
-import pt.isec.client.core.IClientControllerContext;
 import pt.isec.client.core.IClientThreadContext;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.util.Log;
-
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
@@ -13,6 +10,7 @@ import java.io.Serializable;
  * Thread that continuously listens for messages from the server over TCP
  * and enqueues them into the response queue to be processed.
  */
+@SuppressWarnings("ClassCanBeRecord")
 public class ClientListenerThread implements Runnable {
 
     private final IClientThreadContext service;
@@ -49,13 +47,13 @@ public class ClientListenerThread implements Runnable {
                 }
             } catch (IOException e) {
                 if (service.isRunning()) {
-                    Log.error(ClientListenerThread.class, "Connection lost: " + e.getMessage(), e);
+                    Log.error(ClientListenerThread.class, "Connection lost: " + e.getMessage());
                     service.handleConnectionLost();
                 }
                 break;
             } catch (ClassNotFoundException e) {
                 Log.error(ClientListenerThread.class,
-                        "Unknown message type received: " + e.getMessage(), e);
+                        "Unknown message type received: " + e.getMessage());
             } catch (InterruptedException e) {
                 Log.warn(ClientListenerThread.class, "Listener interrupted");
                 Thread.currentThread().interrupt();

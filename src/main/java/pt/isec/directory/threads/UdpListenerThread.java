@@ -106,12 +106,12 @@ public class UdpListenerThread implements Runnable {
                     break;
                 }
                 Log.error(UdpListenerThread.class,
-                        "Erro de socket UDP: " + se.getMessage(), se);
+                        "Erro de socket UDP: " + se.getMessage());
                 pauseAfterError();
             } catch (IOException e) {
                 if (threadInfo.isRunning()) {
                     Log.error(UdpListenerThread.class,
-                            "Erro a receber UDP: " + e.getMessage(), e);
+                            "Erro a receber UDP: " + e.getMessage());
                 }
                 pauseAfterError();
             } catch (InterruptedException ie) {

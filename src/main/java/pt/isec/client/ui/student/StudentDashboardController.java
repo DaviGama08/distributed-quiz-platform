@@ -1,14 +1,8 @@
 package pt.isec.client.ui.student;
-
 import javafx.application.Platform;
 import javafx.geometry.Insets;
-import javafx.geometry.Pos;
 import javafx.scene.control.*;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.text.Font;
-import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 import pt.isec.client.ClientApplication;
@@ -24,8 +18,8 @@ import pt.isec.common.dto.auth.UpdateStudentDTO;
 import pt.isec.common.dto.question.JoinQuestionDTO;
 import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.Question;
-
 import java.beans.PropertyChangeListener;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -132,7 +126,7 @@ public class StudentDashboardController implements IDisposableProp {
             awaitingSubmitAnswer = false;
             String msg = (String) evt.getNewValue();
             UiUtils.runOnUiThread(() -> {
-                showSuccessAlert("Resposta submetida com sucesso!", msg == null ? "" : msg);
+                AlertUtils.showInfo(getOwnerWindow(), "Resposta submetida com sucesso!", msg == null ? "" : msg);
                 view.addNotification("Resposta submetida com sucesso.");
             });
         };
@@ -151,9 +145,17 @@ public class StudentDashboardController implements IDisposableProp {
             if (!awaitingHistory) {
                 return;
             }
-            awaitingHistory = false;
-            @SuppressWarnings("unchecked")
-            List<Answer> history = (List<Answer>) evt.getNewValue();
+            List<Answer> history = new ArrayList<>();
+            Object newValue = evt.getNewValue();
+
+            if (newValue instanceof List<?> tmp) {
+                for (Object o : tmp) {
+                    if (o instanceof Answer a) {
+                        history.add(a);
+                    }
+                }
+            }
+
             UiUtils.runOnUiThread(() -> {
                 StudentDialogs.showHistoryDialog(
                         getOwnerWindow(),
@@ -203,7 +205,7 @@ public class StudentDashboardController implements IDisposableProp {
             UiUtils.runOnUiThread(() -> view.updateUserInfo(this.userName, this.userEmail));
         };
 
-        studentNumberListener = evt -> {
+        studentNumberListener = _ -> {
             // No direct UI update needed for student number in the main dashboard view.
             // Internal state is maintained in ClientManager/Service.
         };
@@ -381,7 +383,7 @@ public class StudentDashboardController implements IDisposableProp {
         Label numberLabel = new Label("Número de estudante:");
         TextField numberField = new TextField();
         numberField.setPromptText("Número de estudante");
-        Integer currentNumber = clientControllerContext.getStudentNumber();
+        Long currentNumber = clientControllerContext.getStudentNumber();
         if (currentNumber != null) {
             numberField.setText(String.valueOf(currentNumber));
         }
@@ -425,16 +427,15 @@ public class StudentDashboardController implements IDisposableProp {
             String oldPw = oldPwField.getText();
             String newPw = newPwField.getText();
 
-            // Student number is passed as Integer, but semantic validation is done on the server
-            Integer number = null;
+            // Student number is passed as Long, but semantic validation is done on the server
+            Long number = null;
             if (numberText != null) {
                 String trimmed = numberText.trim();
                 if (!trimmed.isEmpty()) {
                     try {
-                        number = Integer.parseInt(trimmed);
+                        number = Long.parseLong(trimmed);
                     } catch (NumberFormatException ignored) {
                         // Let the server treat null/invalid as "Número de estudante inválido"
-                        number = null;
                     }
                 }
             }
@@ -501,16 +502,6 @@ public class StudentDashboardController implements IDisposableProp {
             return view.getScene().getWindow();
         }
         return stage;
-    }
-
-    /**
-     * Shows a success information dialog.
-     *
-     * @param title   dialog title
-     * @param message dialog message
-     */
-    private void showSuccessAlert(String title, String message) {
-        AlertUtils.showInfo(getOwnerWindow(), title, message);
     }
 
     /**

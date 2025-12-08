@@ -63,7 +63,7 @@ public class MainDirectory {
                           java MainDirectory <udpPort>
                           java MainDirectory <udpPort> <queueCapacity> <maxPacketSize> <ttlMillis>
                         """.trim());
-                    Log.info(MainDirectory.class, "(Argumentos inválidos: a iniciar com valores por defeito)");
+                    Log.info(MainDirectory.class, "(Invalid arguments: starting with default values.)");
                 }
             }
 
@@ -75,7 +75,7 @@ public class MainDirectory {
             ttlMillis     = (ttlMillis > 0) ? ttlMillis : DEF_TTL_MS;
 
             Log.info(MainDirectory.class,
-                    "=== Diretoria ===%nUDP:%d | queue:%d | maxPkt:%d | TTL(ms):%d",
+                    "=== Directory ===%nUDP:%d | queue:%d | maxPkt:%d | TTL(ms):%d",
                     udpPort, queueCapacity, maxPacketSize, ttlMillis
             );
 
@@ -87,13 +87,13 @@ public class MainDirectory {
                     ds.stop();
                 } catch (Exception ignored) {
                 }
-                Log.info(MainDirectory.class, "Diretoria terminada.");
+                Log.info(MainDirectory.class, "Diretoria terminated.");
             }));
 
             ds.run();
-            Log.info(MainDirectory.class, "Diretoria a correr. CTRL+C para sair.");
+            Log.info(MainDirectory.class, "Diretoria is running. CTRL+C to shutdown.");
         } catch (Exception e) {
-            Log.error(MainDirectory.class, "Falha ao iniciar a diretoria: " + e.getMessage(), e);
+            Log.error(MainDirectory.class, "Error starting the directory: " + e.getMessage());
         }
     }
 

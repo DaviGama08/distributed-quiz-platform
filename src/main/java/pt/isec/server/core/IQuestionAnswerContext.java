@@ -19,23 +19,8 @@ public interface IQuestionAnswerContext {
      */
     BlockingQueue<List<String>> queue();
 
-    /**
-     * Updates the database version used by the context.
-     *
-     * @param v new DB version
-     */
-    void setDbVersion(long v);
-
 
     /* ===================== USER MANAGEMENT / NOTIFICATIONS ===================== */
-
-    /**
-     * Checks whether a user is currently logged in.
-     *
-     * @param userId user identifier
-     * @return {@code true} if the user has an active session
-     */
-    boolean isUserLogged(long userId);
 
     /**
      * Sends a message to the client associated with the given user id, if connected.

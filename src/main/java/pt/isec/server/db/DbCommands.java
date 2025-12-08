@@ -66,27 +66,6 @@ public final class DbCommands {
     }
 
     /**
-     * Returns the current {@code db_version} from {@code config} using an existing connection.
-     *
-     * @param c open connection
-     * @return DB version or {@code -1} if missing or {@code NULL}
-     */
-    private long get_db_version(Connection c) {
-        final String sql = "SELECT db_version FROM config WHERE id = 1";
-        try (PreparedStatement ps = c.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
-
-            if (!rs.next()) {
-                return -1L;
-            }
-            long v = rs.getLong("db_version");
-            return rs.wasNull() ? -1L : v;
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    /**
      * Executes INSERT/UPDATE/DELETE/DDL using its own connection.
      * <p>
      * If it affects at least one row, the DB version is incremented.
@@ -194,6 +173,7 @@ public final class DbCommands {
     public static final class Transaction {
         private final Connection connection;
         private String executedSql;
+
 
         private Transaction(Connection connection) {
             this.connection = connection;

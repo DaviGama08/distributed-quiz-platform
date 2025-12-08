@@ -13,7 +13,7 @@ import java.io.Serializable;
  */
 public record UpdateStudentDTO(
         Integer userId,
-        Integer studentNumber,
+        Long studentNumber,
         String name,
         String email,
         String oldPassword,

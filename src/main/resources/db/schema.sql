@@ -39,15 +39,23 @@ CREATE TABLE IF NOT EXISTS student (
 );
 
 -- Sessões (ainda podes não usar, mas fica preparada)
+DROP TABLE IF EXISTS session;
+
 CREATE TABLE IF NOT EXISTS session (
-                                       id         TEXT PRIMARY KEY,  -- token (UUID)
-                                       user_id    TEXT NOT NULL,
-                                       role       TEXT NOT NULL CHECK (role IN ('TEACHER','STUDENT')),
-                                       name       TEXT NOT NULL,
-                                       email      TEXT NOT NULL,
-                                       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                                       expires_at TEXT
-);
+                                       id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                                       session_id    TEXT    NOT NULL,
+                                       user_id       INTEGER NOT NULL,
+                                       operationType TEXT NOT NULL CHECK (operationType IN ('Login','Register','Logout')),
+                                       role          TEXT    NOT NULL CHECK (role IN ('TEACHER','STUDENT')),
+                                       name          TEXT    NOT NULL,
+                                       email         TEXT    NOT NULL,
+                                       created_at    TEXT    DEFAULT CURRENT_TIMESTAMP,
+                                       last_seen_at  TEXT    DEFAULT CURRENT_TIMESTAMP,
+                                       expires_at    TEXT
+                                       );
+
+CREATE INDEX IF NOT EXISTS idx_session_user_id ON session(user_id);
+CREATE INDEX IF NOT EXISTS idx_session_session_id ON session(session_id);
 
 -- Perguntas
 CREATE TABLE IF NOT EXISTS question (

@@ -51,6 +51,15 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
     /** ID of the currently logged-in user for this connection, or {@code null}. */
     private Long loggerUserId = null;
 
+    /** Current session id associated with this connection, or {@code null} if not authenticated. */
+    private String currentSessionId = null;
+
+    /** Extra info about current logged user, for session invalidation/logging. */
+    private String currentUserType = null;
+    private String currentUserName = null;
+    private String currentUserEmail = null;
+
+
     /**
      * Creates a new handler for a given client connection.
      *
@@ -119,17 +128,38 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
         } finally {
             Log.info(ClientHandlerThread.class,
                     "Client handler thread terminated (client connection closed).");
+
             if (loggerUserId != null) {
+                if (currentSessionId != null && threadInfo.isRunning()) {
+                    try {
+                        threadInfo.getAuthService().invalidateSession(
+                                loggerUserId,
+                                currentSessionId,
+                                currentUserType,
+                                currentUserName,
+                                currentUserEmail
+                        );
+                    } catch (Exception e) {
+                        Log.error(ClientHandlerThread.class,
+                                "[TCP] Failed to invalidate session in database when closing connection: %s",
+                                e.getMessage());
+                    }
+                }
+
                 try {
                     threadInfo.unregisterClientConnection(loggerUserId);
-                } catch (Exception ignored) {
-                }
-                threadInfo.unregisterLogin(loggerUserId);
+                } catch (Exception ignored) { }
+
+                loggerUserId = null;
+                currentUserType = null;
+                currentUserName = null;
+                currentUserEmail = null;
+                currentSessionId = null;
             }
+
             try {
                 connection.close();
-            } catch (IOException ignored) {
-            }
+            } catch (IOException ignored) {}
         }
     }
 
@@ -156,7 +186,21 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                 try {
                     RegisterStudentDTO dto = tcpMessage.getDataAs(RegisterStudentDTO.class);
                     AuthResponseDTO res = threadInfo.getAuthService().registerStudent(dto);
+
+                    long userId = Long.parseLong(res.userId());
+                    this.loggerUserId = userId;
+                    this.currentSessionId = res.sessionId();
+                    this.currentUserType = res.userType();
+                    this.currentUserName = res.name();
+                    this.currentUserEmail = res.email();
+
+                    try {
+                        threadInfo.registerClientConnection(userId, connection);
+                    } catch (Exception ignored) {
+                    }
+
                     connection.sendMessage(new TcpMessage<>(MessageType.REGISTER_OK, res, AuthResponseDTO.class));
+                    connection.setReadTimeout(NO_TIMEOUT);
                     Log.info(ClientHandlerThread.class, "[TCP] Student registered successfully.");
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
@@ -167,7 +211,21 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                 try {
                     RegisterTeacherDTO dto = tcpMessage.getDataAs(RegisterTeacherDTO.class);
                     AuthResponseDTO res = threadInfo.getAuthService().registerTeacher(dto);
+
+                    long userId = Long.parseLong(res.userId());
+                    this.loggerUserId = userId;
+                    this.currentSessionId = res.sessionId();
+                    this.currentUserType = res.userType();
+                    this.currentUserName = res.name();
+                    this.currentUserEmail = res.email();
+
+                    try {
+                        threadInfo.registerClientConnection(userId, connection);
+                    } catch (Exception ignored) {
+                    }
+
                     connection.sendMessage(new TcpMessage<>(MessageType.REGISTER_OK, res, AuthResponseDTO.class));
+                    connection.setReadTimeout(NO_TIMEOUT);
                     Log.info(ClientHandlerThread.class, "[TCP] Teacher registered successfully.");
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
@@ -181,20 +239,13 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
 
                     long userId = Long.parseLong(res.userId());
 
-                    // If a session is already registered for this user, clear it but do NOT refuse login
-                    try {
-                        if (threadInfo.isUserLogged(userId)) {
-                            threadInfo.unregisterClientConnection(userId);
-                            threadInfo.unregisterLogin(userId);
-                            Log.error(ClientHandlerThread.class, "[TCP] Client already logged in.");
-                        }
-                    } catch (Exception ignored) {
-                    }
-
-                    threadInfo.registerLogin(userId, res.sessionId());
                     this.loggerUserId = userId;
+                    this.currentSessionId = res.sessionId();
+                    this.currentUserType = res.userType();
+                    this.currentUserName = res.name();
+                    this.currentUserEmail = res.email();
 
-                    // Also register active connection to allow server-to-client notifications
+                    // Register active connection to allow server-to-client notifications
                     try {
                         threadInfo.registerClientConnection(userId, connection);
                     } catch (Exception ignored) {
@@ -209,19 +260,65 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
             }
 
             case LOGOUT -> {
-                if (loggerUserId != null) {
+                if (loggerUserId != null && currentSessionId != null) {
+                    try {
+                        threadInfo.getAuthService().invalidateSession(
+                                loggerUserId,
+                                currentSessionId,
+                                currentUserType,
+                                currentUserName,
+                                currentUserEmail
+                        );
+                    } catch (Exception e) {
+                        Log.error(ClientHandlerThread.class,
+                                "[TCP] Failed to invalidate session in database: %s", e.getMessage());
+                    }
+
                     try {
                         threadInfo.unregisterClientConnection(loggerUserId);
                     } catch (Exception ignored) {
                     }
-                    threadInfo.unregisterLogin(loggerUserId);
+
                     loggerUserId = null;
+                    currentSessionId = null;
+                    currentUserType = null;
+                    currentUserName = null;
+                    currentUserEmail = null;
                 }
-                // Apply 30-second timeout again for a possible new session
+
                 connection.setReadTimeout(Duration.ofSeconds(FIRST_MESSAGE_TIMEOUT_SEC));
-                // Send logout confirmation
                 connection.sendMessage(new TcpMessage<>(MessageType.ACK, "logout-ok", String.class));
                 Log.info(ClientHandlerThread.class, "[TCP] Logout successfully. Good bye.");
+            }
+            case RESUME_SESSION -> {
+                try {
+                    String sessionId = tcpMessage.getDataAs(String.class);
+
+                    AuthResponseDTO res = threadInfo.getAuthService().resumeSession(sessionId);
+
+                    long userId = Long.parseLong(res.userId());
+
+                    this.loggerUserId = userId;
+                    this.currentSessionId = res.sessionId();
+                    this.currentUserType = res.userType();
+                    this.currentUserName = res.name();
+                    this.currentUserEmail = res.email();
+
+                    // volta a registar a ligação para notificações server→cliente
+                    try {
+                        threadInfo.registerClientConnection(userId, connection);
+                    } catch (Exception ignored) { }
+
+                    // a partir daqui já não queremos timeout de primeira mensagem
+                    connection.setReadTimeout(NO_TIMEOUT);
+
+                    connection.sendMessage(new TcpMessage<>(MessageType.RESUME_SESSION_OK, res, AuthResponseDTO.class));
+                    Log.info(ClientHandlerThread.class, "[TCP] Session resumed successfully.");
+                } catch (Exception e) {
+                    connection.sendMessage(new TcpMessage<>(MessageType.RESUME_SESSION_FAIL, e.getMessage(), String.class));
+                    Log.error(ClientHandlerThread.class,
+                            "[TCP] Failed to resume session: %s", e.getMessage());
+                }
             }
 
             /* ========= QUESTIONS (TEACHER) ========= */
@@ -321,8 +418,18 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                             String.class
                     ));
 
+                } catch (IllegalStateException e) {
+                    connection.sendMessage(new TcpMessage<>(
+                            MessageType.SUBMIT_FAIL,
+                            e.getMessage(),
+                            String.class
+                    ));
                 } catch (Exception e) {
-                    connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
+                    connection.sendMessage(new TcpMessage<>(
+                            MessageType.ERROR,
+                            e.getMessage(),
+                            String.class
+                    ));
                 }
             }
 

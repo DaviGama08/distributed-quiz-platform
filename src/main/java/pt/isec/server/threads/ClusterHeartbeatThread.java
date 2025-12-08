@@ -395,7 +395,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
         String encodedSql = "";
         if (sql != null && !sql.isEmpty()) {
             String joined = String.join(";;", sql);
-            encodedSql = Base64.getEncoder()
+            encodedSql = Base64.getEncoder() //encoded string with base64
                     .encodeToString(joined.getBytes(StandardCharsets.UTF_8));
         }
 

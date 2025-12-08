@@ -967,8 +967,43 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
         tHandler  = null;
     }
 
-    /* ====================== Advanced reconnection flow (private) ============ */
-
+    /* ====================== reconnection flow  ============ */
+    /**
+     * Attempts to resume a previously authenticated session after a new TCP connection
+     * is established.
+     * <p>
+     * Behavior:
+     * <ul>
+     *     <li>If there is no stored {@code sessionIdForReauth}, the method returns {@code true}
+     *         immediately (there is nothing to resume).</li>
+     *     <li>Otherwise, it sends a {@link MessageType#RESUME_SESSION} request to the server with
+     *         the stored session id and waits for a reply.</li>
+     *     <li>On {@link MessageType#RESUME_SESSION_OK}, it:
+     *         <ul>
+     *             <li>Deserializes the {@link AuthResponseDTO} from the response;</li>
+     *             <li>Updates local user/session fields (ID, type, name, email, student number);</li>
+     *             <li>Updates {@code sessionIdForReauth} with the (possibly refreshed) session id;</li>
+     *             <li>Returns {@code true}.</li>
+     *         </ul>
+     *     </li>
+     *     <li>On {@link MessageType#RESUME_SESSION_FAIL}, it:
+     *         <ul>
+     *             <li>Logs the reason (if present);</li>
+     *             <li>Calls {@code logout()} and clears {@code sessionIdForReauth};</li>
+     *             <li>Returns {@code true} (the connection itself is still usable, only the session
+     *                 is no longer valid).</li>
+     *         </ul>
+     *     </li>
+     *     <li>On any unexpected message type, or if a protocol/IO error occurs, it logs the error
+     *         and returns {@code false}.</li>
+     * </ul>
+     * Independently of the outcome, the socket read timeout is restored to {@code 0}
+     * (blocking mode) before returning.
+     *
+     * @return {@code true} if the connection remains usable after the attempt (even if the
+     *         session was rejected), or {@code false} if an IO/protocol error occurred that
+     *         prevented the resume procedure from completing.
+     */
     private boolean tryResumeSessionOnNewConnection() {
         if (sessionIdForReauth == null || sessionIdForReauth.isBlank()) {
             return true;

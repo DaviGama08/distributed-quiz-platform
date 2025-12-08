@@ -292,8 +292,6 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
             }
             case RESUME_SESSION -> {
                 try {
-                    // Aqui assumo que o cliente envia apenas o sessionId como String.
-                    // Se preferires um DTO (ex: ResumeSessionDTO), ajusta o tipo.
                     String sessionId = tcpMessage.getDataAs(String.class);
 
                     AuthResponseDTO res = threadInfo.getAuthService().resumeSession(sessionId);

@@ -12,35 +12,35 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PasswordHasherTest {
 
-    private static final String VALID_PASSWORD = "correct horse battery staple";
+    private static final String TEST_PASSPHRASE = "correct horse battery staple";
 
     @Test
     void fixedSaltProducesStableVerifiableRepresentation() throws Exception {
         byte[] salt = "0123456789abcdef".getBytes(StandardCharsets.US_ASCII);
 
-        String first = PasswordHasher.hash(VALID_PASSWORD, salt, 10_000);
-        String second = PasswordHasher.hash(VALID_PASSWORD, salt, 10_000);
+        String first = PasswordHasher.hash(TEST_PASSPHRASE, salt, 10_000);
+        String second = PasswordHasher.hash(TEST_PASSPHRASE, salt, 10_000);
 
-        assertTrue(PasswordHasher.verify(VALID_PASSWORD, first));
+        assertTrue(PasswordHasher.verify(TEST_PASSPHRASE, first));
         assertFalse(PasswordHasher.verify("wrong password", first));
         assertEquals(first, second);
     }
 
     @Test
     void productionHashUsesAUniqueSalt() throws Exception {
-        String first = PasswordHasher.hash(VALID_PASSWORD);
-        String second = PasswordHasher.hash(VALID_PASSWORD);
+        String first = PasswordHasher.hash(TEST_PASSPHRASE);
+        String second = PasswordHasher.hash(TEST_PASSPHRASE);
 
         assertNotEquals(first, second);
-        assertTrue(PasswordHasher.verify(VALID_PASSWORD, first));
-        assertTrue(PasswordHasher.verify(VALID_PASSWORD, second));
+        assertTrue(PasswordHasher.verify(TEST_PASSPHRASE, first));
+        assertTrue(PasswordHasher.verify(TEST_PASSPHRASE, second));
     }
 
     @Test
     void malformedRepresentationsFailClosed() {
         assertThrows(IllegalArgumentException.class,
-                () -> PasswordHasher.verify(VALID_PASSWORD, "not-a-pbkdf2-value"));
+                () -> PasswordHasher.verify(TEST_PASSPHRASE, "not-a-pbkdf2-value"));
         assertThrows(IllegalArgumentException.class,
-                () -> PasswordHasher.verify(VALID_PASSWORD, "0:c2FsdHNhbHRzYWx0c2FsdA==:aGFzaA=="));
+                () -> PasswordHasher.verify(TEST_PASSPHRASE, "0:c2FsdHNhbHRzYWx0c2FsdA==:aGFzaA=="));
     }
 }

@@ -359,20 +359,23 @@ Every additional server must use different TCP ports.
 
 ### Client
 
-The current JavaFX client uses:
+The client defaults to `localhost:9999`. Override the directory endpoint with
+JavaFX named arguments:
 
-```java
-private static final String DIRECTORY_IP = "localhost";
-private static final int DIRECTORY_PORT = 9999;
+```bash
+mvn javafx:run -Djavafx.args="--directory-host=directory.example --directory-port=9999"
 ```
 
-These values are located in:
+The same values can be supplied through JVM properties:
 
 ```text
-src/main/java/pt/isec/client/ClientApplication.java
+quiz.directory.host
+quiz.directory.port
 ```
 
-Change them when the directory service is running on another machine.
+or environment variables `QUIZ_DIRECTORY_HOST` and `QUIZ_DIRECTORY_PORT`.
+Arguments take precedence over properties, which take precedence over the
+environment.
 
 ## Build
 
@@ -388,6 +391,15 @@ Create the project package:
 mvn clean package
 ```
 
+Run the deterministic unit tests:
+
+```bash
+mvn clean test
+```
+
+The current suite covers directory-endpoint resolution and PBKDF2 hashing and
+verification. It does not yet simulate a complete multi-process failover.
+
 ## Running on Windows
 
 The repository includes Windows batch scripts under:
@@ -396,13 +408,9 @@ The repository includes Windows batch scripts under:
 src/main/java/batchFiles/
 ```
 
-Before starting, review the multicast interface configured in the server scripts. Replace any local IP address with:
-
-```text
-AUTO
-```
-
-or with the IPv4 address of your multicast-compatible network interface.
+The scripts use `AUTO` for multicast selection and accept explicit endpoint and
+port arguments. They invoke Maven, so copied JARs or JavaFX runtimes are not
+required.
 
 ### Minimal environment
 
@@ -482,6 +490,17 @@ The project focused on applying distributed-systems concepts through a complete 
 The implemented version uses Java sockets and object-based message exchange.
 
 REST and RMI interfaces were considered as part of the architectural planning, but they are not implemented in the current version.
+
+The academic node protocol does not authenticate or cryptographically protect
+messages between directory and quiz-server processes. Run it only on a trusted
+demonstration network. JavaFX dependencies are currently selected for Windows;
+cross-platform packaging has not been validated.
+
+## Licence
+
+No open-source licence is granted by this repository. The code and bundled
+resources remain subject to the rights of their respective authors. Resource
+provenance must be confirmed before public redistribution.
 
 ---
 

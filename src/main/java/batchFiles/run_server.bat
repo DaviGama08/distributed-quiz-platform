@@ -1,23 +1,20 @@
-javac -d ..\bin\server.pt.isec ^
-  -cp "..\lib\sqlite-jdbc-3.45.2.0.jar;..\lib\slf4j-api-2.0.13.jar;..\lib\slf4j-simple-2.0.13.jar;..\lib\jansi-2.4.0.jar" ^
-  ..\pt\isec\server\core\*.java ^
-  ..\pt\isec\server\*.java ^
-  ..\pt\isec\server\threads\*.java ^
-  ..\pt\isec\server\db\*.java ^
-  ..\pt\isec\server\services\auth\*.java ^
-  ..\pt\isec\server\services\question\*.java ^
-  ..\pt\isec\common\model\user\*.java ^
-  ..\pt\isec\common\model\question\*.java ^
-  ..\pt\isec\common\messages\*.java ^
-  ..\pt\isec\common\dto\auth\*.java ^
-  ..\pt\isec\common\dto\question\*.java ^
-  ..\pt\isec\common\dto\answer\*.java ^
-  ..\pt\isec\common\util\*.java
+@echo off
+setlocal
+set "DIR_HOST=%~1"
+set "DIR_PORT=%~2"
+set "DATA_DIR=%~3"
+set "MULTICAST_INTERFACE=%~4"
+set "CLIENT_PORT=%~5"
+set "DB_COPY_PORT=%~6"
+if not defined DIR_HOST set "DIR_HOST=localhost"
+if not defined DIR_PORT set "DIR_PORT=9999"
+if not defined DATA_DIR set "DATA_DIR=PROJECT"
+if not defined MULTICAST_INTERFACE set "MULTICAST_INTERFACE=AUTO"
+if not defined CLIENT_PORT set "CLIENT_PORT=5010"
+if not defined DB_COPY_PORT set "DB_COPY_PORT=17010"
 
-pause
-
-java --enable-native-access=ALL-UNNAMED ^
- -cp "..\bin\server.pt.isec;..\..\resources;..\lib\sqlite-jdbc-3.45.2.0.jar;..\lib\slf4j-api-2.0.13.jar;..\lib\slf4j-simple-2.0.13.jar;..\lib\jansi-2.4.0.jar" ^
- pt.isec.server.MainServer localhost 9999 PROJECT 192.168.1.233 5010 17010
-
-pause
+pushd "%~dp0..\..\..\.." || exit /b 1
+call mvn -q exec:java -Dexec.mainClass=pt.isec.server.MainServer -Dexec.args="%DIR_HOST% %DIR_PORT% %DATA_DIR% %MULTICAST_INTERFACE% %CLIENT_PORT% %DB_COPY_PORT%"
+set "EXIT_CODE=%ERRORLEVEL%"
+popd
+exit /b %EXIT_CODE%

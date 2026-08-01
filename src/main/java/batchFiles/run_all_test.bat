@@ -1,5 +1,5 @@
 @echo off
-start "" /min "run_directory.bat"
+start "" /min "%~dp0run_directory.bat"
 timeout /t 1 >nul
-start "" /min "run_server.bat"
-start "" /min "run_client.bat"
+start "" /min "%~dp0run_server.bat"
+start "" /min "%~dp0run_client.bat"

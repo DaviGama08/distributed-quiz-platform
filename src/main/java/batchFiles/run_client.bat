@@ -1,30 +1,12 @@
-javac ^
- -d ..\bin\client.pt.isec ^
- -cp "..\bin\client.pt.isec;..\lib\*;..\lib\javafx\lib\*;..\lib\jansi-2.4.0.jar" ^
- ..\pt\isec\client\*.java ^
- ..\pt\isec\client\threads\*.java ^
- ..\pt\isec\client\core\*.java ^
- ..\pt\isec\client\services\*.java ^
- ..\pt\isec\client\ui\*.java ^
- ..\pt\isec\client\ui\auth\*.java ^
- ..\pt\isec\client\ui\student\*.java ^
- ..\pt\isec\client\ui\teacher\*.java ^
- ..\pt\isec\client\ui\util\*.java ^
- ..\pt\isec\client\ui\util\dialogs\*.java ^
- ..\pt\isec\common\util\*.java ^
- ..\pt\isec\common\messages\*.java ^
- ..\pt\isec\common\dto\auth\*.java ^
- ..\pt\isec\common\dto\answer\*.java ^
- ..\pt\isec\common\dto\question\*.java ^
- ..\pt\isec\common\model\question\*.java ^
- ..\pt\isec\common\model\user\*.java
+@echo off
+setlocal
+set "DIR_HOST=%~1"
+set "DIR_PORT=%~2"
+if not defined DIR_HOST set "DIR_HOST=localhost"
+if not defined DIR_PORT set "DIR_PORT=9999"
 
-pause
-
-java ^
- --module-path ..\lib\javafx\lib ^
- --add-modules javafx.controls,javafx.fxml ^
- -cp "..\bin\client.pt.isec;..\..\resources;..\lib\*;..\lib\javafx\lib\*;..\lib\jansi-2.4.0.jar" ^
- pt.isec.client.ClientApplication
-
-pause
+pushd "%~dp0..\..\..\.." || exit /b 1
+call mvn -q javafx:run -Djavafx.args="--directory-host=%DIR_HOST% --directory-port=%DIR_PORT%"
+set "EXIT_CODE=%ERRORLEVEL%"
+popd
+exit /b %EXIT_CODE%

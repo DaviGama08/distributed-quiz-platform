@@ -1,3 +1,7 @@
+> **Academic Project — Instituto Superior de Engenharia de Coimbra (ISEC)**
+>
+> This public repository is a portfolio-ready version. The original academic submission is preserved separately in a private `-isec-archive` repository; later improvements may be present here.
+
  <div align="center">
 
 # Distributed Quiz Platform

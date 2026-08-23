@@ -104,8 +104,8 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
 
     /* ======================= ACTIVE TCP CONNECTIONS ======================= */
 
-    /** userId -> current TCP connection (if any). */
-    private final Map<Long, NetworkTcpConnection> activeClientConnections = new ConcurrentHashMap<>();
+    /** role + userId -> current TCP connection (if any). */
+    private final Map<UserConnectionKey, NetworkTcpConnection> activeClientConnections = new ConcurrentHashMap<>();
 
     /* ======================= CONSTRUCTOR ======================= */
 
@@ -423,7 +423,7 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
                 initDatabaseLayerIfNeeded();
             }
 
-            return (dbCommands != null) ? dbCommands.get_db_version() : -1L;
+            return (dbCommands != null) ? dbCommands.getDbVersion() : -1L;
         } catch (Exception e) {
             Log.error(ServerManager.class,
                     "[DB] Failed to read db_version from database: %s", e.getMessage());
@@ -447,8 +447,9 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
     /* ======================= CLIENT CONNECTIONS ======================= */
 
     @Override
-    public void sendToUser(long userId, pt.isec.common.messages.TcpMessage<?> msg) {
-        NetworkTcpConnection conn = activeClientConnections.get(userId);
+    public void sendToUser(String role, long userId, pt.isec.common.messages.TcpMessage<?> msg) {
+        UserConnectionKey key = new UserConnectionKey(role, userId);
+        NetworkTcpConnection conn = activeClientConnections.get(key);
         if (conn == null) {
             Log.info(ServerManager.class,
                     "Sem ligação TCP registada para o utilizador %d, não foi possível enviar %s",
@@ -467,17 +468,17 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
 
     /** {@inheritDoc} */
     @Override
-    public void registerClientConnection(long userId, NetworkTcpConnection conn) {
+    public void registerClientConnection(String role, long userId, NetworkTcpConnection conn) {
         if (conn == null) {
             return;
         }
-        activeClientConnections.put(userId, conn);
+        activeClientConnections.put(new UserConnectionKey(role, userId), conn);
     }
 
     /** {@inheritDoc} */
     @Override
-    public void unregisterClientConnection(long userId) {
-        activeClientConnections.remove(userId);
+    public void unregisterClientConnection(String role, long userId, NetworkTcpConnection conn) {
+        activeClientConnections.remove(new UserConnectionKey(role, userId), conn);
     }
 
     /* ======================= REPLICATION / DB COPY ======================= */

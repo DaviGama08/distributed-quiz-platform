@@ -162,24 +162,8 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     "Client handler thread terminated (client connection closed).");
 
             if (loggerUserId != null) {
-                if (currentSessionId != null && threadInfo.isRunning()) {
-                    try {
-                        threadInfo.getAuthService().invalidateSession(
-                                loggerUserId,
-                                currentSessionId,
-                                currentUserType,
-                                currentUserName,
-                                currentUserEmail
-                        );
-                    } catch (Exception e) {
-                        Log.error(ClientHandlerThread.class,
-                                "[TCP] Failed to invalidate session in database when closing connection: %s",
-                                e.getMessage());
-                    }
-                }
-
                 try {
-                    threadInfo.unregisterClientConnection(loggerUserId);
+                    threadInfo.unregisterClientConnection(currentUserType, loggerUserId, connection);
                 } catch (Exception ignored) { }
 
                 loggerUserId = null;
@@ -234,7 +218,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     long userId = establishAuthenticatedSession(res, ROLE_STUDENT);
 
                     try {
-                        threadInfo.registerClientConnection(userId, connection);
+                        threadInfo.registerClientConnection(currentUserType, userId, connection);
                     } catch (Exception ignored) {
                     }
 
@@ -254,7 +238,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     long userId = establishAuthenticatedSession(res, ROLE_TEACHER);
 
                     try {
-                        threadInfo.registerClientConnection(userId, connection);
+                        threadInfo.registerClientConnection(currentUserType, userId, connection);
                     } catch (Exception ignored) {
                     }
 
@@ -275,7 +259,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
 
                     // Register active connection to allow server-to-client notifications
                     try {
-                        threadInfo.registerClientConnection(userId, connection);
+                        threadInfo.registerClientConnection(currentUserType, userId, connection);
                     } catch (Exception ignored) {
                     }
 
@@ -293,9 +277,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                         threadInfo.getAuthService().invalidateSession(
                                 loggerUserId,
                                 currentSessionId,
-                                currentUserType,
-                                currentUserName,
-                                currentUserEmail
+                                currentUserType
                         );
                     } catch (Exception e) {
                         Log.error(ClientHandlerThread.class,
@@ -303,7 +285,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     }
 
                     try {
-                        threadInfo.unregisterClientConnection(loggerUserId);
+                        threadInfo.unregisterClientConnection(currentUserType, loggerUserId, connection);
                     } catch (Exception ignored) {
                     }
 
@@ -328,7 +310,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
 
                     // volta a registar a ligação para notificações server→cliente
                     try {
-                        threadInfo.registerClientConnection(userId, connection);
+                        threadInfo.registerClientConnection(currentUserType, userId, connection);
                     } catch (Exception ignored) { }
 
                     // a partir daqui já não queremos timeout de primeira mensagem

@@ -13,13 +13,11 @@ import pt.isec.common.model.question.Question;
 import pt.isec.server.core.IQuestionAnswerContext;
 import pt.isec.server.db.DbCommands;
 
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -536,26 +534,7 @@ public class QuestionService implements IQuestionService {
             params.add(now.toString());
         }
 
-        List<Map<String, Object>> rows = new ArrayList<>();
-        try (var con = DriverManager.getConnection(dbCommands.getUrl());
-             var ps = con.prepareStatement(sql.toString())) {
-            for (int i = 0; i < params.size(); i++) {
-                ps.setObject(i + 1, params.get(i));
-            }
-            try (var rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    Map<String, Object> m = new LinkedHashMap<>();
-                    m.put("id", rs.getInt("id"));
-                    m.put("statement", rs.getString("statement"));
-                    m.put("teacher_id", rs.getInt("teacher_id"));
-                    m.put("correct_option", rs.getString("correct_option"));
-                    m.put("start_at", rs.getString("start_at"));
-                    m.put("end_at", rs.getString("end_at"));
-                    m.put("access_code", rs.getString("access_code"));
-                    rows.add(m);
-                }
-            }
-        }
+        List<Map<String, Object>> rows = dbCommands.selectList(sql.toString(), params.toArray());
 
         List<Question> out = new ArrayList<>();
         for (Map<String, Object> r : rows) {
@@ -634,17 +613,13 @@ public class QuestionService implements IQuestionService {
      */
     private List<Option> loadOptions(int questionId) throws Exception {
         List<Option> opts = new ArrayList<>();
-        try (var con = DriverManager.getConnection(dbCommands.getUrl());
-             var ps = con.prepareStatement(
-                     "SELECT letter, text FROM option WHERE question_id = ? ORDER BY letter")) {
-            ps.setInt(1, questionId);
-            try (var rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    OptionLetter letter = OptionLetter.valueOf(rs.getString("letter"));
-                    String text = rs.getString("text");
-                    opts.add(new Option(letter, text));
-                }
-            }
+        for (Map<String, Object> row : dbCommands.selectList(
+                "SELECT letter, text FROM option WHERE question_id = ? ORDER BY letter",
+                questionId
+        )) {
+            OptionLetter letter = OptionLetter.valueOf((String) row.get("letter"));
+            String text = (String) row.get("text");
+            opts.add(new Option(letter, text));
         }
         return opts;
     }

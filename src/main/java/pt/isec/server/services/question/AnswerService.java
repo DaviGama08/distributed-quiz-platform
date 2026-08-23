@@ -10,7 +10,6 @@ import pt.isec.server.core.IQuestionAnswerContext;
 import pt.isec.server.db.DbCommands;
 import pt.isec.common.util.Log;
 
-import java.sql.DriverManager;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -115,7 +114,7 @@ public class AnswerService implements IAnswerService {
             if (teacherId != null) {
                 TcpMessage<Integer> notify =
                         new TcpMessage<>(MessageType.ANSWER_SUBMITTED, questionId, Integer.class);
-                context.sendToUser(teacherId, notify);
+                context.sendToUser("TEACHER", teacherId, notify);
 
                 Log.info(AnswerService.class,
                         "Real-time notification attempt sent to teacher %d (question %d).",
@@ -160,40 +159,30 @@ public class AnswerService implements IAnswerService {
         OptionLetter correct = OptionLetter.valueOf((String) rec.get("correct_option"));
 
         List<Answer> out = new ArrayList<>();
-        try (var con = DriverManager.getConnection(dbCommands.getUrl());
-             var ps = con.prepareStatement(
-                     "SELECT a.student_id, a.chosen_option, a.created_at, " +
-                             "s.name AS student_name, s.email AS student_email, s.student_number " +
-                             "FROM answer a " +
-                             "JOIN student s ON s.id = a.student_id " +
-                             "WHERE a.question_id = ? " +
-                             "ORDER BY a.created_at")) {
-            ps.setInt(1, questionId);
-            try (var rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    Integer stuId = rs.getInt("student_id");
-                    OptionLetter sel = OptionLetter.valueOf(rs.getString("chosen_option"));
-                    LocalDateTime at = LocalDateTime.parse(rs.getString("created_at"));
-                    boolean isCorrect = sel.equals(correct);
-
-                    String studentName = rs.getString("student_name");
-                    String studentEmail = rs.getString("student_email");
-                    Long studentNumber = rs.getLong("student_number");
-
-                    out.add(new Answer(
-                            null,
-                            stuId,
-                            studentNumber,
-                            questionId,
-                            sel,
-                            at,
-                            isCorrect,
-                            studentName,
-                            studentEmail,
-                            null
-                    ));
-                }
-            }
+        for (Map<String, Object> row : dbCommands.selectList(
+                "SELECT a.student_id, a.chosen_option, a.created_at, " +
+                        "s.name AS student_name, s.email AS student_email, s.student_number " +
+                        "FROM answer a " +
+                        "JOIN student s ON s.id = a.student_id " +
+                        "WHERE a.question_id = ? " +
+                        "ORDER BY a.created_at",
+                questionId
+        )) {
+            Integer studentId = ((Number) row.get("student_id")).intValue();
+            OptionLetter selected = OptionLetter.valueOf((String) row.get("chosen_option"));
+            LocalDateTime answeredAt = LocalDateTime.parse((String) row.get("created_at"));
+            out.add(new Answer(
+                    null,
+                    studentId,
+                    ((Number) row.get("student_number")).longValue(),
+                    questionId,
+                    selected,
+                    answeredAt,
+                    selected.equals(correct),
+                    (String) row.get("student_name"),
+                    (String) row.get("student_email"),
+                    null
+            ));
         }
         return out;
     }
@@ -212,47 +201,38 @@ public class AnswerService implements IAnswerService {
             throw new IllegalArgumentException("Identificador de estudante inválido.");
         }
         List<Answer> out = new ArrayList<>();
-        try (var con = DriverManager.getConnection(dbCommands.getUrl());
-             var ps = con.prepareStatement(
-                     "SELECT a.question_id, a.chosen_option, a.created_at, " +
-                             "q.correct_option, q.statement, q.end_at " +
-                             "FROM answer a " +
-                             "JOIN question q ON q.id = a.question_id " +
-                             "WHERE a.student_id = ? " +
-                             "ORDER BY a.created_at DESC")) {
-            ps.setInt(1, studentId);
-            try (var rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    Integer qId = rs.getInt("question_id");
-                    OptionLetter sel = OptionLetter.valueOf(rs.getString("chosen_option"));
-                    LocalDateTime at = LocalDateTime.parse(rs.getString("created_at"));
+        for (Map<String, Object> row : dbCommands.selectList(
+                "SELECT a.question_id, a.chosen_option, a.created_at, " +
+                        "q.correct_option, q.statement, q.end_at " +
+                        "FROM answer a " +
+                        "JOIN question q ON q.id = a.question_id " +
+                        "WHERE a.student_id = ? " +
+                        "ORDER BY a.created_at DESC",
+                studentId
+        )) {
+            Integer questionId = ((Number) row.get("question_id")).intValue();
+            OptionLetter selected = OptionLetter.valueOf((String) row.get("chosen_option"));
+            LocalDateTime answeredAt = LocalDateTime.parse((String) row.get("created_at"));
+            LocalDateTime endAt = LocalDateTime.parse((String) row.get("end_at"));
+            boolean resultAvailable = !LocalDateTime.now().isBefore(endAt);
+            Boolean correct = resultAvailable
+                    ? selected.equals(OptionLetter.valueOf((String) row.get("correct_option")))
+                    : null;
 
-                    String stmt = rs.getString("statement");
-                    LocalDateTime endAt = LocalDateTime.parse(rs.getString("end_at"));
-                    boolean resultAvailable = !LocalDateTime.now().isBefore(endAt);
-                    String corrStr = rs.getString("correct_option");
-                    Boolean correct = null;
-                    if (resultAvailable && corrStr != null) {
-                        OptionLetter corr = OptionLetter.valueOf(corrStr);
-                        correct = sel.equals(corr);
-                    }
-
-                    out.add(new Answer(
-                            null,
-                            studentId,
-                            null, // studentNumber
-                            qId,
-                            sel,
-                            at,
-                            resultAvailable,
-                            correct,
-                            null,  // studentName
-                            null,  // studentEmail
-                            stmt   // questionStatement
-                    ));
-                }
-            }
-            return out;
+            out.add(new Answer(
+                    null,
+                    studentId,
+                    null,
+                    questionId,
+                    selected,
+                    answeredAt,
+                    resultAvailable,
+                    correct,
+                    null,
+                    null,
+                    (String) row.get("statement")
+            ));
         }
+        return out;
     }
 }

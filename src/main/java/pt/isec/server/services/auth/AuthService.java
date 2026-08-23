@@ -96,7 +96,7 @@ public class AuthService implements IAuthService {
         long newId = row == null ? -1L : ((Number) row.get("id")).longValue();
 
         Log.info(AuthService.class, "Novo docente registado com ID %d.", newId);
-        String session = createSessionRecord(newId, "TEACHER", email, name, "Register");
+        String session = createSessionRecord(newId, "TEACHER");
 
         String aux = "INSERT INTO teacher (id, name, email, password_hash, created_at) VALUES (" +
                 newId + ", '" + escape(name) + "', '" + escape(email) + "', '" + escape(hashPw) + "', datetime('now'));" ;
@@ -167,7 +167,7 @@ public class AuthService implements IAuthService {
             throw new IllegalStateException("Não foi possível obter o ID do novo estudante.");
         }
 
-        String session = createSessionRecord(newId, "STUDENT", email, name, "Register");
+        String session = createSessionRecord(newId, "STUDENT");
 
         String aux = "INSERT INTO student (id, student_number, name, email, password_hash, created_at) VALUES (" +
                 newId + ", " + number + ", '" + escape(name) + "', '" + escape(email) + "', '" +
@@ -212,7 +212,7 @@ public class AuthService implements IAuthService {
             long teacherId = ((Number) teacher.get("id")).longValue();
             String name    = teacher.get("name").toString();
 
-            String session = createSessionRecord(teacherId, "TEACHER", email, name, "Login");
+            String session = createSessionRecord(teacherId, "TEACHER");
 
             return new AuthResponseDTO(
                     session,
@@ -236,7 +236,7 @@ public class AuthService implements IAuthService {
             Long studentNumber = ((Number) student.get("student_number")).longValue();
             String name    = student.get("name").toString();
 
-            String session = createSessionRecord(studentId, "STUDENT", email, name, "Login");
+            String session = createSessionRecord(studentId, "STUDENT");
             return new AuthResponseDTO(
                     session,
                     String.valueOf(((Number) student.get("id")).longValue()),
@@ -555,61 +555,58 @@ public class AuthService implements IAuthService {
         }
 
         Map<String, Object> row = dbCommands.selectOne(
-                "SELECT user_id, role, name, email, operationType, created_at, expires_at " +
-                        "FROM session " +
+                "SELECT user_id, role FROM session " +
                         "WHERE session_id = ? " +
-                        "ORDER BY created_at DESC " +
-                        "LIMIT 1",
+                        "AND revoked_at IS NULL " +
+                        "AND datetime(expires_at) > datetime('now')",
                 sessionId
         );
 
         if (row == null) {
-            throw new IllegalArgumentException("Sessão inexistente");
+            throw new IllegalArgumentException("Sessão inexistente, revogada ou expirada");
         }
 
-        String op = (String) row.get("operationType");
         String role = (String) row.get("role");
-        String name = (String) row.get("name");
-        String email = (String) row.get("email");
         long userId = ((Number) row.get("user_id")).longValue();
-
-        if ("Logout".equalsIgnoreCase(op)) {
-            throw new IllegalArgumentException("Sessão terminada");
-        }
-
-        Map<String, Object> valid = dbCommands.selectOne(
-                "SELECT 1 AS one FROM session " +
-                        "WHERE session_id = ? " +
-                        "  AND (expires_at IS NULL OR expires_at > datetime('now')) " +
-                        "ORDER BY created_at DESC " +
-                        "LIMIT 1",
-                sessionId
-        );
-        if (valid == null) {
-            throw new IllegalArgumentException("Sessão expirada");
-        }
 
         dbCommands.executeUpdate(
                 "UPDATE session " +
-                        "SET last_seen_at = datetime('now'), expires_at = datetime('now','+1 day') " +
-                        "WHERE session_id = ?",
+                        "SET last_seen_at = datetime('now') " +
+                        "WHERE session_id = ? AND revoked_at IS NULL",
                 sessionId
         );
 
         String aux =
-                "UPDATE session SET last_seen_at=datetime('now'), expires_at=datetime('now','+1 day') " +
+                "UPDATE session SET last_seen_at=datetime('now') " +
                         "WHERE session_id='" + escape(sessionId) + "';";
         context.queue().add(Collections.singletonList(aux));
 
         Long studentNumber = null;
+        String name;
+        String email;
         if ("STUDENT".equalsIgnoreCase(role)) {
             Map<String, Object> st = dbCommands.selectOne(
-                    "SELECT student_number FROM student WHERE id = ?",
+                    "SELECT student_number, name, email FROM student WHERE id = ?",
                     userId
             );
-            if (st != null && st.get("student_number") != null) {
-                studentNumber = ((Number) st.get("student_number")).longValue();
+            if (st == null) {
+                throw new IllegalArgumentException("Utilizador da sessão não existe");
             }
+            studentNumber = ((Number) st.get("student_number")).longValue();
+            name = (String) st.get("name");
+            email = (String) st.get("email");
+        } else if ("TEACHER".equalsIgnoreCase(role)) {
+            Map<String, Object> teacher = dbCommands.selectOne(
+                    "SELECT name, email FROM teacher WHERE id = ?",
+                    userId
+            );
+            if (teacher == null) {
+                throw new IllegalArgumentException("Utilizador da sessão não existe");
+            }
+            name = (String) teacher.get("name");
+            email = (String) teacher.get("email");
+        } else {
+            throw new IllegalArgumentException("Role da sessão inválida");
         }
 
         return new AuthResponseDTO(
@@ -629,22 +626,21 @@ public class AuthService implements IAuthService {
      * @param sessionId session identifier to deactivate
      */
     @Override
-    public void invalidateSession(long userId, String sessionId, String userType, String name, String email) {
+    public void invalidateSession(long userId, String sessionId, String userType) {
         if (sessionId == null || sessionId.isBlank()) {
             return;
         }
 
         dbCommands.executeUpdate(
-                "INSERT INTO session (session_id, user_id, operationType, role, name, email, created_at, last_seen_at, expires_at) " +
-                        "VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), datetime('now','+1 day'))",
-                sessionId, userId, "Logout", userType, name, email
+                "UPDATE session SET revoked_at = datetime('now') " +
+                        "WHERE session_id = ? AND user_id = ? AND role = ? AND revoked_at IS NULL",
+                sessionId, userId, userType
         );
 
         String auxLogout =
-                "INSERT INTO session (session_id, user_id, operationType, role, name, email, created_at, last_seen_at, expires_at) " +
-                        "VALUES ('" + escape(sessionId) + "', " + userId + ", 'Logout', '" +
-                        escape(userType) + "', '" + escape(name) + "', '" + escape(email) +
-                        "', datetime('now'), datetime('now'), datetime('now','+1 day'));";
+                "UPDATE session SET revoked_at=datetime('now') WHERE session_id='" +
+                        escape(sessionId) + "' AND user_id=" + userId + " AND role='" +
+                        escape(userType) + "' AND revoked_at IS NULL;";
 
         context.queue().add(Collections.singletonList(auxLogout));
     }
@@ -818,19 +814,19 @@ public class AuthService implements IAuthService {
      * @param userType user type ("STUDENT" or "TEACHER")
      * @return generated session id string
      */
-    private String createSessionRecord(long userId, String userType, String email, String name, String operationType) {
+    private String createSessionRecord(long userId, String userType) {
         String session = newSessionId();
 
         dbCommands.executeUpdate(
-                "INSERT INTO session (session_id, user_id, operationType, role, name, email,  created_at, last_seen_at, expires_at) " +
-                        "VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), datetime('now','+1 day'))",
-                session, userId, operationType, userType, name, email
+                "INSERT INTO session (session_id, user_id, role, created_at, last_seen_at, expires_at) " +
+                        "VALUES (?, ?, ?, datetime('now'), datetime('now'), datetime('now','+1 day'))",
+                session, userId, userType
         );
 
         String aux =
-                "INSERT INTO session (session_id, user_id, operationType, role, name, email,  created_at, last_seen_at, expires_at) VALUES (" +
-                        "'" + escape(session) + "', " + userId + ", '" + operationType + "', '" + escape(userType) + "', '" + escape(name) +
-                        "', '" + escape(email) + "', datetime('now'), datetime('now'), datetime('now','+1 day'));";
+                "INSERT INTO session (session_id, user_id, role, created_at, last_seen_at, expires_at) VALUES (" +
+                        "'" + escape(session) + "', " + userId + ", '" + escape(userType) +
+                        "', datetime('now'), datetime('now'), datetime('now','+1 day'));";
 
         context.queue().add(Collections.singletonList(aux));
 

@@ -260,15 +260,14 @@ class ClientHandlerThreadAuthorizationIT {
         @Override public IAuthService getAuthService() { return authService; }
         @Override public IQuestionService getQuestionService() { return questionService; }
         @Override public IAnswerService getAnswerService() { return answerService; }
-        @Override public void registerClientConnection(long userId, NetworkTcpConnection conn) { }
-        @Override public void unregisterClientConnection(long userId) { }
+        @Override public void registerClientConnection(String role, long userId, NetworkTcpConnection conn) { }
+        @Override public void unregisterClientConnection(String role, long userId, NetworkTcpConnection conn) { }
     }
 
     private static final class FakeAuthService implements IAuthService {
         private final AtomicInteger loginCalls = new AtomicInteger();
 
-        @Override public void invalidateSession(long userId, String sessionId, String typeUser,
-                                                String name, String email) { }
+        @Override public void invalidateSession(long userId, String sessionId, String typeUser) { }
 
         @Override
         public AuthResponseDTO registerTeacher(RegisterTeacherDTO dto) {

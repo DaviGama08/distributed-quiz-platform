@@ -28,5 +28,5 @@ public interface IQuestionAnswerContext {
      * @param userId user identifier
      * @param msg    message to send
      */
-    void sendToUser(long userId, TcpMessage<?> msg);
+    void sendToUser(String role, long userId, TcpMessage<?> msg);
 }

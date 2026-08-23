@@ -211,12 +211,12 @@ public interface IServerThreadContext {
      * @param userId user identifier
      * @param conn   active TCP connection
      */
-    void registerClientConnection(long userId, NetworkTcpConnection conn);
+    void registerClientConnection(String role, long userId, NetworkTcpConnection conn);
 
     /**
      * Unregisters the active TCP connection for a user.
      *
      * @param userId user identifier
      */
-    void unregisterClientConnection(long userId);
+    void unregisterClientConnection(String role, long userId, NetworkTcpConnection conn);
 }

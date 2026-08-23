@@ -15,7 +15,7 @@ public interface IAuthService {
      * @param userId    id of the user
      * @param sessionId session identifier to invalidate
      */
-    void invalidateSession(long userId, String sessionId, String typeUser, String name, String email);
+    void invalidateSession(long userId, String sessionId, String typeUser);
 
     /**
      * Registers a new teacher account.

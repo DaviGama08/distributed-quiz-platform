@@ -149,7 +149,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
         }
     }
 
-    private void requestDbCopyFromPrimary(String primaryIp, int primaryPort, long announcedVersion) {
+    void requestDbCopyFromPrimary(String primaryIp, int primaryPort, long announcedVersion) {
         Path target = threadInfo.dbPath().toAbsolutePath().normalize();
         Path temporary = null;
         try {
@@ -209,7 +209,7 @@ public class ClusterHeartbeatThread implements Runnable, AutoCloseable {
         }
     }
 
-    private void handleDbCopySession(Socket acceptedSocket) {
+    void handleDbCopySession(Socket acceptedSocket) {
         try (Socket socket = acceptedSocket;
              NetworkTcpConnection connection = new NetworkTcpConnection(socket)) {
             connection.setReadTimeout(Duration.ofSeconds(10));

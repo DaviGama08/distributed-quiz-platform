@@ -7,6 +7,7 @@ import pt.isec.common.dto.answer.SubmitAnswerDTO;
 import pt.isec.common.dto.question.CreateQuestionDTO;
 import pt.isec.common.dto.question.CreateQuestionResponseDTO;
 import pt.isec.common.dto.question.DeleteQuestionDTO;
+import pt.isec.common.dto.question.EditQuestionDTO;
 import pt.isec.common.dto.question.JoinQuestionDTO;
 import pt.isec.common.dto.question.StudentQuestionDTO;
 import pt.isec.common.messages.TcpMessage;
@@ -194,6 +195,39 @@ class QuestionAnswerServiceIT {
         assertNotNull(questions.createQuestion(
                 createQuestion("reusable statement", firstStart.plusHours(1), firstEnd.plusHours(1))
         ));
+    }
+
+    @Test
+    void createsAndEditsQuestionWithoutAnswers() throws Exception {
+        LocalDateTime start = LocalDateTime.now().plusMinutes(5).withNano(0);
+        LocalDateTime end = start.plusMinutes(10);
+        CreateQuestionResponseDTO created = questions.createQuestion(createQuestion("Original", start, end));
+
+        assertTrue(questions.editQuestion(new EditQuestionDTO(
+                created.questionId(), 1, "Edited",
+                List.of(new Option(OptionLetter.A, "Alpha"), new Option(OptionLetter.C, "Charlie")),
+                OptionLetter.C, start, end
+        )));
+        assertEquals("Edited", db.selectOne(
+                "SELECT statement FROM question WHERE id = ?", created.questionId()).get("statement"));
+        assertNotNull(db.selectOne(
+                "SELECT id FROM option WHERE question_id = ? AND letter = 'C'", created.questionId()));
+        assertNull(db.selectOne(
+                "SELECT id FROM option WHERE question_id = ? AND letter = 'B'", created.questionId()));
+    }
+
+    @Test
+    void editIsBlockedAfterAnAnswerExists() throws Exception {
+        LocalDateTime start = LocalDateTime.now().minusMinutes(2).withNano(0);
+        LocalDateTime end = LocalDateTime.now().plusMinutes(10).withNano(0);
+        int questionId = insertQuestion("editanswer", start, end);
+        assertTrue(answers.submitAnswer(new SubmitAnswerDTO(questionId, 1, OptionLetter.A)));
+
+        assertThrows(IllegalStateException.class, () -> questions.editQuestion(new EditQuestionDTO(
+                questionId, 1, "Cannot edit",
+                List.of(new Option(OptionLetter.A, "One"), new Option(OptionLetter.B, "Two")),
+                OptionLetter.A, start, end
+        )));
     }
 
     @Test

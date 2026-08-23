@@ -8,6 +8,7 @@ import javafx.stage.Modality;
 import javafx.stage.Window;
 import pt.isec.client.ui.util.AlertUtils;
 import pt.isec.common.dto.answer.SubmitAnswerDTO;
+import pt.isec.common.dto.question.StudentQuestionDTO;
 import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.Option;
 import pt.isec.common.model.question.OptionLetter;
@@ -96,7 +97,7 @@ public final class StudentDialogs {
      * @param onSubmit  callback invoked when the user submits an answer
      */
     public static void showAnswerQuestionDialog(Window owner,
-                                                Question question,
+                                                 StudentQuestionDTO question,
                                                 Integer studentId,
                                                 Consumer<SubmitAnswerDTO> onSubmit) {
         if (studentId == null) {
@@ -111,8 +112,8 @@ public final class StudentDialogs {
             dialog.initModality(Modality.WINDOW_MODAL);
         }
 
-        dialog.setTitle("Pergunta - " + question.getAccessCode());
-        dialog.setHeaderText(question.getStatement());
+        dialog.setTitle("Responder pergunta");
+        dialog.setHeaderText(question.statement());
 
         VBox content = new VBox(15);
         content.setPadding(new Insets(20));
@@ -120,7 +121,7 @@ public final class StudentDialogs {
         ToggleGroup group = new ToggleGroup();
         List<RadioButton> radioButtons = new ArrayList<>();
 
-        List<Option> opts = question.getOptions();
+        List<Option> opts = question.options();
         if (opts != null) {
             for (Option opt : opts) {
                 RadioButton rb = new RadioButton(
@@ -163,7 +164,7 @@ public final class StudentDialogs {
 
             if (onSubmit != null) {
                 SubmitAnswerDTO dto = new SubmitAnswerDTO(
-                        question.getId(),
+                        question.id(),
                         studentId,
                         selectedOption
                 );
@@ -280,7 +281,9 @@ public final class StudentDialogs {
             TableColumn<Answer, String> resultCol = new TableColumn<>("Correta?");
             resultCol.setCellValueFactory(data ->
                     new javafx.beans.property.SimpleStringProperty(
-                            data.getValue().isCorrect() ? "Sim" : "Não"
+                            !data.getValue().isResultAvailable()
+                                    ? "Pendente"
+                                    : data.getValue().isCorrect() ? "Sim" : "Não"
                     )
             );
 
@@ -297,7 +300,7 @@ public final class StudentDialogs {
                     case "Corretas":
                         // Only correct answers
                         for (Answer a : originalHistory) {
-                            if (a.isCorrect()) {
+                            if (a.isResultAvailable() && a.isCorrect()) {
                                 table.getItems().add(a);
                             }
                         }
@@ -306,7 +309,7 @@ public final class StudentDialogs {
                     case "Incorretas":
                         // Only incorrect answers
                         for (Answer a : originalHistory) {
-                            if (!a.isCorrect()) {
+                            if (a.isResultAvailable() && !a.isCorrect()) {
                                 table.getItems().add(a);
                             }
                         }

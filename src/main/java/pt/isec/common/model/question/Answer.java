@@ -20,11 +20,12 @@ public final class Answer implements Serializable {
 
     private Integer id;
     private Integer studentId;
-    private Integer studentNumber;
+    private Long studentNumber;
     private Integer questionId;
     private OptionLetter selectedOption;
     private LocalDateTime answeredAt;
-    private boolean isCorrect;
+    private boolean resultAvailable;
+    private Boolean correct;
     private String studentName;
     private String studentEmail;
     private String questionStatement;
@@ -52,7 +53,7 @@ public final class Answer implements Serializable {
      */
     public Answer(Integer id,
                   Integer studentId,
-                  Integer studentNumber,
+                  Long studentNumber,
                   Integer questionId,
                   OptionLetter selectedOption,
                   LocalDateTime answeredAt,
@@ -61,13 +62,38 @@ public final class Answer implements Serializable {
                   String studentEmail,
                   String questionStatement) {
 
+        this(id, studentId, studentNumber, questionId, selectedOption, answeredAt,
+                true, isCorrect, studentName, studentEmail, questionStatement);
+    }
+
+    /**
+     * Constructs an answer whose correctness may still be unavailable.
+     */
+    public Answer(Integer id,
+                  Integer studentId,
+                  Long studentNumber,
+                  Integer questionId,
+                  OptionLetter selectedOption,
+                  LocalDateTime answeredAt,
+                  boolean resultAvailable,
+                  Boolean correct,
+                  String studentName,
+                  String studentEmail,
+                  String questionStatement) {
+        if (resultAvailable && correct == null) {
+            throw new IllegalArgumentException("Available result must have a correctness value");
+        }
+        if (!resultAvailable && correct != null) {
+            throw new IllegalArgumentException("Unavailable result cannot expose correctness");
+        }
         this.id = id;
         this.studentId = studentId;
         this.studentNumber = studentNumber;
         this.questionId = questionId;
         this.selectedOption = selectedOption;
         this.answeredAt = answeredAt;
-        this.isCorrect = isCorrect;
+        this.resultAvailable = resultAvailable;
+        this.correct = correct;
         this.studentName = studentName;
         this.studentEmail = studentEmail;
         this.questionStatement = questionStatement;
@@ -93,7 +119,7 @@ public final class Answer implements Serializable {
     /**
      * @return student number (external identifier)
      */
-    public Integer getStudentNumber() {
+    public Long getStudentNumber() {
         return studentNumber;
     }
 
@@ -122,7 +148,21 @@ public final class Answer implements Serializable {
      * @return {@code true} if the answer is correct
      */
     public boolean isCorrect() {
-        return isCorrect;
+        return Boolean.TRUE.equals(correct);
+    }
+
+    /**
+     * Indicates whether the correctness result may be shown to the student.
+     */
+    public boolean isResultAvailable() {
+        return resultAvailable;
+    }
+
+    /**
+     * Returns correctness, or {@code null} while the question is still active/future.
+     */
+    public Boolean getCorrect() {
+        return correct;
     }
 
     /**
@@ -173,7 +213,7 @@ public final class Answer implements Serializable {
      * @param studentNumber student number (external identifier)
      */
     @SuppressWarnings("unused") // may be used by mappers / frameworks
-    public void setStudentNumber(Integer studentNumber) {
+    public void setStudentNumber(Long studentNumber) {
         this.studentNumber = studentNumber;
     }
 
@@ -212,7 +252,8 @@ public final class Answer implements Serializable {
      * @param correct {@code true} if the answer is correct
      */
     public void setCorrect(boolean correct) {
-        this.isCorrect = correct;
+        this.resultAvailable = true;
+        this.correct = correct;
     }
 
     /* ======================= OVERRIDDEN METHODS ======================= */
@@ -226,7 +267,8 @@ public final class Answer implements Serializable {
                 ", questionId=" + questionId +
                 ", selectedOption=" + selectedOption +
                 ", answeredAt=" + answeredAt +
-                ", isCorrect=" + isCorrect +
+                ", resultAvailable=" + resultAvailable +
+                ", correct=" + correct +
                 '}';
     }
 
@@ -234,13 +276,14 @@ public final class Answer implements Serializable {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o instanceof Answer answer)) return false;
-        return isCorrect == answer.isCorrect &&
+        return resultAvailable == answer.resultAvailable &&
                 Objects.equals(id, answer.id) &&
                 Objects.equals(studentId, answer.studentId) &&
                 Objects.equals(studentNumber, answer.studentNumber) &&
                 Objects.equals(questionId, answer.questionId) &&
                 selectedOption == answer.selectedOption &&
                 Objects.equals(answeredAt, answer.answeredAt) &&
+                Objects.equals(correct, answer.correct) &&
                 Objects.equals(studentName, answer.studentName) &&
                 Objects.equals(studentEmail, answer.studentEmail) &&
                 Objects.equals(questionStatement, answer.questionStatement);
@@ -250,7 +293,7 @@ public final class Answer implements Serializable {
     public int hashCode() {
         return Objects.hash(
                 id, studentId, studentNumber, questionId,
-                selectedOption, answeredAt, isCorrect,
+                selectedOption, answeredAt, resultAvailable, correct,
                 studentName, studentEmail, questionStatement
         );
     }

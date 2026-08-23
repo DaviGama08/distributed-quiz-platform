@@ -9,6 +9,7 @@ import pt.isec.client.threads.RequestSenderThread;
 import pt.isec.client.threads.ResponseHandlerThread;
 import pt.isec.common.dto.auth.AuthResponseDTO;
 import pt.isec.common.dto.question.CreateQuestionResponseDTO;
+import pt.isec.common.dto.question.StudentQuestionDTO;
 import pt.isec.common.messages.MessageType;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.model.question.Answer;
@@ -563,7 +564,7 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
     }
 
     @Override
-    public void setPropJoinQuestionResponse(Question question) {
+    public void setPropJoinQuestionResponse(StudentQuestionDTO question) {
         pcs.firePropertyChange(PROP_JOIN_QUESTION_RESPONSE, null, question);
     }
 

@@ -85,7 +85,9 @@ CREATE TABLE IF NOT EXISTS answer (
                                       question_id    INTEGER NOT NULL REFERENCES question(id) ON DELETE CASCADE,
                                       chosen_option  CHAR(1) NOT NULL CHECK (chosen_option BETWEEN 'A' AND 'Z'),
                                       created_at     TEXT DEFAULT CURRENT_TIMESTAMP,
-                                      PRIMARY KEY (student_id, question_id)
+                                      PRIMARY KEY (student_id, question_id),
+                                      FOREIGN KEY (question_id, chosen_option)
+                                          REFERENCES option(question_id, letter)
 );
 
 -- Índices úteis

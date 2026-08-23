@@ -6,6 +6,7 @@ import pt.isec.common.dto.question.DeleteQuestionDTO;
 import pt.isec.common.dto.question.EditQuestionDTO;
 import pt.isec.common.dto.question.JoinQuestionDTO;
 import pt.isec.common.dto.question.ListQuestionsDTO;
+import pt.isec.common.dto.question.StudentQuestionDTO;
 import pt.isec.common.model.question.Option;
 import pt.isec.common.model.question.OptionLetter;
 import pt.isec.common.model.question.Question;
@@ -13,6 +14,7 @@ import pt.isec.server.core.IQuestionAnswerContext;
 import pt.isec.server.db.DbCommands;
 
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -34,6 +36,8 @@ import java.util.UUID;
  */
 @SuppressWarnings("ClassCanBeRecord")
 public class QuestionService implements IQuestionService {
+
+    private static final int MAX_ACCESS_CODE_ATTEMPTS = 8;
 
     /** Context used for DB replication and access to shared structures. */
     private final IQuestionAnswerContext context;
@@ -113,10 +117,14 @@ public class QuestionService implements IQuestionService {
         String normalizedStatement = statement.trim();
 
         // Options: no duplicated texts (case-insensitive, trimmed).
+        Set<OptionLetter> optionLetters = new LinkedHashSet<>();
         Set<String> normalizedTexts = new LinkedHashSet<>();
         for (Option o : options) {
-            if (o == null || o.getText() == null) {
+            if (o == null || o.getLetter() == null || o.getText() == null || o.getText().isBlank()) {
                 throw new IllegalArgumentException("Opção inválida recebida do cliente.");
+            }
+            if (!optionLetters.add(o.getLetter())) {
+                throw new IllegalArgumentException("As letras das opções não podem ser repetidas.");
             }
             String normalized = o.getText().trim().toLowerCase(Locale.ROOT);
             if (!normalizedTexts.add(normalized)) {
@@ -154,12 +162,14 @@ public class QuestionService implements IQuestionService {
             );
         }
 
-        // Check for duplicated statement for this teacher.
+        // A statement may be reused in another time window.
         Map<String, Object> existing = dbCommands.selectOne(
                 "SELECT id FROM question " +
-                        "WHERE teacher_id = ? AND LOWER(TRIM(statement)) = LOWER(TRIM(?)) " +
+                        "WHERE teacher_id = ? " +
+                        "AND LOWER(TRIM(statement)) = LOWER(TRIM(?)) " +
+                        "AND start_at = ? AND end_at = ? " +
                         "LIMIT 1",
-                teacherId, normalizedStatement
+                teacherId, normalizedStatement, startAt.toString(), endAt.toString()
         );
         if (existing != null) {
             throw new IllegalArgumentException(
@@ -169,25 +179,39 @@ public class QuestionService implements IQuestionService {
 
         // ---------- insertion + replication ----------
 
-        String accessCode = UUID.randomUUID().toString().substring(0, 6).toUpperCase();
-
-        final long[] qIdArr = new long[1];
-        dbCommands.runInTransaction(tx -> {
-            tx.executeUpdate(
-                    "INSERT INTO question (statement, teacher_id, correct_option, start_at, end_at, access_code) " +
-                            "VALUES (?, ?, ?, ?, ?, ?)",
-                    normalizedStatement, teacherId, correct.name(), startAt.toString(), endAt.toString(), accessCode
-            );
-            qIdArr[0] = tx.getLastInsertId();
-            for (Option o : options) {
-                tx.executeUpdate(
-                        "INSERT INTO option (question_id, letter, text) VALUES (?, ?, ?)",
-                        qIdArr[0], o.getLetter().name(), o.getText()
-                );
+        String accessCode = null;
+        long qId = -1L;
+        for (int attempt = 1; attempt <= MAX_ACCESS_CODE_ATTEMPTS; attempt++) {
+            String candidate = generateAccessCode();
+            final long[] insertedId = new long[1];
+            try {
+                dbCommands.runInTransaction(tx -> {
+                    tx.executeUpdate(
+                            "INSERT INTO question (statement, teacher_id, correct_option, start_at, end_at, access_code) " +
+                                    "VALUES (?, ?, ?, ?, ?, ?)",
+                            normalizedStatement, teacherId, correct.name(), startAt.toString(), endAt.toString(), candidate
+                    );
+                    insertedId[0] = tx.getLastInsertId();
+                    for (Option o : options) {
+                        tx.executeUpdate(
+                                "INSERT INTO option (question_id, letter, text) VALUES (?, ?, ?)",
+                                insertedId[0], o.getLetter().name(), o.getText().trim()
+                        );
+                    }
+                });
+                accessCode = candidate;
+                qId = insertedId[0];
+                break;
+            } catch (Exception e) {
+                if (!isAccessCodeCollision(e) || attempt == MAX_ACCESS_CODE_ATTEMPTS) {
+                    throw e;
+                }
             }
-        });
+        }
 
-        long qId = qIdArr[0];
+        if (qId <= 0 || accessCode == null) {
+            throw new IllegalStateException("Não foi possível gerar um código de acesso único.");
+        }
 
         List<String> aux = new ArrayList<>();
         aux.add("INSERT INTO question (id, statement, teacher_id, correct_option, start_at, end_at, access_code) " +
@@ -428,28 +452,46 @@ public class QuestionService implements IQuestionService {
      */
     @Override
     public boolean deleteQuestion(DeleteQuestionDTO dto) throws Exception {
+        if (dto == null) {
+            throw new IllegalArgumentException("Dados da pergunta inválidos.");
+        }
         Integer qId = dto.questionId();
         Integer teacherId = dto.teacherId();
-
-        Map<String, Object> ans = dbCommands.selectOne(
-                "SELECT 1 as one FROM answer WHERE question_id = ? LIMIT 1",
-                qId
-        );
-        if (ans != null) {
-            throw new IllegalStateException("Não é possível eliminar pergunta com respostas registadas");
+        if (qId == null || qId <= 0 || teacherId == null || teacherId <= 0) {
+            throw new IllegalArgumentException("Identificadores da pergunta inválidos.");
         }
 
         dbCommands.runInTransaction(tx -> {
-            tx.executeUpdate("DELETE FROM option WHERE question_id = ?", qId);
-            tx.executeUpdate("DELETE FROM question WHERE id = ? AND teacher_id = ?", qId, teacherId);
+            Map<String, Object> ownedQuestion = tx.selectOne(
+                    "SELECT id FROM question WHERE id = ? AND teacher_id = ?",
+                    qId,
+                    teacherId
+            );
+            if (ownedQuestion == null) {
+                throw new IllegalArgumentException("Pergunta não encontrada ou não pertence ao docente.");
+            }
+
+            Map<String, Object> answer = tx.selectOne(
+                    "SELECT 1 AS one FROM answer WHERE question_id = ? LIMIT 1",
+                    qId
+            );
+            if (answer != null) {
+                throw new IllegalStateException("Não é possível eliminar pergunta com respostas registadas.");
+            }
+
+            int affectedRows = tx.executeUpdate(
+                    "DELETE FROM question WHERE id = ? AND teacher_id = ?",
+                    qId,
+                    teacherId
+            );
+            if (affectedRows != 1) {
+                throw new IllegalStateException("A pergunta não foi eliminada.");
+            }
         });
 
-        List<String> aux = new ArrayList<>();
-
-        aux.add("DELETE FROM option WHERE question_id=" + qId + ";");
-        aux.add("DELETE FROM question WHERE id=" + qId + " AND teacher_id=" + teacherId + ";");
-
-        context.queue().add(aux);
+        context.queue().add(List.of(
+                "DELETE FROM question WHERE id=" + qId + " AND teacher_id=" + teacherId + ";"
+        ));
 
         return true;
     }
@@ -468,6 +510,9 @@ public class QuestionService implements IQuestionService {
      */
     @Override
     public List<Question> listQuestions(ListQuestionsDTO dto) throws Exception {
+        if (dto == null || dto.teacherId() == null || dto.teacherId() <= 0) {
+            throw new IllegalArgumentException("Identificador de docente inválido.");
+        }
         Integer teacherId = dto.teacherId();
         String filter = dto.filter();
 
@@ -480,14 +525,14 @@ public class QuestionService implements IQuestionService {
 
         LocalDateTime now = LocalDateTime.now();
         if ("active".equalsIgnoreCase(filter)) {
-            sql.append(" AND start_at <= ? AND end_at >= ?");
+            sql.append(" AND start_at <= ? AND end_at > ?");
             params.add(now.toString());
             params.add(now.toString());
         } else if ("future".equalsIgnoreCase(filter)) {
             sql.append(" AND start_at > ?");
             params.add(now.toString());
         } else if ("expired".equalsIgnoreCase(filter)) {
-            sql.append(" AND end_at < ?");
+            sql.append(" AND end_at <= ?");
             params.add(now.toString());
         }
 
@@ -541,10 +586,17 @@ public class QuestionService implements IQuestionService {
      * @throws Exception if DB access fails
      */
     @Override
-    public Question joinQuestion(JoinQuestionDTO dto) throws Exception {
+    public StudentQuestionDTO joinQuestion(JoinQuestionDTO dto) throws Exception {
+        if (dto == null || dto.studentId() == null || dto.studentId() <= 0) {
+            throw new IllegalArgumentException("Dados de acesso à pergunta inválidos.");
+        }
         String access = dto.accessCode();
+        if (access == null || access.isBlank()) {
+            throw new IllegalArgumentException("Código de acesso inválido.");
+        }
+        access = access.trim().toUpperCase(Locale.ROOT);
         Map<String, Object> r = dbCommands.selectOne(
-                "SELECT id, statement, teacher_id, correct_option, start_at, end_at, access_code " +
+                "SELECT id, statement, start_at, end_at " +
                         "FROM question WHERE access_code = ? LIMIT 1",
                 access
         );
@@ -553,19 +605,19 @@ public class QuestionService implements IQuestionService {
         }
 
         int qId = ((Number) r.get("id")).intValue();
-        List<Option> opts = loadOptions(qId);
-        OptionLetter corr = OptionLetter.valueOf((String) r.get("correct_option"));
         LocalDateTime startAt = LocalDateTime.parse((String) r.get("start_at"));
         LocalDateTime endAt = LocalDateTime.parse((String) r.get("end_at"));
-        return new Question(
+        LocalDateTime now = LocalDateTime.now();
+        if (now.isBefore(startAt) || !now.isBefore(endAt)) {
+            return null;
+        }
+
+        return new StudentQuestionDTO(
                 qId,
                 (String) r.get("statement"),
-                ((Number) r.get("teacher_id")).intValue(),
-                opts,
+                loadOptions(qId),
                 startAt,
-                endAt,
-                corr,
-                (String) r.get("access_code")
+                endAt
         );
     }
 
@@ -595,6 +647,28 @@ public class QuestionService implements IQuestionService {
             }
         }
         return opts;
+    }
+
+    static String generateAccessCode() {
+        return UUID.randomUUID()
+                .toString()
+                .replace("-", "")
+                .substring(0, 6)
+                .toUpperCase(Locale.ROOT);
+    }
+
+    private static boolean isAccessCodeCollision(Throwable error) {
+        for (Throwable current = error; current != null; current = current.getCause()) {
+            if (current instanceof SQLException) {
+                String message = current.getMessage();
+                if (message != null
+                        && message.toLowerCase(Locale.ROOT).contains("unique")
+                        && message.toLowerCase(Locale.ROOT).contains("question.access_code")) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**

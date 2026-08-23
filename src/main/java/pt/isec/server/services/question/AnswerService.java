@@ -44,9 +44,17 @@ public class AnswerService implements IAnswerService {
      */
     @Override
     public boolean submitAnswer(SubmitAnswerDTO dto)  {
+        if (dto == null) {
+            throw new IllegalArgumentException("Dados da resposta inválidos.");
+        }
         Integer questionId = dto.questionId();
         Integer studentId = dto.studentId();
         OptionLetter selected = dto.selectedOption();
+        if (questionId == null || questionId <= 0
+                || studentId == null || studentId <= 0
+                || selected == null) {
+            throw new IllegalArgumentException("Dados da resposta inválidos.");
+        }
         LocalDateTime now = LocalDateTime.now();
 
         // validate question (existence + active period) and retrieve teacher_id
@@ -60,8 +68,17 @@ public class AnswerService implements IAnswerService {
 
         LocalDateTime startAt = LocalDateTime.parse((String) q.get("start_at"));
         LocalDateTime endAt = LocalDateTime.parse((String) q.get("end_at"));
-        if (now.isBefore(startAt) || now.isAfter(endAt)) {
+        if (now.isBefore(startAt) || !now.isBefore(endAt)) {
             throw new IllegalStateException("Pergunta fora do período de disponibilidade");
+        }
+
+        Map<String, Object> validOption = dbCommands.selectOne(
+                "SELECT 1 AS one FROM option WHERE question_id = ? AND letter = ?",
+                questionId,
+                selected.name()
+        );
+        if (validOption == null) {
+            throw new IllegalArgumentException("Opção inválida para esta pergunta.");
         }
 
         Map<String, Object> existing = dbCommands.selectOne(
@@ -124,6 +141,10 @@ public class AnswerService implements IAnswerService {
     @Override
     // TODO Docente: consulta dos detalhes associados a uma pergunta expirada, incluindo as respostas
     public List<Answer> viewAnswers(ViewAnswersDTO dto) throws Exception {
+        if (dto == null || dto.questionId() == null || dto.questionId() <= 0
+                || dto.teacherId() == null || dto.teacherId() <= 0) {
+            throw new IllegalArgumentException("Dados da consulta inválidos.");
+        }
         Integer questionId = dto.questionId();
         Integer teacherId = dto.teacherId();
 
@@ -157,7 +178,7 @@ public class AnswerService implements IAnswerService {
 
                     String studentName = rs.getString("student_name");
                     String studentEmail = rs.getString("student_email");
-                    Integer studentNumber = rs.getInt("student_number");
+                    Long studentNumber = rs.getLong("student_number");
 
                     out.add(new Answer(
                             null,
@@ -187,11 +208,14 @@ public class AnswerService implements IAnswerService {
      */
     @Override
     public List<Answer> getStudentHistory(Integer studentId) throws Exception {
+        if (studentId == null || studentId <= 0) {
+            throw new IllegalArgumentException("Identificador de estudante inválido.");
+        }
         List<Answer> out = new ArrayList<>();
         try (var con = DriverManager.getConnection(dbCommands.getUrl());
              var ps = con.prepareStatement(
                      "SELECT a.question_id, a.chosen_option, a.created_at, " +
-                             "q.correct_option, q.statement " +
+                             "q.correct_option, q.statement, q.end_at " +
                              "FROM answer a " +
                              "JOIN question q ON q.id = a.question_id " +
                              "WHERE a.student_id = ? " +
@@ -204,11 +228,13 @@ public class AnswerService implements IAnswerService {
                     LocalDateTime at = LocalDateTime.parse(rs.getString("created_at"));
 
                     String stmt = rs.getString("statement");
+                    LocalDateTime endAt = LocalDateTime.parse(rs.getString("end_at"));
+                    boolean resultAvailable = !LocalDateTime.now().isBefore(endAt);
                     String corrStr = rs.getString("correct_option");
-                    boolean isCorrect = false;
-                    if (corrStr != null) {
+                    Boolean correct = null;
+                    if (resultAvailable && corrStr != null) {
                         OptionLetter corr = OptionLetter.valueOf(corrStr);
-                        isCorrect = sel.equals(corr);
+                        correct = sel.equals(corr);
                     }
 
                     out.add(new Answer(
@@ -218,7 +244,8 @@ public class AnswerService implements IAnswerService {
                             qId,
                             sel,
                             at,
-                            isCorrect,
+                            resultAvailable,
+                            correct,
                             null,  // studentName
                             null,  // studentEmail
                             stmt   // questionStatement

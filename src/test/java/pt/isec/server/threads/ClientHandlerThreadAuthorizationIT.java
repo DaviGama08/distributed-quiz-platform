@@ -16,6 +16,7 @@ import pt.isec.common.dto.question.DeleteQuestionDTO;
 import pt.isec.common.dto.question.EditQuestionDTO;
 import pt.isec.common.dto.question.JoinQuestionDTO;
 import pt.isec.common.dto.question.ListQuestionsDTO;
+import pt.isec.common.dto.question.StudentQuestionDTO;
 import pt.isec.common.messages.MessageType;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.model.question.Answer;
@@ -316,7 +317,7 @@ class ClientHandlerThreadAuthorizationIT {
         @Override public boolean editQuestion(EditQuestionDTO dto) { return true; }
         @Override public boolean deleteQuestion(DeleteQuestionDTO dto) { return true; }
         @Override public List<Question> listQuestions(ListQuestionsDTO dto) { return List.of(); }
-        @Override public Question joinQuestion(JoinQuestionDTO dto) { return null; }
+        @Override public StudentQuestionDTO joinQuestion(JoinQuestionDTO dto) { return null; }
     }
 
     private static final class FakeAnswerService implements IAnswerService {

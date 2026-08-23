@@ -186,7 +186,7 @@ public final class DbCommands {
          * @param args arguments for placeholders
          */
         @SuppressWarnings("unusedReturnValue")
-        public void executeUpdate(String sql, Object... args) {
+        public int executeUpdate(String sql, Object... args) {
             try (PreparedStatement ps = connection.prepareStatement(sql)) {
                 bind(ps, args);
                 int x = ps.executeUpdate();
@@ -194,6 +194,7 @@ public final class DbCommands {
                     // recorded for potential debugging or external use
                     executedSql = sql;
                 }
+                return x;
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }

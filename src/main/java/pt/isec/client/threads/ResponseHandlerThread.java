@@ -3,6 +3,7 @@ import pt.isec.client.core.IClientControllerContext;
 import pt.isec.client.core.IClientThreadContext;
 import pt.isec.common.dto.auth.AuthResponseDTO;
 import pt.isec.common.dto.question.CreateQuestionResponseDTO;
+import pt.isec.common.dto.question.StudentQuestionDTO;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.messages.MessageType;
 import pt.isec.common.model.question.Answer;
@@ -182,7 +183,7 @@ public class ResponseHandlerThread implements Runnable {
                 Log.info(ResponseHandlerThread.class, "Question details received");
                 Serializable data = response.getData();
 
-                if (data instanceof Question q) {
+                if (data instanceof StudentQuestionDTO q) {
                     tInfo.setPropJoinQuestionResponse(q);
                 } else {
                     Log.error(ResponseHandlerThread.class,

@@ -13,6 +13,7 @@ import pt.isec.common.dto.question.DeleteQuestionDTO;
 import pt.isec.common.dto.question.EditQuestionDTO;
 import pt.isec.common.dto.question.JoinQuestionDTO;
 import pt.isec.common.dto.question.ListQuestionsDTO;
+import pt.isec.common.dto.question.StudentQuestionDTO;
 import pt.isec.common.messages.MessageType;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.model.question.Answer;
@@ -420,11 +421,15 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                 try {
                     JoinQuestionDTO dto = tcpMessage.getDataAs(JoinQuestionDTO.class);
                     requireSameUser(dto.studentId());
-                    Question q = threadInfo.getQuestionService().joinQuestion(dto);
+                    StudentQuestionDTO q = threadInfo.getQuestionService().joinQuestion(dto);
                     if (q == null) {
                         connection.sendMessage(new TcpMessage<>(MessageType.NACK, "invalid-code", String.class));
                     } else {
-                        connection.sendMessage(new TcpMessage<>(MessageType.QUESTION_DETAILS, q, Question.class));
+                        connection.sendMessage(new TcpMessage<>(
+                                MessageType.QUESTION_DETAILS,
+                                q,
+                                StudentQuestionDTO.class
+                        ));
                     }
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));

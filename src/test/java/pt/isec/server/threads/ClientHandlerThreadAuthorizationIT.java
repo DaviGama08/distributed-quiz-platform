@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 import pt.isec.common.dto.answer.SubmitAnswerDTO;
 import pt.isec.common.dto.answer.ViewAnswersDTO;
 import pt.isec.common.dto.auth.AuthResponseDTO;
-import pt.isec.common.dto.auth.ChangePasswordDTO;
 import pt.isec.common.dto.auth.LoginRequestDTO;
 import pt.isec.common.dto.auth.RegisterStudentDTO;
 import pt.isec.common.dto.auth.RegisterTeacherDTO;
@@ -34,11 +33,9 @@ import java.net.ServerSocket;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -157,6 +154,18 @@ class ClientHandlerThreadAuthorizationIT {
     }
 
     @Test
+    void registrationLeavesConnectionReadyForExplicitLogin() throws Exception {
+        try (HandlerHarness harness = new HandlerHarness()) {
+            harness.send(new TcpMessage<>(MessageType.REGISTER_STUDENT,
+                    new RegisterStudentDTO("Student", "new@example.test", "password", 3_000_000_001L)));
+            assertEquals(MessageType.REGISTER_OK, harness.receive().getType());
+
+            harness.loginStudent();
+            assertEquals(1, harness.context.authService.loginCalls.get());
+        }
+    }
+
+    @Test
     void allowsTeacherOperationOnlyForAuthenticatedTeacherIdentity() throws Exception {
         try (HandlerHarness harness = new HandlerHarness()) {
             harness.loginTeacher();
@@ -266,7 +275,6 @@ class ClientHandlerThreadAuthorizationIT {
         @Override public boolean isPrimary() { return true; }
         @Override public void setPrimary(String ip, int port) { }
         @Override public long dbVersion() { return 0; }
-        @Override public void setDbVersion(long v) { }
         @Override public Path dbPath() { return null; }
         @Override public void initDatabaseLayerIfNeeded() { }
         @Override public DbCommands getDb() { return null; }
@@ -305,7 +313,6 @@ class ClientHandlerThreadAuthorizationIT {
         @Override public AuthResponseDTO updateStudent(UpdateStudentDTO dto) { return auth(202, "STUDENT"); }
         @Override public AuthResponseDTO updateTeacher(UpdateTeacherDTO dto) { return auth(101, "TEACHER"); }
         @Override public AuthResponseDTO resumeSession(String sessionId) { return auth(101, "TEACHER"); }
-        @Override public void changePassword(ChangePasswordDTO dto) { }
 
         private static AuthResponseDTO auth(long id, String role) {
             return new AuthResponseDTO(

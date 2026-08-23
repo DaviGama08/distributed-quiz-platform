@@ -128,17 +128,6 @@ public interface IServerThreadContext {
     long dbVersion();
 
     /**
-     * Deprecated: kept only for backwards compatibility.
-     * <p>
-     * Implementations are free to ignore this call, since the database version is
-     * now managed exclusively in the database itself.
-     *
-     * @param v new DB version (ignored)
-     */
-    @Deprecated
-    void setDbVersion(long v);
-
-    /**
      * Returns the current path of the DB file used by this server.
      *
      * @return DB file path

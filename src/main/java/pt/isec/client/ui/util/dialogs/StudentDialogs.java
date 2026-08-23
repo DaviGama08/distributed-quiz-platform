@@ -12,7 +12,6 @@ import pt.isec.common.dto.question.StudentQuestionDTO;
 import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.Option;
 import pt.isec.common.model.question.OptionLetter;
-import pt.isec.common.model.question.Question;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;

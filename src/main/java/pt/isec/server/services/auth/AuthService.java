@@ -1,7 +1,6 @@
 package pt.isec.server.services.auth;
 
 import pt.isec.common.dto.auth.*;
-import pt.isec.server.core.IQuestionAnswerContext;
 import pt.isec.server.db.DbCommands;
 import pt.isec.common.util.Log;
 
@@ -28,10 +27,9 @@ public class AuthService implements IAuthService {
     /**
      * Creates a new {@link AuthService}.
      *
-     * @param context    server context retained for API compatibility
      * @param dbCommands database command helper
      */
-    public AuthService(IQuestionAnswerContext context, DbCommands dbCommands) {
+    public AuthService(DbCommands dbCommands) {
         this.dbCommands = dbCommands;
     }
 
@@ -40,14 +38,12 @@ public class AuthService implements IAuthService {
        ========================================================= */
 
     /**
-     * Registers a new teacher, validates the registration code and
-     * enqueues SQL for replication.
+     * Registers a new teacher and validates the registration code.
      *
      * @param dto teacher registration data
      * @return authentication response with session and teacher info
      * @throws Exception if validation or database access fails
      */
-    // TODO Utilizador com perfil de docente: registo com código
     @Override
     public AuthResponseDTO registerTeacher(RegisterTeacherDTO dto) throws Exception {
         if (dto == null) {
@@ -99,14 +95,12 @@ public class AuthService implements IAuthService {
     }
 
     /**
-     * Registers a new student, validates uniqueness for email and student number
-     * and enqueues SQL for replication.
+     * Registers a new student and validates uniqueness for email and student number.
      *
      * @param dto student registration data
      * @return authentication response with session and student info
      * @throws Exception if validation or database access fails
      */
-    // TODO Utilizador com perfil de estudante: registo
     @Override
     public AuthResponseDTO registerStudent(RegisterStudentDTO dto) throws Exception {
         if (dto == null) {
@@ -172,7 +166,6 @@ public class AuthService implements IAuthService {
      * @return authentication response with session and user info
      * @throws Exception if validation or database access fails
      */
-    // TODO Utilizador: autenticação (username + password)
     @Override
     public AuthResponseDTO login(LoginRequestDTO dto) throws Exception {
         if (dto == null) {
@@ -238,82 +231,13 @@ public class AuthService implements IAuthService {
     }
 
     /**
-     * Changes the password for a teacher or student.
-     *
-     * @param changePasswordDTO change password data
-     */
-    @Override
-    public void changePassword(ChangePasswordDTO changePasswordDTO) {
-        if (changePasswordDTO == null) {
-            throw new IllegalArgumentException("Dados em falta");
-        }
-        String userType = changePasswordDTO.userType();
-        String id = String.valueOf(changePasswordDTO.sessionId());
-        String oldPass = changePasswordDTO.oldPassword();
-        String newPass = changePasswordDTO.newPassword();
-
-        if (userType == null || id == null || oldPass == null || newPass == null) {
-            throw new IllegalArgumentException("Dados em falta");
-        }
-
-        if (!isValidPassword(newPass)) {
-            throw new IllegalArgumentException("Nova password inválida");
-        }
-
-        try {
-            long userId = Long.parseLong(id);
-
-            if ("TEACHER".equalsIgnoreCase(userType)) {
-                Map<String, Object> rec = dbCommands.selectOne(
-                        "SELECT password_hash FROM teacher WHERE id = ?",
-                        userId
-                );
-                if (rec == null) {
-                    throw new IllegalArgumentException("Utilizador não encontrado");
-                }
-                String stored = (String) rec.get("password_hash");
-                requirePasswordMatch(oldPass, stored, "Password antiga incorreta");
-                String newHash = hashPassword(newPass);
-
-                dbCommands.executeUpdate(
-                        "UPDATE teacher SET password_hash = ? WHERE id = ?",
-                        newHash, userId
-                );
-
-            } else if ("STUDENT".equalsIgnoreCase(userType)) {
-                Map<String, Object> rec = dbCommands.selectOne(
-                        "SELECT password_hash FROM student WHERE id = ?",
-                        userId
-                );
-                if (rec == null) {
-                    throw new IllegalArgumentException("Utilizador não encontrado");
-                }
-                String stored = (String) rec.get("password_hash");
-                requirePasswordMatch(oldPass, stored, "Password antiga incorreta");
-                String newHash = hashPassword(newPass);
-
-                dbCommands.executeUpdate(
-                        "UPDATE student SET password_hash = ? WHERE id = ?",
-                        newHash, userId
-                );
-
-            } else {
-                throw new IllegalArgumentException("Tipo de utilizador inválido");
-            }
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    /**
      * Updates a student profile (name, email, student number and optionally password),
-     * checks for uniqueness constraints and enqueues SQL for replication.
+     * checks uniqueness constraints and updates the profile atomically.
      *
      * @param dto profile update data
      * @return updated authentication response (without session id change)
      * @throws Exception if validation or database access fails
      */
-    // TODO Utilizador: edição dos dados de registo
     @Override
     public AuthResponseDTO updateStudent(UpdateStudentDTO dto) throws Exception {
         if (dto == null) {
@@ -407,13 +331,12 @@ public class AuthService implements IAuthService {
 
     /**
      * Updates a teacher profile (name, email and optionally password),
-     * checks for uniqueness constraints and enqueues SQL for replication.
+     * checks uniqueness constraints and updates the profile atomically.
      *
      * @param dto profile update data
      * @return updated authentication response (without session id change)
      * @throws Exception if validation or database access fails
      */
-    // TODO Utilizador: edição dos dados de registo
     @Override
     public AuthResponseDTO updateTeacher(UpdateTeacherDTO dto) throws Exception {
         if (dto == null) {

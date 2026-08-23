@@ -10,7 +10,6 @@ import pt.isec.common.dto.question.StudentQuestionDTO;
 import pt.isec.common.model.question.Option;
 import pt.isec.common.model.question.OptionLetter;
 import pt.isec.common.model.question.Question;
-import pt.isec.server.core.IQuestionAnswerContext;
 import pt.isec.server.db.DbCommands;
 
 import java.sql.SQLException;
@@ -41,10 +40,9 @@ public class QuestionService implements IQuestionService {
     /**
      * Creates a new {@link QuestionService}.
      *
-     * @param context    server context retained for API compatibility
      * @param dbCommands database access helper
      */
-    public QuestionService(IQuestionAnswerContext context, DbCommands dbCommands) {
+    public QuestionService(DbCommands dbCommands) {
         this.dbCommands = dbCommands;
     }
 
@@ -210,7 +208,7 @@ public class QuestionService implements IQuestionService {
 
     /**
      * Edits an existing question (when there are no answers registered),
-     * applies business rules and enqueues SQL for replication.
+     * applies business rules and persists the change transactionally.
      * <p>
      * The client is responsible for UI validation of fields. This method:
      * <ul>
@@ -405,7 +403,7 @@ public class QuestionService implements IQuestionService {
 
     /**
      * Deletes a question if there are no answers registered
-     * and enqueues SQL statements for replication.
+     * and deletes the owned question transactionally.
      *
      * @param dto delete parameters
      * @return {@code true} if the question was deleted

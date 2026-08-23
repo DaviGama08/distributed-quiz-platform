@@ -69,10 +69,7 @@ public class DirectoryManager implements IDirectoryThreadContext {
     /** Fast lookup by UUID. */
     private final ConcurrentMap<String, ServerInfo> servers = new ConcurrentHashMap<>();
 
-    /**
-     * Servers preserved in insertion order. The first entry is considered the
-     * current primary/master.
-     */
+    /** Servers preserved in insertion order for deterministic election tie-breaking. */
     private final Map<String, ServerInfo> serversOrdered = new LinkedHashMap<>();
 
     /** Lock object to protect {@link #serversOrdered}. */

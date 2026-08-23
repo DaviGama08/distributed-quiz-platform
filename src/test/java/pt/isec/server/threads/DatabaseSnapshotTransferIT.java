@@ -89,7 +89,6 @@ class DatabaseSnapshotTransferIT {
         @Override public boolean isPrimary() { return primary; }
         @Override public void setPrimary(String ip, int port) { }
         @Override public long dbVersion() { return SqliteSnapshotManager.inspectDatabaseVersion(database); }
-        @Override public void setDbVersion(long version) { }
         @Override public Path dbPath() { return database; }
         @Override public void initDatabaseLayerIfNeeded() { }
         @Override public DbCommands getDb() { return null; }

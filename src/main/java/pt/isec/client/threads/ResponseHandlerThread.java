@@ -49,7 +49,6 @@ public class ResponseHandlerThread implements Runnable {
 
         while (tInfo.isRunning()) {
             try {
-                // TODO Aplicação cliente: indicação assíncrona de alterações na BD
                 TcpMessage<? extends Serializable> response = tInfo.getResponseQueue().take();
                 processResponse(response);
             } catch (InterruptedException e) {

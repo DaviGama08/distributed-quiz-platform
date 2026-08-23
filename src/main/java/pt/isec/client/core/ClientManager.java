@@ -247,7 +247,6 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
     /**
      * Clears the current authentication data, but does not close the network.
      */
-    // TODO Utilizador: logout
     @Override
     public void logout() {
         setAuthenticated(false);
@@ -393,7 +392,6 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
             reconInProgress = true;
         }
 
-        // TODO Aplicação cliente: recuperação automática de perda de ligação ao servidor principal / falha do servidor principal
         Thread worker = new Thread(this::doReconnectionFlow, "ReconnectionWorker");
         worker.setDaemon(true);
         worker.start();
@@ -708,7 +706,6 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
         pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "DIRECTORY_CONNECTING");
         boolean discovered = false;
         for (int i = 0; i < 3 && !discovered; i++) {
-            // TODO Aplicação cliente: ligação ao servidor principal após consultar o serviço de diretoria
             discovered = discoverServer();
         }
 
@@ -718,7 +715,6 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
         }
 
         pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "SERVER_CONNECTING");
-        // TODO Aplicação cliente: ligação ao servidor principal após consultar o serviço de diretoria
         if (!connectToServer()) {
             pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "SERVER_ERROR");
             try {
@@ -1114,7 +1110,6 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
      * If all attempts fail, notifies permanent disconnection and stops the client.
      */
     private void doReconnectionFlow() {
-        // TODO Aplicação cliente: recuperação automática de perda de ligação ao servidor principal / falha do servidor principal
         try {
             pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, STATUS_RECONNECTING);
 

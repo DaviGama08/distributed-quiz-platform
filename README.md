@@ -106,11 +106,11 @@ flowchart LR
     B1 -- Local replica --> DB2
     B2 -- Local replica --> DB3
 
-    P -- TCP initial database copy --> B1
-    P -- TCP initial database copy --> B2
+    P -- Validated SQLite snapshot over TCP --> B1
+    P -- Validated SQLite snapshot over TCP --> B2
 
-    P -- Multicast SQL updates and versions --> B1
-    P -- Multicast SQL updates and versions --> B2
+    P -- Metadata-only multicast heartbeats --> B1
+    P -- Metadata-only multicast heartbeats --> B2
 
     P -- UDP heartbeat --> D
     B1 -- UDP heartbeat --> D
@@ -125,7 +125,7 @@ A more detailed interaction diagram is available in [`docs/Geral.png`](docs/Gera
 
 The directory service starts before the other components and listens for UDP messages.
 
-Every quiz server registers with the directory service. The server that has been registered for the longest period is considered the current primary server.
+Every quiz server registers its current database version with the directory service. The healthy server with the highest valid `db_version` is elected primary; registration order and server ID provide deterministic tie-breaks.
 
 Clients contact the directory service to obtain the address and TCP port of that primary server.
 
@@ -157,20 +157,18 @@ Servers periodically send heartbeat messages to:
 Heartbeats carry information such as:
 
 - Server identifier;
+- Server role;
 - Client TCP port;
 - Database-copy TCP port;
-- Current database version;
-- Database update query, when applicable.
+- Current database version.
 
 The directory service removes servers that stop sending heartbeats within the configured timeout.
 
 ### 4. Database replication
 
-When a backup server starts, it requests a complete copy of the primary server's SQLite database through TCP.
+When a backup is missing a database or observes a newer primary version, it requests a complete snapshot through TCP. The primary creates a consistent SQLite snapshot with `VACUUM INTO`, including committed WAL data, and sends its size, logical version and SHA-256 digest.
 
-After the initial synchronisation, database changes are propagated incrementally. Each change includes the new database version and the SQL operation that must be applied by the backup servers.
-
-Version validation is used to detect inconsistencies between replicas.
+The backup validates the byte count, checksum, SQLite integrity and `db_version` before atomically replacing its local database. A failed transfer is retried on a later heartbeat; version mismatch triggers resynchronisation rather than automatic shutdown. SQL statements never travel in multicast datagrams.
 
 ### 5. Automatic client recovery
 
@@ -191,8 +189,8 @@ This recovery process is designed to minimise disruption to the user.
 | Client → Directory | UDP | Primary-server discovery |
 | Server → Directory | UDP | Registration, heartbeat and deregistration |
 | Client ↔ Primary Server | TCP | Authentication, questions, answers and notifications |
-| Backup → Primary Server | TCP | Initial SQLite database copy |
-| Server ↔ Server | UDP Multicast | Heartbeats and incremental database replication |
+| Backup → Primary Server | TCP | Validated SQLite snapshot transfer |
+| Server ↔ Server | UDP Multicast | Metadata-only version and endpoint heartbeats |
 
 ## Security
 
@@ -205,6 +203,8 @@ The authentication layer includes:
 - Authentication-required operations;
 - Role-based separation between teachers and students;
 - Session tracking;
+- Strict Java deserialisation allow-list and resource limits;
+- Authenticated PING/PONG liveness with bounded reads;
 - Server-side validation of permissions.
 
 No plaintext password is stored in the SQLite databases.
@@ -395,14 +395,17 @@ Create the project package:
 mvn clean package
 ```
 
-Run the deterministic unit tests:
+Run the complete unit and integration test suite:
 
 ```bash
 mvn clean test
 ```
 
-The current suite covers directory-endpoint resolution and PBKDF2 hashing and
-verification. It does not yet simulate a complete multi-process failover.
+The suite covers authentication/roles, question and answer rules, persistent
+sessions, JDBC rollback, snapshot/WAL/checksum behavior, loopback TCP transfer,
+election, liveness and serialisation filtering. See
+[`LEGACY_VALIDATION.md`](LEGACY_VALIDATION.md) for the latest result and the
+remaining interactive multi-process smoke-test procedure.
 
 ## Running on Windows
 

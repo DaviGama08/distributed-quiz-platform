@@ -22,8 +22,6 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -47,7 +45,7 @@ class QuestionAnswerServiceIT {
         DbCreate.createIfMissing(database, "/db/schema.sql");
         db = new DbCommands("jdbc:sqlite:" + database.toAbsolutePath());
         TestContext context = new TestContext();
-        questions = new QuestionService(context, db);
+        questions = new QuestionService(db);
         answers = new AnswerService(context, db);
 
         db.executeUpdate(

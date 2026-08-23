@@ -5,17 +5,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import pt.isec.common.dto.auth.AuthResponseDTO;
 import pt.isec.common.dto.auth.LoginRequestDTO;
-import pt.isec.common.messages.TcpMessage;
-import pt.isec.server.core.IQuestionAnswerContext;
 import pt.isec.server.core.UserConnectionKey;
 import pt.isec.server.db.DbCommands;
 import pt.isec.server.db.DbCreate;
 
 import java.nio.file.Path;
 import java.sql.DriverManager;
-import java.util.List;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -34,7 +29,7 @@ class SessionServiceIT {
         Path database = tempDir.resolve("sessions.db");
         DbCreate.createIfMissing(database, "/db/schema.sql");
         db = new DbCommands("jdbc:sqlite:" + database.toAbsolutePath());
-        auth = new AuthService(new TestContext(), db);
+        auth = new AuthService(db);
         String passwordHash = PasswordHasher.hash("Password1!");
         db.executeUpdate(
                 "INSERT INTO teacher (id, name, email, password_hash) VALUES (?, ?, ?, ?)",
@@ -140,7 +135,4 @@ class SessionServiceIT {
         ));
     }
 
-    private static final class TestContext implements IQuestionAnswerContext {
-        @Override public void sendToUser(String role, long userId, TcpMessage<?> msg) { }
-    }
 }

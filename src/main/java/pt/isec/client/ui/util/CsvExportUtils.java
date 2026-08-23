@@ -33,7 +33,6 @@ public final class CsvExportUtils {
      * @param q           question whose answers will be exported
      * @param answers     list of answers to export
      */
-    // TODO Docente: exportação dos detalhes associados a uma pergunta expirada para um ficheiro CSV
     public static void exportAnswersToCsv(Window ownerWindow,
                                           Question q,
                                           List<Answer> answers) {

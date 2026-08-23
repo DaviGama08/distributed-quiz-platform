@@ -53,7 +53,6 @@ public enum MessageType {
     UPDATE_PROFILE_OK,
     UPDATE_PROFILE_FAIL,
 
-    // Incremental replication via SQL (heartbeat)
-    SQL_UPDATE,
+    // Snapshot replication
     DB_REQUEST_COPY
 }

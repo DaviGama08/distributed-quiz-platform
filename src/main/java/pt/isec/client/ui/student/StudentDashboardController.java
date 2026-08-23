@@ -18,7 +18,6 @@ import pt.isec.common.dto.auth.UpdateStudentDTO;
 import pt.isec.common.dto.question.JoinQuestionDTO;
 import pt.isec.common.dto.question.StudentQuestionDTO;
 import pt.isec.common.model.question.Answer;
-import pt.isec.common.model.question.Question;
 import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
 import java.util.List;

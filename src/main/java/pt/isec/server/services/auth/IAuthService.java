@@ -81,10 +81,4 @@ public interface IAuthService {
      */
     AuthResponseDTO resumeSession(String sessionId) throws Exception;
 
-    /**
-     * Changes the password for an existing user.
-     *
-     * @param changePasswordDTO password change data
-     */
-    void changePassword(ChangePasswordDTO changePasswordDTO);
 }

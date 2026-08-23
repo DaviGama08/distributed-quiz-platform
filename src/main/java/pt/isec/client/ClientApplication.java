@@ -52,7 +52,6 @@ public class ClientApplication extends Application {
      * @param stage primary application stage
      */
     @Override
-    // TODO Cliente: código estruturado com separação entre vista e lógica de comunicação
     public void start(Stage stage) {
         // Enable colored console output (server/client logs).
         AnsiConsole.systemInstall();

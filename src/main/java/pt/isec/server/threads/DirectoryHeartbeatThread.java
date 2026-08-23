@@ -73,7 +73,6 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             }
 
             // REGISTER
-            // TODO Servidor: registo no serviço de diretoria e determinação do papel (principal ou secundário)
             String registerMsg = requestKeyValue(
                     "TYPE", "REGISTER",
                     "ID", threadInfo.id(),
@@ -86,7 +85,6 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             // waits "200 PRINCIPAL ip:port[|DBV=X]"
             Endpoint reply = waitPrincipal(socket);
             if (reply == null) {
-                // TODO Servidor: encerramento se não receber qualquer resposta do serviço de diretoria
                 Log.error(DirectoryHeartbeatThread.class,
                         "[DIR] No response from directory for REGISTER; shutting down server.");
                 threadInfo.shutdownServer();
@@ -108,8 +106,7 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             if (threadInfo instanceof ServerManager node) {
                 if (iAmPrimary) {
                     try {
-                        // primary chooses DB: newest or new
-                        // TODO Servidor principal: quando arranca, cria a base de dados se não existir (esquema, mas sem dados) ou utiliza a mais recente
+                        // Primary uses the valid local database with the highest logical version.
                         node.initDbPathAsPrincipalOnStartup();
                         // create/open DB and schema
                         node.initDatabaseLayerIfNeeded();
@@ -140,7 +137,6 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             // HEARTBEAT — always send current DB version (threadInfo.dbVersion())
             while (threadInfo.isRunning()) {
                 long now = System.currentTimeMillis();
-                //TODO e por UDP unicast ao serviço de diretoria, de Heartbeats + estrutura de Heartbeats
                 if (now - last >= HEARTBEAT_INTERVAL_MS) {
                     String hb = requestKeyValue("[ROLE", iAmPrimary ? "MASTER] " : "BACKUP] ",
                             "TYPE", "HEARTBEAT",
@@ -252,7 +248,6 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
      * @param socket datagram socket
      * @return {@link Endpoint} data or {@code null} on timeout/error
      */
-    //TODO thread dedicada à receção de datagramas UDP
     private Endpoint tryReceivePrincipal(DatagramSocket socket) {
         try {
             byte[] buf = new byte[BUFFER_SIZE];

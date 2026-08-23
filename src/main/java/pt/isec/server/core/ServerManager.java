@@ -1,6 +1,4 @@
 package pt.isec.server.core;
-import pt.isec.common.dto.auth.AuthResponseDTO;
-import pt.isec.common.dto.auth.LoginRequestDTO;
 import pt.isec.common.util.Log;
 import pt.isec.server.db.DbCommands;
 import pt.isec.server.db.DbCreate;
@@ -19,7 +17,6 @@ import java.io.IOException;
 import java.net.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Enumeration;
 import java.util.Map;
@@ -186,10 +183,10 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
     }
 
     /**
-     * Finds the most recently modified {@code .db} file in a directory.
+     * Finds the valid {@code .db} file with the highest logical version.
      *
      * @param dir directory to search
-     * @return newest DB path or {@code null} if none found
+     * @return best DB path or {@code null} if none is valid
      * @throws IOException if listing or reading attributes fails
      */
     private static Path findBestDbInDir(Path dir) throws IOException {
@@ -201,7 +198,7 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
     /**
      * Initializes DB path when starting as primary node.
      * <p>
-     * If an existing DB is found in {@code dataDir}, uses the newest one;
+     * If an existing DB is found in {@code dataDir}, uses the valid copy with the highest version;
      * otherwise creates a new file name.
      *
      * @throws IOException if directory access fails
@@ -211,15 +208,12 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
             return; // already chosen
         }
 
-        // TODO Servidor: esquema de nomeação dos ficheiros SQLite (".db") que evita apagar ficheiros existentes
-        Path newest = findBestDbInDir(dataDir);
-        //TODO Servidor: evita apagar ficheiros existentes
-        if (newest != null) {
-            this.dbPath = newest.toAbsolutePath();
+        Path best = findBestDbInDir(dataDir);
+        if (best != null) {
+            this.dbPath = best.toAbsolutePath();
             Log.info(ServerManager.class,
-                    "[DB] PRIMARY: a usar a BD mais recente no diretório: %s", this.dbPath);
+                    "[DB] PRIMARY: a usar a BD válida com maior db_version: %s", this.dbPath);
         } else {
-            //TODO Servidor: esquema de nomeação dos ficheiros SQLite (".db")
             String name = String.format("quiz-%s.db", serverIdShort);
             this.dbPath = dataDir.resolve(name).toAbsolutePath();
             Log.info(ServerManager.class,
@@ -275,14 +269,11 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
                 return;
             }
             try {
-                // TODO Servidor principal: quando arranca, cria a base de dados se não existir (esquema, mas sem dados) ou utiliza a mais recente
                 DbCreate.createIfMissing(this.dbPath, "/db/schema.sql");
                 this.dbCommands = new DbCommands("jdbc:sqlite:" + this.dbPath.toAbsolutePath());
-                IQuestionAnswerContext qaContext = this;
-
-                this.authService = new AuthService(qaContext, dbCommands);
-                this.questionService = new QuestionService(qaContext, dbCommands);
-                this.answerService = new AnswerService(qaContext, dbCommands);
+                this.authService = new AuthService(dbCommands);
+                this.questionService = new QuestionService(dbCommands);
+                this.answerService = new AnswerService(this, dbCommands);
 
                 dbInitialised = true;
 
@@ -422,13 +413,6 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
 
     /** {@inheritDoc} */
     @Override
-    public void setDbVersion(long v) {
-        // Deprecated: DB version is no longer cached in memory; it is always read from the database.
-        // Method kept only for backwards compatibility with older code paths.
-    }
-
-    /** {@inheritDoc} */
-    @Override
     public Path dbPath() {
         return dbPath;
     }
@@ -473,7 +457,6 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
     /* ======================= REPLICATION / DB COPY ======================= */
 
     /** {@inheritDoc} */
-    // TODO: Servidor principal: o acesso à base de dados local deve ser feito de forma atómica para garantir que, enquanto umthread executa uma query e divulga a operação através de um hearbeat , ou transfere o ficheiro para um servidorsecundário que arrancou, não existem outras threads a aceder à base de dados.
     @Override
     public boolean tryLockCopy() {
         return copying.compareAndSet(false, true);

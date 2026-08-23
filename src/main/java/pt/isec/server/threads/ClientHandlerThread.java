@@ -46,6 +46,9 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
     /** Timeout, in seconds, for the very first message received from the client. */
     private static final int FIRST_MESSAGE_TIMEOUT_SEC = 30;
 
+    /** Registration keeps the connection public so the existing UI can perform login. */
+    private static final Duration UNAUTHENTICATED_IDLE_TIMEOUT = Duration.ofMinutes(5);
+
     /** Authenticated clients must send application traffic or PING within this interval. */
     private static final Duration AUTHENTICATED_READ_TIMEOUT = Duration.ofSeconds(45);
 
@@ -116,7 +119,6 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
     @Override
     public void run() {
         try {
-            // TODO Aplicação cliente: ligação encerrada pelo servidor após 30 segundos (pode ser aumentado) sem tentativa de registo ou autenticação
             // Initial 30-second timeout for the first client message
             connection.setReadTimeout(Duration.ofSeconds(FIRST_MESSAGE_TIMEOUT_SEC));
 
@@ -129,7 +131,6 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
             // Connection accepted
             connection.sendMessage(new TcpMessage<>(MessageType.ACK, "ok"));
 
-            // TODO Servidor principal e secundários: thread para comunicação com cada cliente ligado via TCP (pedido e resposta)
             while (threadInfo.isRunning()) {
                 TcpMessage<?> msg = connection.receiveMessage();
                 if (msg == null) {
@@ -191,7 +192,6 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
      * @param tcpMessage message received from the client
      * @throws Exception if a service call fails
      */
-    //TODO thread para comunicação com cada cliente ligado via TCP (pedido e resposta)
     private void processMessage(TcpMessage<?> tcpMessage) throws Exception {
         if (tcpMessage == null) {
             return;
@@ -220,15 +220,8 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     RegisterStudentDTO dto = tcpMessage.getDataAs(RegisterStudentDTO.class);
                     AuthResponseDTO res = threadInfo.getAuthService().registerStudent(dto);
 
-                    long userId = establishAuthenticatedSession(res, ROLE_STUDENT);
-
-                    try {
-                        threadInfo.registerClientConnection(currentUserType, userId, connection);
-                    } catch (Exception ignored) {
-                    }
-
                     connection.sendMessage(new TcpMessage<>(MessageType.REGISTER_OK, res, AuthResponseDTO.class));
-                    connection.setReadTimeout(AUTHENTICATED_READ_TIMEOUT);
+                    connection.setReadTimeout(UNAUTHENTICATED_IDLE_TIMEOUT);
                     Log.info(ClientHandlerThread.class, "[TCP] Student registered successfully.");
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
@@ -240,15 +233,8 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     RegisterTeacherDTO dto = tcpMessage.getDataAs(RegisterTeacherDTO.class);
                     AuthResponseDTO res = threadInfo.getAuthService().registerTeacher(dto);
 
-                    long userId = establishAuthenticatedSession(res, ROLE_TEACHER);
-
-                    try {
-                        threadInfo.registerClientConnection(currentUserType, userId, connection);
-                    } catch (Exception ignored) {
-                    }
-
                     connection.sendMessage(new TcpMessage<>(MessageType.REGISTER_OK, res, AuthResponseDTO.class));
-                    connection.setReadTimeout(AUTHENTICATED_READ_TIMEOUT);
+                    connection.setReadTimeout(UNAUTHENTICATED_IDLE_TIMEOUT);
                     Log.info(ClientHandlerThread.class, "[TCP] Teacher registered successfully.");
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));

@@ -234,7 +234,6 @@ class ClientHandlerThreadAuthorizationIT {
         private final FakeAuthService authService = new FakeAuthService();
         private final FakeQuestionService questionService = new FakeQuestionService();
         private final FakeAnswerService answerService = new FakeAnswerService();
-        private final BlockingQueue<List<String>> replicationQueue = new LinkedBlockingQueue<>();
 
         @Override public String id() { return "test-server"; }
         @Override public String serverTcpIp() { return InetAddress.getLoopbackAddress().getHostAddress(); }
@@ -245,7 +244,6 @@ class ClientHandlerThreadAuthorizationIT {
         @Override public String multicastGroup() { return ""; }
         @Override public int multicastPort() { return 0; }
         @Override public NetworkInterface multicastInterface() { return null; }
-        @Override public BlockingQueue<List<String>> queue() { return replicationQueue; }
         @Override public boolean isRunning() { return running.get(); }
         @Override public void shutdownServer() { running.set(false); }
         @Override public boolean isPrimary() { return true; }

@@ -797,7 +797,7 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
                 return false;
             }
 
-            String target = msg.substring("200 PRINCIPAL ".length()).trim();
+            String target = msg.substring("200 PRINCIPAL ".length()).trim().split("\\|", 2)[0];
             int idx = target.lastIndexOf(':');
             if (idx <= 0) {
                 return false;

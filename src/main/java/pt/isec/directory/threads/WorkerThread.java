@@ -1,6 +1,7 @@
 package pt.isec.directory.threads;
 import pt.isec.common.messages.UdpMessage;
 import pt.isec.common.util.Log;
+import pt.isec.directory.core.ServerElection;
 import pt.isec.directory.core.IDirectoryThreadContext;
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -184,7 +185,7 @@ public class WorkerThread implements Runnable {
                 principal.getId()
         );
 
-        return "200 PRINCIPAL " + principal.tcpEndpoint();
+        return "200 PRINCIPAL " + principal.tcpEndpoint() + "|DBV=" + principal.getDbVersion();
     }
 
     /**
@@ -249,6 +250,7 @@ public class WorkerThread implements Runnable {
 
         long now = System.currentTimeMillis();
         si.setLastSeenMillis(now);
+        si.setDbVersion(parseDbVersion(kv.get("DBV")));
 
         ServerInfo principal = findPrincipal();
         if (principal == null) {
@@ -272,7 +274,7 @@ public class WorkerThread implements Runnable {
             );
         }
 
-        return "200 OK " + principal.tcpEndpoint();
+        return "200 OK " + principal.tcpEndpoint() + "|DBV=" + principal.getDbVersion();
     }
 
     /**
@@ -326,20 +328,12 @@ public class WorkerThread implements Runnable {
             }
         }
 
-        int dbVersion = 0;
-        if (dbv != null && !dbv.isBlank()) {
-            try {
-                dbVersion = Integer.parseInt(dbv.trim());
-            } catch (NumberFormatException ex) {
-                Log.warn(WorkerThread.class,
-                        "Invalid DBV '%s' received from server %s.", dbv, id);
-            }
-        }
+        long dbVersion = parseDbVersion(dbv);
 
         ServerInfo si = threadInfo.servers().get(id);
         long now = System.currentTimeMillis();
         if (si == null) {
-            si = new ServerInfo(id, ip, port, udpPort);
+            si = new ServerInfo(id, ip, port, udpPort, dbVersion);
             si.setLastSeenMillis(now);
             threadInfo.servers().put(id, si);
             synchronized (threadInfo.serversLock()) {
@@ -348,6 +342,7 @@ public class WorkerThread implements Runnable {
         } else {
             // same ID coming back: update last seen
             si.setLastSeenMillis(now);
+            si.setDbVersion(dbVersion);
         }
 
         Log.info(WorkerThread.class,
@@ -373,7 +368,7 @@ public class WorkerThread implements Runnable {
                 principal.getId()
         );
 
-        return "200 OK " + principal.tcpEndpoint();
+        return "200 OK " + principal.tcpEndpoint() + "|DBV=" + principal.getDbVersion();
     }
 
     /* ===================== LOW-LEVEL HELPERS ===================== */
@@ -393,15 +388,25 @@ public class WorkerThread implements Runnable {
     }
 
     /**
-     * Returns the current "principal" server, defined as the first entry in the
-     * ordered server map (insertion order).
+     * Returns the healthy server with the highest valid database version.
      *
      * @return {@link ServerInfo} of the principal server, or {@code null} if none
      */
     private ServerInfo findPrincipal() {
         synchronized (threadInfo.serversLock()) {
-            var iterator = threadInfo.serversOrdered().values().iterator();
-            return iterator.hasNext() ? iterator.next() : null;
+            return ServerElection.selectFreshest(threadInfo.serversOrdered().values());
+        }
+    }
+
+    private static long parseDbVersion(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return -1L;
+        }
+        try {
+            long version = Long.parseLong(raw.trim());
+            return version >= 0 ? version : -1L;
+        } catch (NumberFormatException e) {
+            return -1L;
         }
     }
 

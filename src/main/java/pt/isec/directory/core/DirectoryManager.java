@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentMap;
  * <ul>
  *     <li>Create and manage UDP socket and worker threads</li>
  *     <li>Maintain a registry of active quiz servers</li>
- *     <li>Elect a primary server based on insertion order</li>
+ *     <li>Elect a primary server using the highest valid database version</li>
  *     <li>Periodically reap inactive servers and log metrics</li>
  * </ul>
  */
@@ -268,9 +268,8 @@ public class DirectoryManager implements IDirectoryThreadContext {
     @Override
     public String masterServerUuid() {
         synchronized (serversLock) {
-            return serversOrdered.isEmpty()
-                    ? null
-                    : serversOrdered.keySet().iterator().next();
+            ServerInfo elected = ServerElection.selectFreshest(serversOrdered.values());
+            return elected == null ? null : elected.getId();
         }
     }
 

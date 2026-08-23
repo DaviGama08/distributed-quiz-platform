@@ -10,6 +10,7 @@ import pt.isec.server.services.question.AnswerService;
 import pt.isec.server.services.question.IAnswerService;
 import pt.isec.server.services.question.IQuestionService;
 import pt.isec.server.services.question.QuestionService;
+import pt.isec.server.replication.SqliteDatabaseSelector;
 import pt.isec.server.threads.ClusterHeartbeatThread;
 import pt.isec.server.threads.ClientListenerThread;
 import pt.isec.server.threads.DirectoryHeartbeatThread;
@@ -20,14 +21,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
-import java.util.Comparator;
 import java.util.Enumeration;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -65,9 +62,6 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
     private IAnswerService answerService;
 
     /* ======================= SESSIONS / REPLICATION ======================= */
-
-    /** Queue of SQL commands to replicate to other nodes. */
-    private final BlockingQueue<List<String>> sqlToBroadcast = new LinkedBlockingQueue<>();
 
     /* ======================= IDENTITY / NETWORK ======================= */
 
@@ -198,13 +192,8 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
      * @return newest DB path or {@code null} if none found
      * @throws IOException if listing or reading attributes fails
      */
-    private static Path findNewestDbInDir(Path dir) throws IOException {
-        try (var stream = Files.list(dir)) {
-            return stream
-                    .filter(p -> p.toString().endsWith(".db"))
-                    .max(Comparator.comparingLong(p -> p.toFile().lastModified()))
-                    .orElse(null);
-        }
+    private static Path findBestDbInDir(Path dir) throws IOException {
+        return SqliteDatabaseSelector.selectBest(dir);
     }
 
     /* ======================= DATABASE PATH CHOOSING ======================= */
@@ -223,7 +212,7 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
         }
 
         // TODO Servidor: esquema de nomeação dos ficheiros SQLite (".db") que evita apagar ficheiros existentes
-        Path newest = findNewestDbInDir(dataDir);
+        Path newest = findBestDbInDir(dataDir);
         //TODO Servidor: evita apagar ficheiros existentes
         if (newest != null) {
             this.dbPath = newest.toAbsolutePath();
@@ -495,13 +484,6 @@ public class ServerManager implements IServerThreadContext, IQuestionAnswerConte
     public void unlockCopy() {
         copying.set(false);
     }
-
-    /** {@inheritDoc} */
-    @Override
-    public BlockingQueue<List<String>> queue() {
-        return sqlToBroadcast;
-    }
-
 
     /* ======================= PRIMARY/BACKUP ROLE ======================= */
 

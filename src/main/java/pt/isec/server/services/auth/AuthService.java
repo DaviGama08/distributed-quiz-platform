@@ -6,7 +6,6 @@ import pt.isec.server.db.DbCommands;
 import pt.isec.common.util.Log;
 
 import java.time.Instant;
-import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 
@@ -18,7 +17,6 @@ import java.util.UUID;
 public class AuthService implements IAuthService {
 
     private final DbCommands dbCommands;
-    private final IQuestionAnswerContext context;
 
     /**
      * Cached value of the teacher registration code hash from table {@code config}.
@@ -30,11 +28,10 @@ public class AuthService implements IAuthService {
     /**
      * Creates a new {@link AuthService}.
      *
-     * @param context    cluster context used for SQL replication
+     * @param context    server context retained for API compatibility
      * @param dbCommands database command helper
      */
     public AuthService(IQuestionAnswerContext context, DbCommands dbCommands) {
-        this.context = context;
         this.dbCommands = dbCommands;
     }
 
@@ -98,10 +95,6 @@ public class AuthService implements IAuthService {
         Log.info(AuthService.class, "Novo docente registado com ID %d.", newId);
         String session = createSessionRecord(newId, "TEACHER");
 
-        String aux = "INSERT INTO teacher (id, name, email, password_hash, created_at) VALUES (" +
-                newId + ", '" + escape(name) + "', '" + escape(email) + "', '" + escape(hashPw) + "', datetime('now'));" ;
-
-        context.queue().add(Collections.singletonList(aux));
         return new AuthResponseDTO(session, String.valueOf(newId), null, "TEACHER", name, email);
     }
 
@@ -168,12 +161,6 @@ public class AuthService implements IAuthService {
         }
 
         String session = createSessionRecord(newId, "STUDENT");
-
-        String aux = "INSERT INTO student (id, student_number, name, email, password_hash, created_at) VALUES (" +
-                newId + ", " + number + ", '" + escape(name) + "', '" + escape(email) + "', '" +
-                escape(hashPw) + "', datetime('now'));";
-
-        context.queue().add(Collections.singletonList(aux));
 
         return new AuthResponseDTO(session, String.valueOf(newId), number, "STUDENT", name, email);
     }
@@ -293,10 +280,6 @@ public class AuthService implements IAuthService {
                         newHash, userId
                 );
 
-                String aux = "UPDATE teacher SET password_hash='" + escape(newHash) +
-                        "' WHERE id=" + userId + ";";
-                context.queue().add(Collections.singletonList(aux));
-
             } else if ("STUDENT".equalsIgnoreCase(userType)) {
                 Map<String, Object> rec = dbCommands.selectOne(
                         "SELECT password_hash FROM student WHERE id = ?",
@@ -313,10 +296,6 @@ public class AuthService implements IAuthService {
                         "UPDATE student SET password_hash = ? WHERE id = ?",
                         newHash, userId
                 );
-
-                String aux = "UPDATE student SET password_hash='" + escape(newHash) +
-                        "' WHERE id=" + userId + ";";
-                context.queue().add(Collections.singletonList(aux));
 
             } else {
                 throw new IllegalArgumentException("Tipo de utilizador inválido");
@@ -337,7 +316,6 @@ public class AuthService implements IAuthService {
     // TODO Utilizador: edição dos dados de registo
     @Override
     public AuthResponseDTO updateStudent(UpdateStudentDTO dto) throws Exception {
-        String sql;
         if (dto == null) {
             throw new IllegalArgumentException("Dados em falta");
         }
@@ -400,12 +378,6 @@ public class AuthService implements IAuthService {
                     studentNumber, name, email, newHash, userId
             );
 
-            sql = "UPDATE student SET student_number=" + studentNumber +
-                    ", name='" + escape(name) + "'" +
-                    ", email='" + escape(email) + "'" +
-                    ", password_hash='" + escape(newHash) + "'" +
-                    " WHERE id=" + userId + ";";
-
         } else {
             // Only update number/name/email
             dbCommands.executeUpdate(
@@ -413,10 +385,6 @@ public class AuthService implements IAuthService {
                     studentNumber, name, email, userId
             );
 
-            sql = "UPDATE student SET student_number=" + studentNumber +
-                    ", name='" + escape(name) + "'" +
-                    ", email='" + escape(email) + "'" +
-                    " WHERE id=" + userId + ";";
         }
 
         // Fetch updated student details
@@ -426,8 +394,6 @@ public class AuthService implements IAuthService {
         if (updatedStudent == null) {
             throw new IllegalStateException("Estudante atualizado não encontrado.");
         }
-
-        context.queue().add(Collections.singletonList(sql));
 
         return new AuthResponseDTO(
                 null, // Session ID is not updated here
@@ -450,7 +416,6 @@ public class AuthService implements IAuthService {
     // TODO Utilizador: edição dos dados de registo
     @Override
     public AuthResponseDTO updateTeacher(UpdateTeacherDTO dto) throws Exception {
-        String sql;
         if (dto == null) {
             throw new IllegalArgumentException("Dados em falta");
         }
@@ -498,19 +463,12 @@ public class AuthService implements IAuthService {
                     "UPDATE teacher SET password_hash = ?, name = ?, email = ? WHERE id = ?",
                     newHash, name, email, teacherId
             );
-            sql = "UPDATE teacher SET password_hash='" + escape(newHash) + "'" +
-                    ", name='" + escape(name) + "'" +
-                    ", email='" + escape(email) + "'" +
-                    " WHERE id=" + teacherId + ";";
         } else {
             dbCommands.executeUpdate(
                     "UPDATE teacher SET name = ?, email = ? WHERE id = ?",
                     name, email, teacherId
             );
 
-            sql = "UPDATE teacher SET name='" + escape(name) + "'" +
-                    ", email='" + escape(email) + "'" +
-                    " WHERE id=" + teacherId + ";";
         }
 
         // Fetch updated teacher details
@@ -521,7 +479,6 @@ public class AuthService implements IAuthService {
             throw new IllegalStateException("Docente atualizado não encontrado.");
         }
 
-        context.queue().add(Collections.singletonList(sql));
         return new AuthResponseDTO(
                 null, // Session ID is not updated here
                 String.valueOf(((Number) updatedTeacher.get("id")).longValue()),
@@ -575,11 +532,6 @@ public class AuthService implements IAuthService {
                         "WHERE session_id = ? AND revoked_at IS NULL",
                 sessionId
         );
-
-        String aux =
-                "UPDATE session SET last_seen_at=datetime('now') " +
-                        "WHERE session_id='" + escape(sessionId) + "';";
-        context.queue().add(Collections.singletonList(aux));
 
         Long studentNumber = null;
         String name;
@@ -637,12 +589,6 @@ public class AuthService implements IAuthService {
                 sessionId, userId, userType
         );
 
-        String auxLogout =
-                "UPDATE session SET revoked_at=datetime('now') WHERE session_id='" +
-                        escape(sessionId) + "' AND user_id=" + userId + " AND role='" +
-                        escape(userType) + "' AND revoked_at IS NULL;";
-
-        context.queue().add(Collections.singletonList(auxLogout));
     }
 
     /* =========================================================
@@ -823,23 +769,6 @@ public class AuthService implements IAuthService {
                 session, userId, userType
         );
 
-        String aux =
-                "INSERT INTO session (session_id, user_id, role, created_at, last_seen_at, expires_at) VALUES (" +
-                        "'" + escape(session) + "', " + userId + ", '" + escape(userType) +
-                        "', datetime('now'), datetime('now'), datetime('now','+1 day'));";
-
-        context.queue().add(Collections.singletonList(aux));
-
         return session;
-    }
-
-    /**
-     * Escapes single quotes to safely embed a value inside an SQL literal.
-     *
-     * @param s input string
-     * @return escaped string (never {@code null})
-     */
-    private static String escape(String s) {
-        return s == null ? "" : s.replace("'", "''");
     }
 }

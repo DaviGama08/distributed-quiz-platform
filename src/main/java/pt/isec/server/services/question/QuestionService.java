@@ -28,17 +28,12 @@ import java.util.UUID;
 /**
  * Service responsible for creating, editing, listing and accessing questions.
  * <p>
- * This service encapsulates all business rules for question management and
- * also takes care of generating the SQL statements that must be replicated
- * to backup nodes through the {@link IQuestionAnswerContext#queue()}.
+ * This service encapsulates all business rules for question management.
  */
 @SuppressWarnings("ClassCanBeRecord")
 public class QuestionService implements IQuestionService {
 
     private static final int MAX_ACCESS_CODE_ATTEMPTS = 8;
-
-    /** Context used for DB replication and access to shared structures. */
-    private final IQuestionAnswerContext context;
 
     /** Helper that provides higher-level database commands. */
     private final DbCommands dbCommands;
@@ -46,11 +41,10 @@ public class QuestionService implements IQuestionService {
     /**
      * Creates a new {@link QuestionService}.
      *
-     * @param context    question/answer context used for replication
+     * @param context    server context retained for API compatibility
      * @param dbCommands database access helper
      */
     public QuestionService(IQuestionAnswerContext context, DbCommands dbCommands) {
-        this.context = context;
         this.dbCommands = dbCommands;
     }
 
@@ -210,16 +204,6 @@ public class QuestionService implements IQuestionService {
         if (qId <= 0 || accessCode == null) {
             throw new IllegalStateException("Não foi possível gerar um código de acesso único.");
         }
-
-        List<String> aux = new ArrayList<>();
-        aux.add("INSERT INTO question (id, statement, teacher_id, correct_option, start_at, end_at, access_code) " +
-                "VALUES (" + qId + ", '" + escape(normalizedStatement) + "', " + teacherId + ", '" +
-                correct.name() + "', '" + startAt + "', '" + endAt + "', '" + accessCode + "');");
-        for (Option o : options) {
-            aux.add("INSERT INTO option (question_id, letter, text) VALUES (" +
-                    qId + ", '" + o.getLetter().name() + "', '" + escape(o.getText()) + "');");
-        }
-        context.queue().add(aux);
 
         return new CreateQuestionResponseDTO((int) qId, accessCode);
     }
@@ -416,27 +400,6 @@ public class QuestionService implements IQuestionService {
             }
         });
 
-        List<String> aux = new ArrayList<>();
-
-        aux.add(
-                "UPDATE question SET statement='" + escape(normalizedStatement) +
-                        "', correct_option='" + correct.name() +
-                        "', start_at='" + startAt +
-                        "', end_at='" + endAt +
-                        "' WHERE id=" + quizId +
-                        " AND teacher_id=" + teacherId + ";"
-        );
-
-        aux.add("DELETE FROM option WHERE question_id=" + quizId + ";");
-
-        for (Option o : cleanedOptions) {
-            aux.add(
-                    "INSERT INTO option (question_id, letter, text) VALUES (" +
-                            quizId + ", '" + o.getLetter().name() + "', '" + escape(o.getText()) + "');"
-            );
-        }
-
-        context.queue().add(aux);
         return true;
     }
 
@@ -486,10 +449,6 @@ public class QuestionService implements IQuestionService {
                 throw new IllegalStateException("A pergunta não foi eliminada.");
             }
         });
-
-        context.queue().add(List.of(
-                "DELETE FROM question WHERE id=" + qId + " AND teacher_id=" + teacherId + ";"
-        ));
 
         return true;
     }
@@ -646,13 +605,4 @@ public class QuestionService implements IQuestionService {
         return false;
     }
 
-    /**
-     * Escapes single quotes for safe SQL string literal construction.
-     *
-     * @param s input string
-     * @return escaped string (or empty string if {@code s} is {@code null})
-     */
-    private static String escape(String s) {
-        return s == null ? "" : s.replace("'", "''");
-    }
 }

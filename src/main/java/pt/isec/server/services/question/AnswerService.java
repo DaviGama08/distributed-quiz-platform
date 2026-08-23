@@ -12,7 +12,6 @@ import pt.isec.common.util.Log;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -93,12 +92,6 @@ public class AnswerService implements IAnswerService {
                 "INSERT INTO answer (student_id, question_id, chosen_option, created_at) VALUES (?, ?, ?, ?)",
                 studentId, questionId, selected.name(), now.toString()
         );
-
-        // incremental replication for backup servers
-        context.queue().add(Collections.singletonList(
-                "INSERT INTO answer (student_id, question_id, chosen_option, created_at) VALUES (" +
-                        studentId + ", " + questionId + ", '" + selected.name() + "', '" + now + "');"
-        ));
 
         // Try to notify the owning teacher (if connected)
         try {

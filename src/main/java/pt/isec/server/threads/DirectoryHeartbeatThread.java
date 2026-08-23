@@ -65,6 +65,13 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
             InetAddress dirAddr = InetAddress.getByName(threadInfo.directoryHost());
             int dirPort = threadInfo.directoryPort();
 
+            // A server must advertise a real, validated database version before it
+            // can participate in election. This also lets the first node bootstrap.
+            if (threadInfo instanceof ServerManager node) {
+                node.initDbPathAsPrincipalOnStartup();
+                node.initDatabaseLayerIfNeeded();
+            }
+
             // REGISTER
             // TODO Servidor: registo no serviço de diretoria e determinação do papel (principal ou secundário)
             String registerMsg = requestKeyValue(
@@ -137,7 +144,8 @@ public class DirectoryHeartbeatThread implements Runnable, AutoCloseable {
                 if (now - last >= HEARTBEAT_INTERVAL_MS) {
                     String hb = requestKeyValue("[ROLE", iAmPrimary ? "MASTER] " : "BACKUP] ",
                             "TYPE", "HEARTBEAT",
-                            "ID", threadInfo.id()
+                            "ID", threadInfo.id(),
+                            "DBV", String.valueOf(threadInfo.dbVersion())
                     );
                     send(socket, dirAddr, dirPort, hb);
                     last = now;

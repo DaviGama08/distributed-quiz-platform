@@ -7,8 +7,6 @@ import pt.isec.server.threads.NetworkTcpConnection;
 
 import java.net.NetworkInterface;
 import java.nio.file.Path;
-import java.util.List;
-import java.util.concurrent.BlockingQueue;
 
 /**
  * Abstraction for the main server manager.
@@ -84,14 +82,6 @@ public interface IServerThreadContext {
      * @return multicast-capable interface
      */
     NetworkInterface multicastInterface();
-
-    /**
-     * Returns the queue of SQL statements that should be broadcast to backup nodes.
-     *
-     * @return queue with SQL batches
-     */
-    BlockingQueue<List<String>> queue();
-
 
     /* ===================== LIFE CYCLE / STATE ===================== */
 

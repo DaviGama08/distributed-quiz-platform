@@ -237,9 +237,6 @@ class QuestionAnswerServiceIT {
     }
 
     private static final class TestContext implements IQuestionAnswerContext {
-        private final BlockingQueue<List<String>> queue = new LinkedBlockingQueue<>();
-
-        @Override public BlockingQueue<List<String>> queue() { return queue; }
         @Override public void sendToUser(String role, long userId, TcpMessage<?> msg) { }
     }
 }

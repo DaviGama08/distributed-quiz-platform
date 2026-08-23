@@ -15,6 +15,7 @@ import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.Question;
 import pt.isec.common.util.Log;
+import pt.isec.common.util.SerializationPolicy;
 
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
@@ -408,6 +409,11 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
         return running;
     }
 
+    @Override
+    public boolean isAuthenticated() {
+        return authenticated;
+    }
+
     /**
      * Gets the current TCP output stream to the server.
      *
@@ -466,6 +472,7 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
             setStudentNumber(dto.studentNumber());
         }
         sessionIdForReauth = dto.sessionId();
+        enableAuthenticatedReadTimeout();
         pcs.firePropertyChange(PROP_LOGIN_OK, null, dto);
     }
 
@@ -819,6 +826,17 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
 
     /* ======================= TCP connection & handshake ====================== */
 
+    /** Enables bounded reads once PING/PONG liveness is active. */
+    private void enableAuthenticatedReadTimeout() {
+        try {
+            if (tcpSocket != null && !tcpSocket.isClosed()) {
+                tcpSocket.setSoTimeout(45_000);
+            }
+        } catch (SocketException e) {
+            Log.warn(ClientManager.class, "Could not enable authenticated read timeout: " + e.getMessage());
+        }
+    }
+
     /**
      * Establishes a TCP connection to the main server and performs the handshake.
      *
@@ -833,6 +851,7 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
             ObjectOutputStream tmpOut = new ObjectOutputStream(tcpSocket.getOutputStream());
             tmpOut.flush();
             ObjectInputStream tmpIn = new ObjectInputStream(tcpSocket.getInputStream());
+            SerializationPolicy.apply(tmpIn);
 
             // Timeout just for the handshake
             tcpSocket.setSoTimeout(CONNECTION_TIMEOUT_MS);
@@ -1049,6 +1068,7 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
                     }
 
                     sessionIdForReauth = dto.sessionId();
+                    enableAuthenticatedReadTimeout();
                     Log.info(ClientManager.class, "Session resumed successfully after reconnection.");
                     return true;
                 }

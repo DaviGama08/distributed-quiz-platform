@@ -20,6 +20,7 @@ import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.Question;
 import pt.isec.common.util.Log;
 import pt.isec.server.core.IServerThreadContext;
+import java.io.EOFException;
 import java.io.IOException;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
@@ -45,8 +46,8 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
     /** Timeout, in seconds, for the very first message received from the client. */
     private static final int FIRST_MESSAGE_TIMEOUT_SEC = 30;
 
-    /** Special value used to disable the read timeout on the socket. */
-    private static final Duration NO_TIMEOUT = Duration.ZERO;
+    /** Authenticated clients must send application traffic or PING within this interval. */
+    private static final Duration AUTHENTICATED_READ_TIMEOUT = Duration.ofSeconds(45);
 
     private static final String ROLE_TEACHER = "TEACHER";
     private static final String ROLE_STUDENT = "STUDENT";
@@ -136,6 +137,8 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                 }
                 processMessage(msg);
             }
+        } catch (EOFException e) {
+            Log.info(ClientHandlerThread.class, "[TCP] Client closed the connection.");
         } catch (SocketTimeoutException e) {
             if (!threadInfo.isRunning()) {
                 // Timeout during shutdown – expected behavior
@@ -208,6 +211,8 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
 
         switch (tcpMessage.getType()) {
 
+            case PING -> connection.sendMessage(new TcpMessage<>(MessageType.PONG, "alive"));
+
             /* ========= AUTH ========= */
 
             case REGISTER_STUDENT -> {
@@ -223,7 +228,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     }
 
                     connection.sendMessage(new TcpMessage<>(MessageType.REGISTER_OK, res, AuthResponseDTO.class));
-                    connection.setReadTimeout(NO_TIMEOUT);
+                    connection.setReadTimeout(AUTHENTICATED_READ_TIMEOUT);
                     Log.info(ClientHandlerThread.class, "[TCP] Student registered successfully.");
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
@@ -243,7 +248,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     }
 
                     connection.sendMessage(new TcpMessage<>(MessageType.REGISTER_OK, res, AuthResponseDTO.class));
-                    connection.setReadTimeout(NO_TIMEOUT);
+                    connection.setReadTimeout(AUTHENTICATED_READ_TIMEOUT);
                     Log.info(ClientHandlerThread.class, "[TCP] Teacher registered successfully.");
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
@@ -264,7 +269,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     }
 
                     connection.sendMessage(new TcpMessage<>(MessageType.LOGIN_OK, res, AuthResponseDTO.class));
-                    connection.setReadTimeout(NO_TIMEOUT);
+                    connection.setReadTimeout(AUTHENTICATED_READ_TIMEOUT);
                     Log.info(ClientHandlerThread.class, "[TCP] Login successfully.");
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.LOGIN_FAIL, e.getMessage(), String.class));
@@ -314,7 +319,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     } catch (Exception ignored) { }
 
                     // a partir daqui já não queremos timeout de primeira mensagem
-                    connection.setReadTimeout(NO_TIMEOUT);
+                    connection.setReadTimeout(AUTHENTICATED_READ_TIMEOUT);
 
                     connection.sendMessage(new TcpMessage<>(MessageType.RESUME_SESSION_OK, res, AuthResponseDTO.class));
                     Log.info(ClientHandlerThread.class, "[TCP] Session resumed successfully.");

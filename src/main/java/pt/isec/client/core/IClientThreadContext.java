@@ -38,6 +38,9 @@ public interface IClientThreadContext extends IClientServiceContext{
      */
     boolean isRunning();
 
+    /** Returns whether liveness probes may be sent on the current connection. */
+    boolean isAuthenticated();
+
     /**
      * Gets the current TCP output stream to the server.
      *

@@ -18,6 +18,7 @@ public enum MessageType {
     RESUME_SESSION,
     RESUME_SESSION_OK,
     RESUME_SESSION_FAIL,
+    PING,
     PONG,
 
     // Questions – teacher side

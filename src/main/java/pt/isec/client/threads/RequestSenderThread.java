@@ -1,10 +1,12 @@
 package pt.isec.client.threads;
 import pt.isec.client.core.IClientThreadContext;
+import pt.isec.common.messages.MessageType;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.util.Log;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Thread that sends messages from the request queue to the server over TCP.
@@ -30,8 +32,13 @@ public class RequestSenderThread implements Runnable {
         while (service.isRunning()) {
             TcpMessage<? extends Serializable> request = null;
             try {
-                // Blocks until there is a request to send
-                request = service.getRequestQueue().take();
+                request = service.getRequestQueue().poll(15, TimeUnit.SECONDS);
+                if (request == null) {
+                    if (!service.isAuthenticated()) {
+                        continue;
+                    }
+                    request = new TcpMessage<>(MessageType.PING, "alive");
+                }
 
                 ObjectOutputStream out = service.getOutputStream();
                 if (out == null) {
@@ -46,6 +53,7 @@ public class RequestSenderThread implements Runnable {
                 Log.info(RequestSenderThread.class, "Sending: " + request.getType());
                 out.writeObject(request);
                 out.flush();
+                out.reset();
             } catch (IOException e) {
                 if (service.isRunning()) {
                     Log.error(RequestSenderThread.class, "Failed to send: " + e.getMessage());

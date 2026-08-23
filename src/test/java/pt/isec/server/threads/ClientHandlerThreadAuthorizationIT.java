@@ -63,6 +63,23 @@ class ClientHandlerThreadAuthorizationIT {
     }
 
     @Test
+    void rejectsUnauthenticatedLivenessProbe() throws Exception {
+        try (HandlerHarness harness = new HandlerHarness()) {
+            harness.send(new TcpMessage<>(MessageType.PING, "alive"));
+            assertError(harness.receive(), "authentication-required");
+        }
+    }
+
+    @Test
+    void authenticatedLivenessProbeReturnsPong() throws Exception {
+        try (HandlerHarness harness = new HandlerHarness()) {
+            harness.loginStudent();
+            harness.send(new TcpMessage<>(MessageType.PING, "alive"));
+            assertEquals(MessageType.PONG, harness.receive().getType());
+        }
+    }
+
+    @Test
     void rejectsStudentUsingTeacherOperation() throws Exception {
         try (HandlerHarness harness = new HandlerHarness()) {
             harness.loginStudent();

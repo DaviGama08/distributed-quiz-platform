@@ -1,5 +1,6 @@
 package pt.isec.server.threads;
 import pt.isec.common.messages.TcpMessage;
+import pt.isec.common.util.SerializationPolicy;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -36,6 +37,7 @@ public class NetworkTcpConnection implements AutoCloseable {
         this.socket = socket;
         this.out = new ObjectOutputStream(socket.getOutputStream());
         this.in = new ObjectInputStream(socket.getInputStream());
+        SerializationPolicy.apply(this.in);
     }
 
     /**

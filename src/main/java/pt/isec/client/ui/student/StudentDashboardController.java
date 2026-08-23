@@ -16,8 +16,8 @@ import pt.isec.common.dto.answer.SubmitAnswerDTO;
 import pt.isec.common.dto.auth.AuthResponseDTO;
 import pt.isec.common.dto.auth.UpdateStudentDTO;
 import pt.isec.common.dto.question.JoinQuestionDTO;
+import pt.isec.common.dto.question.StudentQuestionDTO;
 import pt.isec.common.model.question.Answer;
-import pt.isec.common.model.question.Question;
 import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
 import java.util.List;
@@ -102,7 +102,7 @@ public class StudentDashboardController implements IDisposableProp {
                 return;
             }
             awaitingJoinQuestion = false;
-            Question q = (Question) evt.getNewValue();
+            StudentQuestionDTO q = (StudentQuestionDTO) evt.getNewValue();
 
             UiUtils.runOnUiThread(() -> {
                 try {
@@ -112,11 +112,8 @@ public class StudentDashboardController implements IDisposableProp {
                 if (q == null) {
                     showErrorAlert("Código inválido ou pergunta não existente.");
                     view.addNotification("Falha ao carregar pergunta para o código indicado.");
-                } else if (!q.isActive()) {
-                    showErrorAlert("Não é possivel responder à pergunta.");
-                    view.addNotification("Pergunta " + q.getAccessCode() + " não está ativa para resposta.");
                 } else {
-                    view.addNotification("Pergunta " + q.getAccessCode() + " carregada para resposta.");
+                    view.addNotification("Pergunta carregada para resposta.");
                     openQuestionDialog(q);
                 }
             });
@@ -310,7 +307,7 @@ public class StudentDashboardController implements IDisposableProp {
      *
      * @param question question to answer
      */
-    private void openQuestionDialog(Question question) {
+    private void openQuestionDialog(StudentQuestionDTO question) {
         Integer studentId = clientControllerContext.getUserId();
         if (studentId == null) {
             showErrorAlert("Sessão inválida. Faça login novamente.");

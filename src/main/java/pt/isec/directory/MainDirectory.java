@@ -79,8 +79,15 @@ public class MainDirectory {
                     udpPort, queueCapacity, maxPacketSize, ttlMillis
             );
 
-            DirectoryManager ds = new DirectoryManager(udpPort, queueCapacity, maxPacketSize);
-            // If your DirectoryService supports TTL as a parameter, wire it here.
+            DirectoryManager ds = new DirectoryManager(
+                    udpPort,
+                    queueCapacity,
+                    maxPacketSize,
+                    4,
+                    ttlMillis,
+                    2_000L,
+                    5_000L
+            );
 
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 try {

@@ -58,6 +58,6 @@ public interface IQuestionService {
      * @return the question, or {@code null} if not found
      * @throws Exception on DB errors
      */
-    Question joinQuestion(JoinQuestionDTO dto) throws Exception;
+    StudentQuestionDTO joinQuestion(JoinQuestionDTO dto) throws Exception;
 
 }

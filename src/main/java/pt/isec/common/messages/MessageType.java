@@ -18,6 +18,7 @@ public enum MessageType {
     RESUME_SESSION,
     RESUME_SESSION_OK,
     RESUME_SESSION_FAIL,
+    PING,
     PONG,
 
     // Questions – teacher side
@@ -52,7 +53,6 @@ public enum MessageType {
     UPDATE_PROFILE_OK,
     UPDATE_PROFILE_FAIL,
 
-    // Incremental replication via SQL (heartbeat)
-    SQL_UPDATE,
+    // Snapshot replication
     DB_REQUEST_COPY
 }

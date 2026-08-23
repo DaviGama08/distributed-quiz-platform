@@ -1,7 +1,9 @@
 package pt.isec.server.db;
 
 import java.sql.*;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -49,7 +51,7 @@ public final class DbCommands {
      *
      * @return DB version or {@code -1} if missing or {@code NULL}
      */
-    public long get_db_version() {
+    public long getDbVersion() {
         final String sql = "SELECT db_version FROM config WHERE id = 1";
         try (Connection c = openConnection();
              PreparedStatement ps = c.prepareStatement(sql);
@@ -75,15 +77,20 @@ public final class DbCommands {
      * @return number of affected rows
      */
     public int executeUpdate(String sql, Object... args) {
-        try (Connection c = openConnection();
-             PreparedStatement ps = c.prepareStatement(sql)) {
-
-            bind(ps, args);
-            int x = ps.executeUpdate();
-            if (x > 0) {
-                update_db_version(c);
+        try (Connection c = openConnection()) {
+            c.setAutoCommit(false);
+            try (PreparedStatement ps = c.prepareStatement(sql)) {
+                bind(ps, args);
+                int affectedRows = ps.executeUpdate();
+                if (affectedRows > 0) {
+                    updateDbVersion(c);
+                }
+                c.commit();
+                return affectedRows;
+            } catch (SQLException | RuntimeException e) {
+                c.rollback();
+                throw e;
             }
-            return x;
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -112,18 +119,34 @@ public final class DbCommands {
         }
     }
 
+    /** Executes a SELECT and maps every returned row using consistent connection PRAGMAs. */
+    public List<Map<String, Object>> selectList(String sql, Object... args) {
+        try (Connection c = openConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
+            bind(ps, args);
+            try (ResultSet rs = ps.executeQuery()) {
+                List<Map<String, Object>> rows = new ArrayList<>();
+                while (rs.next()) {
+                    rows.add(mapRow(rs));
+                }
+                return rows;
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     /**
      * Increments {@code db_version} in {@code config}.
      *
      * @param c open connection
      */
-    private void update_db_version(Connection c) {
+    private void updateDbVersion(Connection c) throws SQLException {
         final String sql = "UPDATE config SET db_version = db_version + 1 WHERE id = 1";
         try (PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.executeUpdate();
-            // Version is now updated in the database; callers should read it directly when needed.
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+            if (ps.executeUpdate() != 1) {
+                throw new SQLException("config row missing; cannot advance db_version");
+            }
         }
     }
 
@@ -143,7 +166,9 @@ public final class DbCommands {
             try {
                 Transaction tx = new Transaction(c);
                 work.run(tx);
-                update_db_version(c);
+                if (tx.isDirty()) {
+                    updateDbVersion(c);
+                }
                 c.commit();
             } catch (Exception e) {
                 c.rollback();
@@ -173,6 +198,7 @@ public final class DbCommands {
     public static final class Transaction {
         private final Connection connection;
         private String executedSql;
+        private boolean dirty;
 
 
         private Transaction(Connection connection) {
@@ -186,14 +212,16 @@ public final class DbCommands {
          * @param args arguments for placeholders
          */
         @SuppressWarnings("unusedReturnValue")
-        public void executeUpdate(String sql, Object... args) {
+        public int executeUpdate(String sql, Object... args) {
             try (PreparedStatement ps = connection.prepareStatement(sql)) {
                 bind(ps, args);
                 int x = ps.executeUpdate();
                 if (x > 0) {
                     // recorded for potential debugging or external use
                     executedSql = sql;
+                    dirty = true;
                 }
+                return x;
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }
@@ -243,6 +271,10 @@ public final class DbCommands {
         @SuppressWarnings("unused")
         String getExecutedSql() {
             return executedSql;
+        }
+
+        private boolean isDirty() {
+            return dirty;
         }
     }
 

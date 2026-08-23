@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentMap;
  * <ul>
  *     <li>Create and manage UDP socket and worker threads</li>
  *     <li>Maintain a registry of active quiz servers</li>
- *     <li>Elect a primary server based on insertion order</li>
+ *     <li>Elect a primary server using the highest valid database version</li>
  *     <li>Periodically reap inactive servers and log metrics</li>
  * </ul>
  */
@@ -69,10 +69,7 @@ public class DirectoryManager implements IDirectoryThreadContext {
     /** Fast lookup by UUID. */
     private final ConcurrentMap<String, ServerInfo> servers = new ConcurrentHashMap<>();
 
-    /**
-     * Servers preserved in insertion order. The first entry is considered the
-     * current primary/master.
-     */
+    /** Servers preserved in insertion order for deterministic election tie-breaking. */
     private final Map<String, ServerInfo> serversOrdered = new LinkedHashMap<>();
 
     /** Lock object to protect {@link #serversOrdered}. */
@@ -178,12 +175,24 @@ public class DirectoryManager implements IDirectoryThreadContext {
      * <p>
      * This method is typically invoked from a JVM shutdown hook.
      */
-    public void stop() {
+    public synchronized void stop() {
         // Directory threads do not call this method themselves,
         // so we are safe from shutting down our own thread here.
         running = false; // global signal for all threads
 
+        // Wake the periodic threads immediately. The reaper owns the orderly
+        // SHUTDOWN broadcast and closes the UDP socket in its finally block,
+        // which in turn releases the listener from receive().
+        interrupt(tReaper);
+        interrupt(tMetrics);
+
         try {
+            if (tReaper != null) {
+                tReaper.join();
+            } else if (socket != null && !socket.isClosed()) {
+                socket.close();
+            }
+
             if (tListener != null) {
                 tListener.join();
             }
@@ -194,10 +203,6 @@ public class DirectoryManager implements IDirectoryThreadContext {
                 }
             }
 
-            if (tReaper != null) {
-                tReaper.join();
-            }
-
             if (tMetrics != null) {
                 tMetrics.join();
             }
@@ -206,6 +211,12 @@ public class DirectoryManager implements IDirectoryThreadContext {
         }
 
         Log.info(DirectoryManager.class, "DirectoryManager stopped.");
+    }
+
+    private static void interrupt(Thread thread) {
+        if (thread != null && thread != Thread.currentThread()) {
+            thread.interrupt();
+        }
     }
 
     /* ======================= IDirectoryThreadContext IMPLEMENTATION ======================= */
@@ -268,9 +279,8 @@ public class DirectoryManager implements IDirectoryThreadContext {
     @Override
     public String masterServerUuid() {
         synchronized (serversLock) {
-            return serversOrdered.isEmpty()
-                    ? null
-                    : serversOrdered.keySet().iterator().next();
+            ServerInfo elected = ServerElection.selectFreshest(serversOrdered.values());
+            return elected == null ? null : elected.getId();
         }
     }
 

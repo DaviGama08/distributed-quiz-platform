@@ -14,7 +14,7 @@ import java.util.List;
 /**
  * Thread responsible for accepting TCP connections from clients and creating
  * a {@link ClientHandlerThread} for each session.
- */ //TODO thread dedicada à receção de pedidos de ligação dos cliente via TCP
+ */
 public class ClientListenerThread implements Runnable, AutoCloseable {
 
     private static final int THREAD_POOL_SIZE = 8;
@@ -54,7 +54,6 @@ public class ClientListenerThread implements Runnable, AutoCloseable {
             // Main loop — accept clients while the server is running
             while (threadInfo.isRunning()) {
                 try {
-                    // TODO Servidor principal e secundários: thread dedicada à receção de pedidos de ligação dos clientes via TCP
                     Socket newSocket = serverSocket.accept(); //waits until accepts the new client
                     ClientHandlerThread handler =  //creates a thread to deal with the client
                             new ClientHandlerThread(threadInfo, new NetworkTcpConnection(newSocket));

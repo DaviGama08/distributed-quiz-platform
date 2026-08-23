@@ -7,8 +7,6 @@ import pt.isec.server.threads.NetworkTcpConnection;
 
 import java.net.NetworkInterface;
 import java.nio.file.Path;
-import java.util.List;
-import java.util.concurrent.BlockingQueue;
 
 /**
  * Abstraction for the main server manager.
@@ -85,14 +83,6 @@ public interface IServerThreadContext {
      */
     NetworkInterface multicastInterface();
 
-    /**
-     * Returns the queue of SQL statements that should be broadcast to backup nodes.
-     *
-     * @return queue with SQL batches
-     */
-    BlockingQueue<List<String>> queue();
-
-
     /* ===================== LIFE CYCLE / STATE ===================== */
 
     /**
@@ -136,17 +126,6 @@ public interface IServerThreadContext {
      * @return DB version, or {@code -1} if it cannot be determined
      */
     long dbVersion();
-
-    /**
-     * Deprecated: kept only for backwards compatibility.
-     * <p>
-     * Implementations are free to ignore this call, since the database version is
-     * now managed exclusively in the database itself.
-     *
-     * @param v new DB version (ignored)
-     */
-    @Deprecated
-    void setDbVersion(long v);
 
     /**
      * Returns the current path of the DB file used by this server.
@@ -211,12 +190,12 @@ public interface IServerThreadContext {
      * @param userId user identifier
      * @param conn   active TCP connection
      */
-    void registerClientConnection(long userId, NetworkTcpConnection conn);
+    void registerClientConnection(String role, long userId, NetworkTcpConnection conn);
 
     /**
      * Unregisters the active TCP connection for a user.
      *
      * @param userId user identifier
      */
-    void unregisterClientConnection(long userId);
+    void unregisterClientConnection(String role, long userId, NetworkTcpConnection conn);
 }

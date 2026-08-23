@@ -22,6 +22,12 @@ public class ServerInfo {
     /** Timestamp (epoch millis) of the last time this server was seen alive. */
     private long lastSeenMillis;
 
+    /** Database version most recently reported by this server; negative means invalid/unknown. */
+    private volatile long dbVersion;
+
+    /** Stable tie-breaker retained across heartbeats. */
+    private final long registeredAtMillis;
+
     /* ======================= CONSTRUCTOR ======================= */
 
     /**
@@ -33,10 +39,21 @@ public class ServerInfo {
      * @param udpPort UDP port used by the server for directory communications
      */
     public ServerInfo(String id, String ip, int tcpPort, int udpPort) {
+        this(id, ip, tcpPort, udpPort, -1L, System.currentTimeMillis());
+    }
+
+    public ServerInfo(String id, String ip, int tcpPort, int udpPort, long dbVersion) {
+        this(id, ip, tcpPort, udpPort, dbVersion, System.currentTimeMillis());
+    }
+
+    public ServerInfo(String id, String ip, int tcpPort, int udpPort,
+                      long dbVersion, long registeredAtMillis) {
         this.tcpPort = tcpPort;
         this.id = id;
         this.ip = ip;
         this.udpPort = udpPort;
+        this.dbVersion = dbVersion;
+        this.registeredAtMillis = registeredAtMillis;
     }
 
     /* ======================= PUBLIC API ======================= */
@@ -102,5 +119,17 @@ public class ServerInfo {
      */
     public int getUdpPort() {
         return udpPort;
+    }
+
+    public long getDbVersion() {
+        return dbVersion;
+    }
+
+    public void setDbVersion(long dbVersion) {
+        this.dbVersion = dbVersion;
+    }
+
+    public long getRegisteredAtMillis() {
+        return registeredAtMillis;
     }
 }

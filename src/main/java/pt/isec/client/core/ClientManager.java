@@ -9,11 +9,13 @@ import pt.isec.client.threads.RequestSenderThread;
 import pt.isec.client.threads.ResponseHandlerThread;
 import pt.isec.common.dto.auth.AuthResponseDTO;
 import pt.isec.common.dto.question.CreateQuestionResponseDTO;
+import pt.isec.common.dto.question.StudentQuestionDTO;
 import pt.isec.common.messages.MessageType;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.Question;
 import pt.isec.common.util.Log;
+import pt.isec.common.util.SerializationPolicy;
 
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
@@ -245,7 +247,6 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
     /**
      * Clears the current authentication data, but does not close the network.
      */
-    // TODO Utilizador: logout
     @Override
     public void logout() {
         setAuthenticated(false);
@@ -391,7 +392,6 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
             reconInProgress = true;
         }
 
-        // TODO Aplicação cliente: recuperação automática de perda de ligação ao servidor principal / falha do servidor principal
         Thread worker = new Thread(this::doReconnectionFlow, "ReconnectionWorker");
         worker.setDaemon(true);
         worker.start();
@@ -405,6 +405,11 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
     @Override
     public boolean isRunning() {
         return running;
+    }
+
+    @Override
+    public boolean isAuthenticated() {
+        return authenticated;
     }
 
     /**
@@ -465,6 +470,7 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
             setStudentNumber(dto.studentNumber());
         }
         sessionIdForReauth = dto.sessionId();
+        enableAuthenticatedReadTimeout();
         pcs.firePropertyChange(PROP_LOGIN_OK, null, dto);
     }
 
@@ -563,7 +569,7 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
     }
 
     @Override
-    public void setPropJoinQuestionResponse(Question question) {
+    public void setPropJoinQuestionResponse(StudentQuestionDTO question) {
         pcs.firePropertyChange(PROP_JOIN_QUESTION_RESPONSE, null, question);
     }
 
@@ -700,7 +706,6 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
         pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "DIRECTORY_CONNECTING");
         boolean discovered = false;
         for (int i = 0; i < 3 && !discovered; i++) {
-            // TODO Aplicação cliente: ligação ao servidor principal após consultar o serviço de diretoria
             discovered = discoverServer();
         }
 
@@ -710,7 +715,6 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
         }
 
         pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "SERVER_CONNECTING");
-        // TODO Aplicação cliente: ligação ao servidor principal após consultar o serviço de diretoria
         if (!connectToServer()) {
             pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, "SERVER_ERROR");
             try {
@@ -796,7 +800,7 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
                 return false;
             }
 
-            String target = msg.substring("200 PRINCIPAL ".length()).trim();
+            String target = msg.substring("200 PRINCIPAL ".length()).trim().split("\\|", 2)[0];
             int idx = target.lastIndexOf(':');
             if (idx <= 0) {
                 return false;
@@ -818,6 +822,17 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
 
     /* ======================= TCP connection & handshake ====================== */
 
+    /** Enables bounded reads once PING/PONG liveness is active. */
+    private void enableAuthenticatedReadTimeout() {
+        try {
+            if (tcpSocket != null && !tcpSocket.isClosed()) {
+                tcpSocket.setSoTimeout(45_000);
+            }
+        } catch (SocketException e) {
+            Log.warn(ClientManager.class, "Could not enable authenticated read timeout: " + e.getMessage());
+        }
+    }
+
     /**
      * Establishes a TCP connection to the main server and performs the handshake.
      *
@@ -832,6 +847,7 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
             ObjectOutputStream tmpOut = new ObjectOutputStream(tcpSocket.getOutputStream());
             tmpOut.flush();
             ObjectInputStream tmpIn = new ObjectInputStream(tcpSocket.getInputStream());
+            SerializationPolicy.apply(tmpIn);
 
             // Timeout just for the handshake
             tcpSocket.setSoTimeout(CONNECTION_TIMEOUT_MS);
@@ -1048,6 +1064,7 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
                     }
 
                     sessionIdForReauth = dto.sessionId();
+                    enableAuthenticatedReadTimeout();
                     Log.info(ClientManager.class, "Session resumed successfully after reconnection.");
                     return true;
                 }
@@ -1093,7 +1110,6 @@ public class ClientManager implements IClientControllerContext, IClientThreadCon
      * If all attempts fail, notifies permanent disconnection and stops the client.
      */
     private void doReconnectionFlow() {
-        // TODO Aplicação cliente: recuperação automática de perda de ligação ao servidor principal / falha do servidor principal
         try {
             pcs.firePropertyChange(PROP_CONNECTION_STATUS, null, STATUS_RECONNECTING);
 

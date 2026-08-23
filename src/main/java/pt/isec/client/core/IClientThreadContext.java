@@ -2,6 +2,7 @@ package pt.isec.client.core;
 
 import pt.isec.common.dto.auth.AuthResponseDTO;
 import pt.isec.common.dto.question.CreateQuestionResponseDTO;
+import pt.isec.common.dto.question.StudentQuestionDTO;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.Question;
@@ -36,6 +37,9 @@ public interface IClientThreadContext extends IClientServiceContext{
      * @return {@code true} if threads should keep running
      */
     boolean isRunning();
+
+    /** Returns whether liveness probes may be sent on the current connection. */
+    boolean isAuthenticated();
 
     /**
      * Gets the current TCP output stream to the server.
@@ -81,7 +85,7 @@ public interface IClientThreadContext extends IClientServiceContext{
 
     void setPropListQuestionsResponse(List<Question> questions);
 
-    void setPropJoinQuestionResponse(Question question);
+    void setPropJoinQuestionResponse(StudentQuestionDTO question);
 
     void setPropSubmitAnswerOk(String message);
 

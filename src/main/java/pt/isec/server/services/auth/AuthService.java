@@ -1,16 +1,10 @@
 package pt.isec.server.services.auth;
 
 import pt.isec.common.dto.auth.*;
-import pt.isec.server.core.IQuestionAnswerContext;
 import pt.isec.server.db.DbCommands;
 import pt.isec.common.util.Log;
 
-import javax.crypto.SecretKeyFactory;
-import javax.crypto.spec.PBEKeySpec;
-import java.security.SecureRandom;
 import java.time.Instant;
-import java.util.Base64;
-import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 
@@ -21,12 +15,7 @@ import java.util.UUID;
  */
 public class AuthService implements IAuthService {
 
-    private static final int ITERATIONS = 210_000;
-    private static final int KEY_LENGTH = 256;
-    private static final String ALGORITHM = "PBKDF2WithHmacSHA256";
-
     private final DbCommands dbCommands;
-    private final IQuestionAnswerContext context;
 
     /**
      * Cached value of the teacher registration code hash from table {@code config}.
@@ -38,11 +27,9 @@ public class AuthService implements IAuthService {
     /**
      * Creates a new {@link AuthService}.
      *
-     * @param context    cluster context used for SQL replication
      * @param dbCommands database command helper
      */
-    public AuthService(IQuestionAnswerContext context, DbCommands dbCommands) {
-        this.context = context;
+    public AuthService(DbCommands dbCommands) {
         this.dbCommands = dbCommands;
     }
 
@@ -51,14 +38,12 @@ public class AuthService implements IAuthService {
        ========================================================= */
 
     /**
-     * Registers a new teacher, validates the registration code and
-     * enqueues SQL for replication.
+     * Registers a new teacher and validates the registration code.
      *
      * @param dto teacher registration data
      * @return authentication response with session and teacher info
      * @throws Exception if validation or database access fails
      */
-    // TODO Utilizador com perfil de docente: registo com código
     @Override
     public AuthResponseDTO registerTeacher(RegisterTeacherDTO dto) throws Exception {
         if (dto == null) {
@@ -104,24 +89,18 @@ public class AuthService implements IAuthService {
         long newId = row == null ? -1L : ((Number) row.get("id")).longValue();
 
         Log.info(AuthService.class, "Novo docente registado com ID %d.", newId);
-        String session = createSessionRecord(newId, "TEACHER", email, name, "Register");
+        String session = createSessionRecord(newId, "TEACHER");
 
-        String aux = "INSERT INTO teacher (id, name, email, password_hash, created_at) VALUES (" +
-                newId + ", '" + escape(name) + "', '" + escape(email) + "', '" + escape(hashPw) + "', datetime('now'));" ;
-
-        context.queue().add(Collections.singletonList(aux));
         return new AuthResponseDTO(session, String.valueOf(newId), null, "TEACHER", name, email);
     }
 
     /**
-     * Registers a new student, validates uniqueness for email and student number
-     * and enqueues SQL for replication.
+     * Registers a new student and validates uniqueness for email and student number.
      *
      * @param dto student registration data
      * @return authentication response with session and student info
      * @throws Exception if validation or database access fails
      */
-    // TODO Utilizador com perfil de estudante: registo
     @Override
     public AuthResponseDTO registerStudent(RegisterStudentDTO dto) throws Exception {
         if (dto == null) {
@@ -175,13 +154,7 @@ public class AuthService implements IAuthService {
             throw new IllegalStateException("Não foi possível obter o ID do novo estudante.");
         }
 
-        String session = createSessionRecord(newId, "STUDENT", email, name, "Register");
-
-        String aux = "INSERT INTO student (id, student_number, name, email, password_hash, created_at) VALUES (" +
-                newId + ", " + number + ", '" + escape(name) + "', '" + escape(email) + "', '" +
-                escape(hashPw) + "', datetime('now'));";
-
-        context.queue().add(Collections.singletonList(aux));
+        String session = createSessionRecord(newId, "STUDENT");
 
         return new AuthResponseDTO(session, String.valueOf(newId), number, "STUDENT", name, email);
     }
@@ -193,7 +166,6 @@ public class AuthService implements IAuthService {
      * @return authentication response with session and user info
      * @throws Exception if validation or database access fails
      */
-    // TODO Utilizador: autenticação (username + password)
     @Override
     public AuthResponseDTO login(LoginRequestDTO dto) throws Exception {
         if (dto == null) {
@@ -220,7 +192,7 @@ public class AuthService implements IAuthService {
             long teacherId = ((Number) teacher.get("id")).longValue();
             String name    = teacher.get("name").toString();
 
-            String session = createSessionRecord(teacherId, "TEACHER", email, name, "Login");
+            String session = createSessionRecord(teacherId, "TEACHER");
 
             return new AuthResponseDTO(
                     session,
@@ -244,7 +216,7 @@ public class AuthService implements IAuthService {
             Long studentNumber = ((Number) student.get("student_number")).longValue();
             String name    = student.get("name").toString();
 
-            String session = createSessionRecord(studentId, "STUDENT", email, name, "Login");
+            String session = createSessionRecord(studentId, "STUDENT");
             return new AuthResponseDTO(
                     session,
                     String.valueOf(((Number) student.get("id")).longValue()),
@@ -259,93 +231,15 @@ public class AuthService implements IAuthService {
     }
 
     /**
-     * Changes the password for a teacher or student.
-     *
-     * @param changePasswordDTO change password data
-     */
-    @Override
-    public void changePassword(ChangePasswordDTO changePasswordDTO) {
-        if (changePasswordDTO == null) {
-            throw new IllegalArgumentException("Dados em falta");
-        }
-        String userType = changePasswordDTO.userType();
-        String id = String.valueOf(changePasswordDTO.sessionId());
-        String oldPass = changePasswordDTO.oldPassword();
-        String newPass = changePasswordDTO.newPassword();
-
-        if (userType == null || id == null || oldPass == null || newPass == null) {
-            throw new IllegalArgumentException("Dados em falta");
-        }
-
-        if (!isValidPassword(newPass)) {
-            throw new IllegalArgumentException("Nova password inválida");
-        }
-
-        try {
-            long userId = Long.parseLong(id);
-
-            if ("TEACHER".equalsIgnoreCase(userType)) {
-                Map<String, Object> rec = dbCommands.selectOne(
-                        "SELECT password_hash FROM teacher WHERE id = ?",
-                        userId
-                );
-                if (rec == null) {
-                    throw new IllegalArgumentException("Utilizador não encontrado");
-                }
-                String stored = (String) rec.get("password_hash");
-                requirePasswordMatch(oldPass, stored, "Password antiga incorreta");
-                String newHash = hashPassword(newPass);
-
-                dbCommands.executeUpdate(
-                        "UPDATE teacher SET password_hash = ? WHERE id = ?",
-                        newHash, userId
-                );
-
-                String aux = "UPDATE teacher SET password_hash='" + escape(newHash) +
-                        "' WHERE id=" + userId + ";";
-                context.queue().add(Collections.singletonList(aux));
-
-            } else if ("STUDENT".equalsIgnoreCase(userType)) {
-                Map<String, Object> rec = dbCommands.selectOne(
-                        "SELECT password_hash FROM student WHERE id = ?",
-                        userId
-                );
-                if (rec == null) {
-                    throw new IllegalArgumentException("Utilizador não encontrado");
-                }
-                String stored = (String) rec.get("password_hash");
-                requirePasswordMatch(oldPass, stored, "Password antiga incorreta");
-                String newHash = hashPassword(newPass);
-
-                dbCommands.executeUpdate(
-                        "UPDATE student SET password_hash = ? WHERE id = ?",
-                        newHash, userId
-                );
-
-                String aux = "UPDATE student SET password_hash='" + escape(newHash) +
-                        "' WHERE id=" + userId + ";";
-                context.queue().add(Collections.singletonList(aux));
-
-            } else {
-                throw new IllegalArgumentException("Tipo de utilizador inválido");
-            }
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    /**
      * Updates a student profile (name, email, student number and optionally password),
-     * checks for uniqueness constraints and enqueues SQL for replication.
+     * checks uniqueness constraints and updates the profile atomically.
      *
      * @param dto profile update data
      * @return updated authentication response (without session id change)
      * @throws Exception if validation or database access fails
      */
-    // TODO Utilizador: edição dos dados de registo
     @Override
     public AuthResponseDTO updateStudent(UpdateStudentDTO dto) throws Exception {
-        String sql;
         if (dto == null) {
             throw new IllegalArgumentException("Dados em falta");
         }
@@ -408,12 +302,6 @@ public class AuthService implements IAuthService {
                     studentNumber, name, email, newHash, userId
             );
 
-            sql = "UPDATE student SET student_number=" + studentNumber +
-                    ", name='" + escape(name) + "'" +
-                    ", email='" + escape(email) + "'" +
-                    ", password_hash='" + escape(newHash) + "'" +
-                    " WHERE id=" + userId + ";";
-
         } else {
             // Only update number/name/email
             dbCommands.executeUpdate(
@@ -421,10 +309,6 @@ public class AuthService implements IAuthService {
                     studentNumber, name, email, userId
             );
 
-            sql = "UPDATE student SET student_number=" + studentNumber +
-                    ", name='" + escape(name) + "'" +
-                    ", email='" + escape(email) + "'" +
-                    " WHERE id=" + userId + ";";
         }
 
         // Fetch updated student details
@@ -434,8 +318,6 @@ public class AuthService implements IAuthService {
         if (updatedStudent == null) {
             throw new IllegalStateException("Estudante atualizado não encontrado.");
         }
-
-        context.queue().add(Collections.singletonList(sql));
 
         return new AuthResponseDTO(
                 null, // Session ID is not updated here
@@ -449,16 +331,14 @@ public class AuthService implements IAuthService {
 
     /**
      * Updates a teacher profile (name, email and optionally password),
-     * checks for uniqueness constraints and enqueues SQL for replication.
+     * checks uniqueness constraints and updates the profile atomically.
      *
      * @param dto profile update data
      * @return updated authentication response (without session id change)
      * @throws Exception if validation or database access fails
      */
-    // TODO Utilizador: edição dos dados de registo
     @Override
     public AuthResponseDTO updateTeacher(UpdateTeacherDTO dto) throws Exception {
-        String sql;
         if (dto == null) {
             throw new IllegalArgumentException("Dados em falta");
         }
@@ -506,19 +386,12 @@ public class AuthService implements IAuthService {
                     "UPDATE teacher SET password_hash = ?, name = ?, email = ? WHERE id = ?",
                     newHash, name, email, teacherId
             );
-            sql = "UPDATE teacher SET password_hash='" + escape(newHash) + "'" +
-                    ", name='" + escape(name) + "'" +
-                    ", email='" + escape(email) + "'" +
-                    " WHERE id=" + teacherId + ";";
         } else {
             dbCommands.executeUpdate(
                     "UPDATE teacher SET name = ?, email = ? WHERE id = ?",
                     name, email, teacherId
             );
 
-            sql = "UPDATE teacher SET name='" + escape(name) + "'" +
-                    ", email='" + escape(email) + "'" +
-                    " WHERE id=" + teacherId + ";";
         }
 
         // Fetch updated teacher details
@@ -529,7 +402,6 @@ public class AuthService implements IAuthService {
             throw new IllegalStateException("Docente atualizado não encontrado.");
         }
 
-        context.queue().add(Collections.singletonList(sql));
         return new AuthResponseDTO(
                 null, // Session ID is not updated here
                 String.valueOf(((Number) updatedTeacher.get("id")).longValue()),
@@ -563,61 +435,53 @@ public class AuthService implements IAuthService {
         }
 
         Map<String, Object> row = dbCommands.selectOne(
-                "SELECT user_id, role, name, email, operationType, created_at, expires_at " +
-                        "FROM session " +
+                "SELECT user_id, role FROM session " +
                         "WHERE session_id = ? " +
-                        "ORDER BY created_at DESC " +
-                        "LIMIT 1",
+                        "AND revoked_at IS NULL " +
+                        "AND datetime(expires_at) > datetime('now')",
                 sessionId
         );
 
         if (row == null) {
-            throw new IllegalArgumentException("Sessão inexistente");
+            throw new IllegalArgumentException("Sessão inexistente, revogada ou expirada");
         }
 
-        String op = (String) row.get("operationType");
         String role = (String) row.get("role");
-        String name = (String) row.get("name");
-        String email = (String) row.get("email");
         long userId = ((Number) row.get("user_id")).longValue();
-
-        if ("Logout".equalsIgnoreCase(op)) {
-            throw new IllegalArgumentException("Sessão terminada");
-        }
-
-        Map<String, Object> valid = dbCommands.selectOne(
-                "SELECT 1 AS one FROM session " +
-                        "WHERE session_id = ? " +
-                        "  AND (expires_at IS NULL OR expires_at > datetime('now')) " +
-                        "ORDER BY created_at DESC " +
-                        "LIMIT 1",
-                sessionId
-        );
-        if (valid == null) {
-            throw new IllegalArgumentException("Sessão expirada");
-        }
 
         dbCommands.executeUpdate(
                 "UPDATE session " +
-                        "SET last_seen_at = datetime('now'), expires_at = datetime('now','+1 day') " +
-                        "WHERE session_id = ?",
+                        "SET last_seen_at = datetime('now') " +
+                        "WHERE session_id = ? AND revoked_at IS NULL",
                 sessionId
         );
 
-        String aux =
-                "UPDATE session SET last_seen_at=datetime('now'), expires_at=datetime('now','+1 day') " +
-                        "WHERE session_id='" + escape(sessionId) + "';";
-        context.queue().add(Collections.singletonList(aux));
-
         Long studentNumber = null;
+        String name;
+        String email;
         if ("STUDENT".equalsIgnoreCase(role)) {
             Map<String, Object> st = dbCommands.selectOne(
-                    "SELECT student_number FROM student WHERE id = ?",
+                    "SELECT student_number, name, email FROM student WHERE id = ?",
                     userId
             );
-            if (st != null && st.get("student_number") != null) {
-                studentNumber = ((Number) st.get("student_number")).longValue();
+            if (st == null) {
+                throw new IllegalArgumentException("Utilizador da sessão não existe");
             }
+            studentNumber = ((Number) st.get("student_number")).longValue();
+            name = (String) st.get("name");
+            email = (String) st.get("email");
+        } else if ("TEACHER".equalsIgnoreCase(role)) {
+            Map<String, Object> teacher = dbCommands.selectOne(
+                    "SELECT name, email FROM teacher WHERE id = ?",
+                    userId
+            );
+            if (teacher == null) {
+                throw new IllegalArgumentException("Utilizador da sessão não existe");
+            }
+            name = (String) teacher.get("name");
+            email = (String) teacher.get("email");
+        } else {
+            throw new IllegalArgumentException("Role da sessão inválida");
         }
 
         return new AuthResponseDTO(
@@ -637,24 +501,17 @@ public class AuthService implements IAuthService {
      * @param sessionId session identifier to deactivate
      */
     @Override
-    public void invalidateSession(long userId, String sessionId, String userType, String name, String email) {
+    public void invalidateSession(long userId, String sessionId, String userType) {
         if (sessionId == null || sessionId.isBlank()) {
             return;
         }
 
         dbCommands.executeUpdate(
-                "INSERT INTO session (session_id, user_id, operationType, role, name, email, created_at, last_seen_at, expires_at) " +
-                        "VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), datetime('now','+1 day'))",
-                sessionId, userId, "Logout", userType, name, email
+                "UPDATE session SET revoked_at = datetime('now') " +
+                        "WHERE session_id = ? AND user_id = ? AND role = ? AND revoked_at IS NULL",
+                sessionId, userId, userType
         );
 
-        String auxLogout =
-                "INSERT INTO session (session_id, user_id, operationType, role, name, email, created_at, last_seen_at, expires_at) " +
-                        "VALUES ('" + escape(sessionId) + "', " + userId + ", 'Logout', '" +
-                        escape(userType) + "', '" + escape(name) + "', '" + escape(email) +
-                        "', datetime('now'), datetime('now'), datetime('now','+1 day'));";
-
-        context.queue().add(Collections.singletonList(auxLogout));
     }
 
     /* =========================================================
@@ -787,14 +644,7 @@ public class AuthService implements IAuthService {
      * @throws Exception if cryptographic operations fail
      */
     private static String hashPassword(String password) throws Exception {
-        byte[] salt = new byte[16];
-        new SecureRandom().nextBytes(salt);
-        PBEKeySpec spec = new PBEKeySpec(password.toCharArray(), salt, ITERATIONS, KEY_LENGTH);
-        SecretKeyFactory factory = SecretKeyFactory.getInstance(ALGORITHM);
-        byte[] hash = factory.generateSecret(spec).getEncoded();
-        String b64Salt = Base64.getEncoder().encodeToString(salt);
-        String b64Hash = Base64.getEncoder().encodeToString(hash);
-        return ITERATIONS + ":" + b64Salt + ":" + b64Hash;
+        return PasswordHasher.hash(password);
     }
 
     /**
@@ -806,24 +656,7 @@ public class AuthService implements IAuthService {
      * @throws Exception if cryptographic operations fail
      */
     private static boolean verifyPassword(String password, String stored) throws Exception {
-        String[] parts = stored.split(":");
-        if (parts.length != 3) {
-            throw new IllegalArgumentException("Formato de hash inválido");
-        }
-        int iterations = Integer.parseInt(parts[0]);
-        byte[] salt = Base64.getDecoder().decode(parts[1]);
-        byte[] hash = Base64.getDecoder().decode(parts[2]);
-        PBEKeySpec spec = new PBEKeySpec(password.toCharArray(), salt, iterations, hash.length * 8);
-        SecretKeyFactory factory = SecretKeyFactory.getInstance(ALGORITHM);
-        byte[] testHash = factory.generateSecret(spec).getEncoded();
-        if (hash.length != testHash.length) {
-            return false;
-        }
-        int diff = 0;
-        for (int i = 0; i < hash.length; i++) {
-            diff |= hash[i] ^ testHash[i];
-        }
-        return diff == 0;
+        return PasswordHasher.verify(password, stored);
     }
 
     /**
@@ -850,32 +683,15 @@ public class AuthService implements IAuthService {
      * @param userType user type ("STUDENT" or "TEACHER")
      * @return generated session id string
      */
-    private String createSessionRecord(long userId, String userType, String email, String name, String operationType) {
+    private String createSessionRecord(long userId, String userType) {
         String session = newSessionId();
 
         dbCommands.executeUpdate(
-                "INSERT INTO session (session_id, user_id, operationType, role, name, email,  created_at, last_seen_at, expires_at) " +
-                        "VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), datetime('now','+1 day'))",
-                session, userId, operationType, userType, name, email
+                "INSERT INTO session (session_id, user_id, role, created_at, last_seen_at, expires_at) " +
+                        "VALUES (?, ?, ?, datetime('now'), datetime('now'), datetime('now','+1 day'))",
+                session, userId, userType
         );
 
-        String aux =
-                "INSERT INTO session (session_id, user_id, operationType, role, name, email,  created_at, last_seen_at, expires_at) VALUES (" +
-                        "'" + escape(session) + "', " + userId + ", '" + operationType + "', '" + escape(userType) + "', '" + escape(name) +
-                        "', '" + escape(email) + "', datetime('now'), datetime('now'), datetime('now','+1 day'));";
-
-        context.queue().add(Collections.singletonList(aux));
-
         return session;
-    }
-
-    /**
-     * Escapes single quotes to safely embed a value inside an SQL literal.
-     *
-     * @param s input string
-     * @return escaped string (never {@code null})
-     */
-    private static String escape(String s) {
-        return s == null ? "" : s.replace("'", "''");
     }
 }

@@ -78,6 +78,11 @@ application-local.yaml
 *.so
 *.dylib
 
+# Internal academic material (kept locally, not published in the portfolio)
+/docs/*Enunciado*.pdf
+/docs/*checklist*.pdf
+/guide/*.sqlite
+
 # Maven release-plugin backups
 pom.xml.tag
 pom.xml.releaseBackup

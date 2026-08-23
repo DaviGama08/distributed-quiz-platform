@@ -13,18 +13,22 @@ import pt.isec.common.dto.question.DeleteQuestionDTO;
 import pt.isec.common.dto.question.EditQuestionDTO;
 import pt.isec.common.dto.question.JoinQuestionDTO;
 import pt.isec.common.dto.question.ListQuestionsDTO;
+import pt.isec.common.dto.question.StudentQuestionDTO;
 import pt.isec.common.messages.MessageType;
 import pt.isec.common.messages.TcpMessage;
 import pt.isec.common.model.question.Answer;
 import pt.isec.common.model.question.Question;
 import pt.isec.common.util.Log;
 import pt.isec.server.core.IServerThreadContext;
+import java.io.EOFException;
 import java.io.IOException;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Thread responsible for handling all communication with a single client
@@ -42,8 +46,40 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
     /** Timeout, in seconds, for the very first message received from the client. */
     private static final int FIRST_MESSAGE_TIMEOUT_SEC = 30;
 
-    /** Special value used to disable the read timeout on the socket. */
-    private static final Duration NO_TIMEOUT = Duration.ZERO;
+    /** Registration keeps the connection public so the existing UI can perform login. */
+    private static final Duration UNAUTHENTICATED_IDLE_TIMEOUT = Duration.ofMinutes(5);
+
+    /** Authenticated clients must send application traffic or PING within this interval. */
+    private static final Duration AUTHENTICATED_READ_TIMEOUT = Duration.ofSeconds(45);
+
+    private static final String ROLE_TEACHER = "TEACHER";
+    private static final String ROLE_STUDENT = "STUDENT";
+
+    /** Operations that may be requested before a connection is authenticated. */
+    private static final Set<MessageType> PUBLIC_AUTH_OPERATIONS = Set.of(
+            MessageType.LOGIN,
+            MessageType.REGISTER_STUDENT,
+            MessageType.REGISTER_TEACHER,
+            MessageType.RESUME_SESSION
+    );
+
+    /** Protected operations reserved for authenticated teachers. */
+    private static final Set<MessageType> TEACHER_OPERATIONS = Set.of(
+            MessageType.CREATE_QUESTION,
+            MessageType.EDIT_QUESTION,
+            MessageType.DELETE_QUESTION,
+            MessageType.LIST_QUESTIONS,
+            MessageType.VIEW_ANSWERS,
+            MessageType.UPDATE_TEACHER
+    );
+
+    /** Protected operations reserved for authenticated students. */
+    private static final Set<MessageType> STUDENT_OPERATIONS = Set.of(
+            MessageType.JOIN_QUESTION,
+            MessageType.SUBMIT_ANSWER,
+            MessageType.LIST_ANSWERED_QUESTIONS,
+            MessageType.UPDATE_STUDENT
+    );
 
     private final IServerThreadContext threadInfo;
     private final NetworkTcpConnection connection;
@@ -83,7 +119,6 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
     @Override
     public void run() {
         try {
-            // TODO Aplicação cliente: ligação encerrada pelo servidor após 30 segundos (pode ser aumentado) sem tentativa de registo ou autenticação
             // Initial 30-second timeout for the first client message
             connection.setReadTimeout(Duration.ofSeconds(FIRST_MESSAGE_TIMEOUT_SEC));
 
@@ -96,7 +131,6 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
             // Connection accepted
             connection.sendMessage(new TcpMessage<>(MessageType.ACK, "ok"));
 
-            // TODO Servidor principal e secundários: thread para comunicação com cada cliente ligado via TCP (pedido e resposta)
             while (threadInfo.isRunning()) {
                 TcpMessage<?> msg = connection.receiveMessage();
                 if (msg == null) {
@@ -104,6 +138,8 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                 }
                 processMessage(msg);
             }
+        } catch (EOFException e) {
+            Log.info(ClientHandlerThread.class, "[TCP] Client closed the connection.");
         } catch (SocketTimeoutException e) {
             if (!threadInfo.isRunning()) {
                 // Timeout during shutdown – expected behavior
@@ -130,24 +166,8 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     "Client handler thread terminated (client connection closed).");
 
             if (loggerUserId != null) {
-                if (currentSessionId != null && threadInfo.isRunning()) {
-                    try {
-                        threadInfo.getAuthService().invalidateSession(
-                                loggerUserId,
-                                currentSessionId,
-                                currentUserType,
-                                currentUserName,
-                                currentUserEmail
-                        );
-                    } catch (Exception e) {
-                        Log.error(ClientHandlerThread.class,
-                                "[TCP] Failed to invalidate session in database when closing connection: %s",
-                                e.getMessage());
-                    }
-                }
-
                 try {
-                    threadInfo.unregisterClientConnection(loggerUserId);
+                    threadInfo.unregisterClientConnection(currentUserType, loggerUserId, connection);
                 } catch (Exception ignored) { }
 
                 loggerUserId = null;
@@ -172,13 +192,26 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
      * @param tcpMessage message received from the client
      * @throws Exception if a service call fails
      */
-    //TODO thread para comunicação com cada cliente ligado via TCP (pedido e resposta)
     private void processMessage(TcpMessage<?> tcpMessage) throws Exception {
         if (tcpMessage == null) {
             return;
         }
 
+        if (tcpMessage.getType() == null) {
+            sendAuthorizationError("invalid-message-type");
+            return;
+        }
+
+        try {
+            authorizeOperation(tcpMessage.getType());
+        } catch (SecurityException e) {
+            sendAuthorizationError(e.getMessage());
+            return;
+        }
+
         switch (tcpMessage.getType()) {
+
+            case PING -> connection.sendMessage(new TcpMessage<>(MessageType.PONG, "alive"));
 
             /* ========= AUTH ========= */
 
@@ -187,20 +220,8 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     RegisterStudentDTO dto = tcpMessage.getDataAs(RegisterStudentDTO.class);
                     AuthResponseDTO res = threadInfo.getAuthService().registerStudent(dto);
 
-                    long userId = Long.parseLong(res.userId());
-                    this.loggerUserId = userId;
-                    this.currentSessionId = res.sessionId();
-                    this.currentUserType = res.userType();
-                    this.currentUserName = res.name();
-                    this.currentUserEmail = res.email();
-
-                    try {
-                        threadInfo.registerClientConnection(userId, connection);
-                    } catch (Exception ignored) {
-                    }
-
                     connection.sendMessage(new TcpMessage<>(MessageType.REGISTER_OK, res, AuthResponseDTO.class));
-                    connection.setReadTimeout(NO_TIMEOUT);
+                    connection.setReadTimeout(UNAUTHENTICATED_IDLE_TIMEOUT);
                     Log.info(ClientHandlerThread.class, "[TCP] Student registered successfully.");
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
@@ -212,20 +233,8 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     RegisterTeacherDTO dto = tcpMessage.getDataAs(RegisterTeacherDTO.class);
                     AuthResponseDTO res = threadInfo.getAuthService().registerTeacher(dto);
 
-                    long userId = Long.parseLong(res.userId());
-                    this.loggerUserId = userId;
-                    this.currentSessionId = res.sessionId();
-                    this.currentUserType = res.userType();
-                    this.currentUserName = res.name();
-                    this.currentUserEmail = res.email();
-
-                    try {
-                        threadInfo.registerClientConnection(userId, connection);
-                    } catch (Exception ignored) {
-                    }
-
                     connection.sendMessage(new TcpMessage<>(MessageType.REGISTER_OK, res, AuthResponseDTO.class));
-                    connection.setReadTimeout(NO_TIMEOUT);
+                    connection.setReadTimeout(UNAUTHENTICATED_IDLE_TIMEOUT);
                     Log.info(ClientHandlerThread.class, "[TCP] Teacher registered successfully.");
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
@@ -237,22 +246,16 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     LoginRequestDTO dto = tcpMessage.getDataAs(LoginRequestDTO.class);
                     AuthResponseDTO res = threadInfo.getAuthService().login(dto);
 
-                    long userId = Long.parseLong(res.userId());
-
-                    this.loggerUserId = userId;
-                    this.currentSessionId = res.sessionId();
-                    this.currentUserType = res.userType();
-                    this.currentUserName = res.name();
-                    this.currentUserEmail = res.email();
+                    long userId = establishAuthenticatedSession(res, null);
 
                     // Register active connection to allow server-to-client notifications
                     try {
-                        threadInfo.registerClientConnection(userId, connection);
+                        threadInfo.registerClientConnection(currentUserType, userId, connection);
                     } catch (Exception ignored) {
                     }
 
                     connection.sendMessage(new TcpMessage<>(MessageType.LOGIN_OK, res, AuthResponseDTO.class));
-                    connection.setReadTimeout(NO_TIMEOUT);
+                    connection.setReadTimeout(AUTHENTICATED_READ_TIMEOUT);
                     Log.info(ClientHandlerThread.class, "[TCP] Login successfully.");
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.LOGIN_FAIL, e.getMessage(), String.class));
@@ -265,9 +268,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                         threadInfo.getAuthService().invalidateSession(
                                 loggerUserId,
                                 currentSessionId,
-                                currentUserType,
-                                currentUserName,
-                                currentUserEmail
+                                currentUserType
                         );
                     } catch (Exception e) {
                         Log.error(ClientHandlerThread.class,
@@ -275,7 +276,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     }
 
                     try {
-                        threadInfo.unregisterClientConnection(loggerUserId);
+                        threadInfo.unregisterClientConnection(currentUserType, loggerUserId, connection);
                     } catch (Exception ignored) {
                     }
 
@@ -296,21 +297,15 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
 
                     AuthResponseDTO res = threadInfo.getAuthService().resumeSession(sessionId);
 
-                    long userId = Long.parseLong(res.userId());
-
-                    this.loggerUserId = userId;
-                    this.currentSessionId = res.sessionId();
-                    this.currentUserType = res.userType();
-                    this.currentUserName = res.name();
-                    this.currentUserEmail = res.email();
+                    long userId = establishAuthenticatedSession(res, null);
 
                     // volta a registar a ligação para notificações server→cliente
                     try {
-                        threadInfo.registerClientConnection(userId, connection);
+                        threadInfo.registerClientConnection(currentUserType, userId, connection);
                     } catch (Exception ignored) { }
 
                     // a partir daqui já não queremos timeout de primeira mensagem
-                    connection.setReadTimeout(NO_TIMEOUT);
+                    connection.setReadTimeout(AUTHENTICATED_READ_TIMEOUT);
 
                     connection.sendMessage(new TcpMessage<>(MessageType.RESUME_SESSION_OK, res, AuthResponseDTO.class));
                     Log.info(ClientHandlerThread.class, "[TCP] Session resumed successfully.");
@@ -326,6 +321,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
             case CREATE_QUESTION -> {
                 try {
                     CreateQuestionDTO dto = tcpMessage.getDataAs(CreateQuestionDTO.class);
+                    requireSameUser(dto.teacherId());
                     CreateQuestionResponseDTO res = threadInfo.getQuestionService().createQuestion(dto);
                     connection.sendMessage(new TcpMessage<>(MessageType.CREATE_QUESTION_RESPONSE, res,
                             CreateQuestionResponseDTO.class));
@@ -338,6 +334,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
             case EDIT_QUESTION -> {
                 try {
                     EditQuestionDTO dto = tcpMessage.getDataAs(EditQuestionDTO.class);
+                    requireSameUser(dto.teacherId());
                     boolean ok = threadInfo.getQuestionService().editQuestion(dto);
                     connection.sendMessage(new TcpMessage<>(
                             ok ? MessageType.ACK : MessageType.NACK,
@@ -356,6 +353,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
             case DELETE_QUESTION -> {
                 try {
                     DeleteQuestionDTO dto = tcpMessage.getDataAs(DeleteQuestionDTO.class);
+                    requireSameUser(dto.teacherId());
                     boolean ok = threadInfo.getQuestionService().deleteQuestion(dto);
                     connection.sendMessage(new TcpMessage<>(
                             ok ? MessageType.ACK : MessageType.NACK,
@@ -377,6 +375,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
             case LIST_QUESTIONS -> {
                 try {
                     ListQuestionsDTO dto = tcpMessage.getDataAs(ListQuestionsDTO.class);
+                    requireSameUser(dto.teacherId());
                     List<Question> list = threadInfo.getQuestionService().listQuestions(dto);
                     // Use ArrayList as payload type because it is Serializable
                     TcpMessage<ArrayList<Question>> out = new TcpMessage<>(
@@ -394,11 +393,16 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
             case JOIN_QUESTION -> {
                 try {
                     JoinQuestionDTO dto = tcpMessage.getDataAs(JoinQuestionDTO.class);
-                    Question q = threadInfo.getQuestionService().joinQuestion(dto);
+                    requireSameUser(dto.studentId());
+                    StudentQuestionDTO q = threadInfo.getQuestionService().joinQuestion(dto);
                     if (q == null) {
                         connection.sendMessage(new TcpMessage<>(MessageType.NACK, "invalid-code", String.class));
                     } else {
-                        connection.sendMessage(new TcpMessage<>(MessageType.QUESTION_DETAILS, q, Question.class));
+                        connection.sendMessage(new TcpMessage<>(
+                                MessageType.QUESTION_DETAILS,
+                                q,
+                                StudentQuestionDTO.class
+                        ));
                     }
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.ERROR, e.getMessage(), String.class));
@@ -410,6 +414,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
             case SUBMIT_ANSWER -> {
                 try {
                     SubmitAnswerDTO dto = tcpMessage.getDataAs(SubmitAnswerDTO.class);
+                    requireSameUser(dto.studentId());
                     boolean ok = threadInfo.getAnswerService().submitAnswer(dto);
 
                     connection.sendMessage(new TcpMessage<>(
@@ -436,6 +441,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
             case VIEW_ANSWERS -> {
                 try {
                     ViewAnswersDTO dto = tcpMessage.getDataAs(ViewAnswersDTO.class);
+                    requireSameUser(dto.teacherId());
                     List<Answer> list = threadInfo.getAnswerService().viewAnswers(dto);
                     // Use ArrayList as payload type because it is Serializable
                     TcpMessage<ArrayList<Answer>> out = new TcpMessage<>(
@@ -453,7 +459,9 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
             case UPDATE_STUDENT -> {
                 try {
                     UpdateStudentDTO dto = tcpMessage.getDataAs(UpdateStudentDTO.class);
+                    requireSameUser(dto.userId());
                     AuthResponseDTO res = threadInfo.getAuthService().updateStudent(dto);
+                    updateAuthenticatedProfile(res);
                     connection.sendMessage(new TcpMessage<>(MessageType.UPDATE_PROFILE_OK, res, AuthResponseDTO.class));
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.UPDATE_PROFILE_FAIL, e.getMessage(), String.class));
@@ -463,7 +471,10 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
             case UPDATE_TEACHER -> {
                 try {
                     UpdateTeacherDTO dto = tcpMessage.getDataAs(UpdateTeacherDTO.class);
+                    requireSameUser(dto.userId());
+                    requireSameUser(dto.teacherId());
                     AuthResponseDTO res = threadInfo.getAuthService().updateTeacher(dto);
+                    updateAuthenticatedProfile(res);
                     connection.sendMessage(new TcpMessage<>(MessageType.UPDATE_PROFILE_OK, res, AuthResponseDTO.class));
                 } catch (Exception e) {
                     connection.sendMessage(new TcpMessage<>(MessageType.UPDATE_PROFILE_FAIL, e.getMessage(), String.class));
@@ -473,6 +484,7 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
             case LIST_ANSWERED_QUESTIONS -> {
                 try {
                     Integer studentId = tcpMessage.getDataAs(Integer.class);
+                    requireSameUser(studentId);
                     List<Answer> list = threadInfo.getAnswerService().getStudentHistory(studentId);
                     // Use ArrayList as payload type because it is Serializable
                     TcpMessage<ArrayList<Answer>> out = new TcpMessage<>(
@@ -491,6 +503,95 @@ public class ClientHandlerThread implements Runnable, AutoCloseable {
                     new TcpMessage<>(MessageType.ERROR, "Tipo de mensagem não suportado", String.class)
             );
         }
+    }
+
+    /**
+     * Applies the connection-level authentication and role policy before dispatching a request.
+     */
+    private void authorizeOperation(MessageType messageType) {
+        if (PUBLIC_AUTH_OPERATIONS.contains(messageType)) {
+            requireUnauthenticated();
+            return;
+        }
+
+        requireAuthenticated();
+
+        if (TEACHER_OPERATIONS.contains(messageType)) {
+            requireRole(ROLE_TEACHER);
+        } else if (STUDENT_OPERATIONS.contains(messageType)) {
+            requireRole(ROLE_STUDENT);
+        }
+    }
+
+    private void requireAuthenticated() {
+        if (loggerUserId == null || currentUserType == null) {
+            throw new SecurityException("authentication-required");
+        }
+    }
+
+    private void requireUnauthenticated() {
+        if (loggerUserId != null || currentUserType != null) {
+            throw new SecurityException("already-authenticated");
+        }
+    }
+
+    private void requireRole(String expectedRole) {
+        requireAuthenticated();
+        if (!expectedRole.equals(currentUserType)) {
+            throw new SecurityException("forbidden-role");
+        }
+    }
+
+    private void requireSameUser(Integer claimedUserId) {
+        requireAuthenticated();
+        if (claimedUserId == null || loggerUserId.longValue() != claimedUserId.longValue()) {
+            throw new SecurityException("identity-mismatch");
+        }
+    }
+
+    /**
+     * Validates an authentication response before making it authoritative for this connection.
+     *
+     * @return the authenticated user id
+     */
+    private long establishAuthenticatedSession(AuthResponseDTO response, String expectedRole) {
+        requireUnauthenticated();
+        if (response == null || response.userId() == null || response.userType() == null) {
+            throw new SecurityException("invalid-authentication-response");
+        }
+
+        final long userId;
+        try {
+            userId = Long.parseLong(response.userId());
+        } catch (NumberFormatException e) {
+            throw new SecurityException("invalid-authentication-response");
+        }
+
+        String role = response.userType().trim().toUpperCase(Locale.ROOT);
+        if (userId <= 0 || (!ROLE_TEACHER.equals(role) && !ROLE_STUDENT.equals(role))) {
+            throw new SecurityException("invalid-authentication-response");
+        }
+        if (expectedRole != null && !expectedRole.equals(role)) {
+            throw new SecurityException("invalid-authentication-response");
+        }
+
+        this.loggerUserId = userId;
+        this.currentSessionId = response.sessionId();
+        this.currentUserType = role;
+        this.currentUserName = response.name();
+        this.currentUserEmail = response.email();
+        return userId;
+    }
+
+    private void updateAuthenticatedProfile(AuthResponseDTO response) {
+        if (response != null) {
+            this.currentUserName = response.name();
+            this.currentUserEmail = response.email();
+        }
+    }
+
+    private void sendAuthorizationError(String reason) throws IOException {
+        connection.sendMessage(new TcpMessage<>(MessageType.ERROR, reason, String.class));
     }
 
     /**

@@ -23,10 +23,6 @@ public class ClientApplication extends Application {
 
     /* ===================== CONSTANTS ===================== */
 
-    private static final String DIRECTORY_IP = "localhost";
-    //private static final String DIRECTORY_IP = "10.84.85.89";
-    private static final int DIRECTORY_PORT = 9999;
-
     private static final String ICON_RESOURCE = "/imgs/app-icon.png";
 
     /* ===================== FIELDS ===================== */
@@ -56,13 +52,17 @@ public class ClientApplication extends Application {
      * @param stage primary application stage
      */
     @Override
-    // TODO Cliente: código estruturado com separação entre vista e lógica de comunicação
     public void start(Stage stage) {
         // Enable colored console output (server/client logs).
         AnsiConsole.systemInstall();
 
         this.primaryStage = stage;
-        this.clientManager = new ClientManager(DIRECTORY_IP, DIRECTORY_PORT);
+        DirectoryEndpoint directory = DirectoryEndpoint.resolve(
+                getParameters().getNamed(),
+                System.getProperties(),
+                System.getenv()
+        );
+        this.clientManager = new ClientManager(directory.host(), directory.port());
         this.authController = new AuthenticationController(primaryStage, clientManager, this);
 
         stage.getIcons().clear();

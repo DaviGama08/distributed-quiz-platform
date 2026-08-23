@@ -16,9 +16,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <javafx.version>20</javafx.version>
-        <jackson.version>2.15.2</jackson.version>
         <sqlite.jdbc.version>3.41.2.1</sqlite.jdbc.version>
-        <spark.version>2.9.4</spark.version>
         <junit.version>5.10.0</junit.version>
 
         <javafx.platform>win</javafx.platform>
@@ -45,13 +43,6 @@
             <groupId>org.xerial</groupId>
             <artifactId>sqlite-jdbc</artifactId>
             <version>${sqlite.jdbc.version}</version>
-        </dependency>
-
-        <!-- Jackson -->
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-            <version>${jackson.version}</version>
         </dependency>
 
         <!-- JUnit -->
@@ -102,7 +93,18 @@
                 <version>3.0.0</version>
                 <configuration>
                     <useSystemClassLoader>true</useSystemClassLoader>
+                    <includes>
+                        <include>**/*Test.java</include>
+                        <include>**/*IT.java</include>
+                    </includes>
                 </configuration>
+            </plugin>
+
+            <!-- Run the non-JavaFX directory and server entry points without copied JARs. -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
             </plugin>
         </plugins>
     </build>

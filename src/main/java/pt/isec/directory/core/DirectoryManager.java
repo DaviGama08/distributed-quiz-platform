@@ -175,12 +175,24 @@ public class DirectoryManager implements IDirectoryThreadContext {
      * <p>
      * This method is typically invoked from a JVM shutdown hook.
      */
-    public void stop() {
+    public synchronized void stop() {
         // Directory threads do not call this method themselves,
         // so we are safe from shutting down our own thread here.
         running = false; // global signal for all threads
 
+        // Wake the periodic threads immediately. The reaper owns the orderly
+        // SHUTDOWN broadcast and closes the UDP socket in its finally block,
+        // which in turn releases the listener from receive().
+        interrupt(tReaper);
+        interrupt(tMetrics);
+
         try {
+            if (tReaper != null) {
+                tReaper.join();
+            } else if (socket != null && !socket.isClosed()) {
+                socket.close();
+            }
+
             if (tListener != null) {
                 tListener.join();
             }
@@ -191,10 +203,6 @@ public class DirectoryManager implements IDirectoryThreadContext {
                 }
             }
 
-            if (tReaper != null) {
-                tReaper.join();
-            }
-
             if (tMetrics != null) {
                 tMetrics.join();
             }
@@ -203,6 +211,12 @@ public class DirectoryManager implements IDirectoryThreadContext {
         }
 
         Log.info(DirectoryManager.class, "DirectoryManager stopped.");
+    }
+
+    private static void interrupt(Thread thread) {
+        if (thread != null && thread != Thread.currentThread()) {
+            thread.interrupt();
+        }
     }
 
     /* ======================= IDirectoryThreadContext IMPLEMENTATION ======================= */

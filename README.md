@@ -405,7 +405,13 @@ The suite covers authentication/roles, question and answer rules, persistent
 sessions, JDBC rollback, snapshot/WAL/checksum behavior, loopback TCP transfer,
 election, liveness and serialisation filtering. See
 [`LEGACY_VALIDATION.md`](LEGACY_VALIDATION.md) for the latest result and the
-remaining interactive multi-process smoke-test procedure.
+repeatable three-server/two-client failover gate.
+
+Run the explicit local multi-process and JavaFX smoke gate with:
+
+```bash
+mvn -B -Dtest=LegacyMultiProcessSmoke test
+```
 
 ## Running on Windows
 

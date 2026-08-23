@@ -5,11 +5,7 @@ import pt.isec.server.core.IQuestionAnswerContext;
 import pt.isec.server.db.DbCommands;
 import pt.isec.common.util.Log;
 
-import javax.crypto.SecretKeyFactory;
-import javax.crypto.spec.PBEKeySpec;
-import java.security.SecureRandom;
 import java.time.Instant;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
@@ -20,10 +16,6 @@ import java.util.UUID;
  * Handles registration, login, profile changes and password hashing/verification.
  */
 public class AuthService implements IAuthService {
-
-    private static final int ITERATIONS = 210_000;
-    private static final int KEY_LENGTH = 256;
-    private static final String ALGORITHM = "PBKDF2WithHmacSHA256";
 
     private final DbCommands dbCommands;
     private final IQuestionAnswerContext context;
@@ -787,14 +779,7 @@ public class AuthService implements IAuthService {
      * @throws Exception if cryptographic operations fail
      */
     private static String hashPassword(String password) throws Exception {
-        byte[] salt = new byte[16];
-        new SecureRandom().nextBytes(salt);
-        PBEKeySpec spec = new PBEKeySpec(password.toCharArray(), salt, ITERATIONS, KEY_LENGTH);
-        SecretKeyFactory factory = SecretKeyFactory.getInstance(ALGORITHM);
-        byte[] hash = factory.generateSecret(spec).getEncoded();
-        String b64Salt = Base64.getEncoder().encodeToString(salt);
-        String b64Hash = Base64.getEncoder().encodeToString(hash);
-        return ITERATIONS + ":" + b64Salt + ":" + b64Hash;
+        return PasswordHasher.hash(password);
     }
 
     /**
@@ -806,24 +791,7 @@ public class AuthService implements IAuthService {
      * @throws Exception if cryptographic operations fail
      */
     private static boolean verifyPassword(String password, String stored) throws Exception {
-        String[] parts = stored.split(":");
-        if (parts.length != 3) {
-            throw new IllegalArgumentException("Formato de hash inválido");
-        }
-        int iterations = Integer.parseInt(parts[0]);
-        byte[] salt = Base64.getDecoder().decode(parts[1]);
-        byte[] hash = Base64.getDecoder().decode(parts[2]);
-        PBEKeySpec spec = new PBEKeySpec(password.toCharArray(), salt, iterations, hash.length * 8);
-        SecretKeyFactory factory = SecretKeyFactory.getInstance(ALGORITHM);
-        byte[] testHash = factory.generateSecret(spec).getEncoded();
-        if (hash.length != testHash.length) {
-            return false;
-        }
-        int diff = 0;
-        for (int i = 0; i < hash.length; i++) {
-            diff |= hash[i] ^ testHash[i];
-        }
-        return diff == 0;
+        return PasswordHasher.verify(password, stored);
     }
 
     /**
